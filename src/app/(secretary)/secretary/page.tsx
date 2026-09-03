@@ -446,7 +446,7 @@ export default function SecretaryPureWorkflowPage() {
         <div className="bg-amber-50/80 border-2 border-amber-300 rounded-3xl p-5 shadow-xs space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 font-black text-amber-950 text-sm">
-              <Sparkles className="w-5 h-5 text-amber-600" />
+              <Camera className="w-4 h-4 text-amber-600" />
               <span>
                 {language === "ar"
                   ? `أطفال بانتظار تصوير الوصفة (${pendingNotifications.length}):`
