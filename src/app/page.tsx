@@ -1,198 +1,101 @@
-"use client";
-
-import React from "react";
 import Link from "next/link";
-import {
-  User,
-  Stethoscope,
-  Calendar,
-  Clock,
-  ShieldCheck,
-  UserCircle2,
-  Layers,
-  ChevronLeft,
-} from "lucide-react";
+import { Stethoscope, UserCheck, ArrowLeft, Sparkles, ShieldCheck } from "lucide-react";
 
 export default function HomePage() {
   return (
-    <div
-      className="min-h-screen bg-[#F8FAFC] text-slate-900 flex flex-col justify-between font-sans selection:bg-teal-100 selection:text-teal-900 relative"
-      dir="rtl"
-    >
-      {/* 1. Top Header */}
-      <header className="w-full max-w-7xl mx-auto px-4 sm:px-8 py-5 flex items-center justify-between relative z-20">
-        {/* Logo & Clinic Titles (Right in RTL) */}
+    <div className="min-h-screen bg-slate-50 flex flex-col justify-between p-4 sm:p-8">
+      {/* Top Header */}
+      <header className="max-w-5xl mx-auto w-full flex items-center justify-between py-4">
         <div className="flex items-center gap-3">
-          {/* Hexagonal Medical Pulse Logo */}
-          <div className="relative w-12 h-12 flex items-center justify-center shrink-0">
-            <svg
-              viewBox="0 0 100 100"
-              className="w-12 h-12 text-[#0B2545]"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="5.5"
-            >
-              <polygon points="50,4 93,25 93,75 50,96 7,75 7,25" strokeLinejoin="round" />
-            </svg>
-            <div className="absolute inset-0 flex items-center justify-center text-teal-600">
-              <svg viewBox="0 0 50 30" className="w-8 h-6 fill-none stroke-teal-600" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M 2 15 L 12 15 L 18 5 L 26 25 L 32 10 L 38 18 L 48 15" />
-              </svg>
-            </div>
+          <div className="w-12 h-12 rounded-2xl overflow-hidden border-2 border-clinic-500 shadow-sm shrink-0 bg-slate-900">
+            <img
+              src="/dr-kareem.jpg"
+              alt="الدكتور عبد الكريم عليوي"
+              className="w-full h-full object-cover object-top"
+            />
           </div>
-
           <div>
-            <h1 className="text-lg sm:text-xl font-black text-[#0B2545] tracking-tight">
-              عيادة د. عبد الكريم عليوي
-            </h1>
-            <p className="text-xs sm:text-sm font-bold text-teal-700">
-              بورد طب الأطفال وحديثي الولادة
-            </p>
+            <h1 className="text-base font-extrabold text-slate-900">عيادة د. عبد الكريم عليوي</h1>
+            <p className="text-[11px] font-bold text-clinic-700">بورد طب الأطفال وحديثي الولادة</p>
           </div>
         </div>
 
-        {/* Login Button (Left in RTL) */}
         <Link
           href="/login"
-          className="inline-flex items-center gap-2 px-5 py-2 rounded-xl border-2 border-teal-700 text-teal-900 hover:bg-teal-50 text-xs sm:text-sm font-bold transition-all shadow-xs"
+          className="text-xs font-bold text-white bg-slate-900 hover:bg-clinic-700 px-4 py-2 rounded-xl shadow-xs transition-all"
         >
-          <User className="w-4 h-4 text-teal-700" />
-          <span>تسجيل الدخول</span>
+          تسجيل الدخول
         </Link>
       </header>
 
-      {/* 2. Main Hero Section */}
-      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-8 py-3 sm:py-6 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-6 items-center relative z-10">
-        {/* Left Side (Visual): Tagline, Main Title, Subtitle, and Two Action Cards */}
-        <div className="lg:col-span-7 space-y-6 sm:space-y-7 order-2 lg:order-1">
-          {/* Tagline Badge */}
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#E6F4F4] text-[#0A6C74] text-xs sm:text-sm font-black border border-teal-100">
-            <span>منظومة إدارة العيادة الطبية</span>
-          </div>
-
-          {/* Main Headline */}
-          <div className="space-y-3">
-            <h2 className="text-3xl sm:text-5xl lg:text-[54px] font-black text-[#0B2545] tracking-tight leading-[1.18]">
-              رعاية أدق، وتنظيم أفضل
-            </h2>
-            <p className="text-sm sm:text-base text-slate-500 font-semibold max-w-xl leading-relaxed">
-              نظام موحّد لإدارة ملفات المرضى والزيارات والمواعيد والوصفات الطبية بكفاءة وأمان.
-            </p>
-          </div>
-
-          {/* The Two Portals Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5 pt-2 max-w-2xl">
-            {/* Card 1: بوابة الاستقبال */}
-            <div className="bg-white rounded-3xl p-5 sm:p-6 border-2 border-slate-100 shadow-sm hover:shadow-md hover:border-teal-400 transition-all flex flex-col justify-between gap-5 text-center">
-              <div className="space-y-3">
-                {/* Calendar / Clock Icon */}
-                <div className="flex justify-center text-teal-600">
-                  <div className="relative">
-                    <Calendar className="w-11 h-11 stroke-[1.8]" />
-                    <Clock className="w-5 h-5 absolute -bottom-1 -right-1 bg-white rounded-full text-teal-700 stroke-[2.2]" />
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="text-lg sm:text-xl font-black text-[#0B2545]">
-                    بوابة الاستقبال
-                  </h3>
-                  <span className="text-xs sm:text-sm font-bold text-teal-700">
-                    إدارة المواعيد
-                  </span>
-                </div>
-
-                <p className="text-xs text-slate-500 leading-relaxed font-medium">
-                  تسجيل المرضى، تنظيم الزيارات ومتابعة قائمة الانتظار.
-                </p>
-              </div>
-
-              <Link href="/secretary">
-                <button
-                  type="button"
-                  className="w-full py-2.5 px-4 rounded-xl border-2 border-teal-700 text-teal-900 hover:bg-teal-50 font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-colors group cursor-pointer"
-                >
-                  <span>فتح شاشة الاستقبال</span>
-                  <ChevronLeft className="w-4 h-4 text-teal-700 group-hover:-translate-x-1 transition-transform" />
-                </button>
-              </Link>
-            </div>
-
-            {/* Card 2: بوابة الطبيب */}
-            <div className="bg-white rounded-3xl p-5 sm:p-6 border-2 border-slate-100 shadow-sm hover:shadow-md hover:border-teal-400 transition-all flex flex-col justify-between gap-5 text-center">
-              <div className="space-y-3">
-                {/* Stethoscope Icon */}
-                <div className="flex justify-center text-teal-600">
-                  <Stethoscope className="w-11 h-11 stroke-[1.8]" />
-                </div>
-
-                <div>
-                  <h3 className="text-lg sm:text-xl font-black text-[#0B2545]">
-                    بوابة الطبيب
-                  </h3>
-                  <span className="text-xs sm:text-sm font-bold text-teal-700">
-                    الكشف السريري
-                  </span>
-                </div>
-
-                <p className="text-xs text-slate-500 leading-relaxed font-medium">
-                  استعراض السجل الطبي، توثيق التشخيص وإدارة الوصفات.
-                </p>
-              </div>
-
-              <Link href="/doctor">
-                <button
-                  type="button"
-                  className="w-full py-2.5 px-4 rounded-xl border-2 border-teal-700 text-teal-900 hover:bg-teal-50 font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-colors group cursor-pointer"
-                >
-                  <span>فتح شاشة الطبيب</span>
-                  <ChevronLeft className="w-4 h-4 text-teal-700 group-hover:-translate-x-1 transition-transform" />
-                </button>
-              </Link>
-            </div>
-          </div>
+      {/* Main Selection Area */}
+      <main className="max-w-3xl mx-auto w-full my-auto text-center py-8">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold mb-6">
+          <span className="w-2 h-2 rounded-full bg-clinic-500 animate-pulse"></span>
+          <span>منظومة العيادة الطبية المباشرة</span>
         </div>
 
-        {/* Right Side (Visual): The Exact Doctor Crescent Image */}
-        <div className="lg:col-span-5 flex justify-center lg:justify-end order-1 lg:order-2">
-          <div className="relative w-full max-w-md lg:max-w-lg">
-            <div className="relative overflow-hidden rounded-[36px] sm:rounded-[48px] shadow-2xl bg-white border border-slate-200 group">
-              <img
-                src="/doctor-hero-crescent.png"
-                alt="الدكتور عبد الكريم عليوي"
-                className="w-full h-auto object-cover object-left group-hover:scale-102 transition-transform duration-500"
-              />
+        <h2 className="text-2xl sm:text-4xl font-black text-slate-900 leading-tight mb-4">
+          نظام إدارة عيادة الأطفال السريري
+        </h2>
+
+        <p className="text-sm text-slate-500 max-w-xl mx-auto leading-relaxed mb-8">
+          اختر البوابة المناسبة للدخول إلى واجهة العمل السريرية للطبيب أو شاشة الاستقبال للسكرتير
+        </p>
+
+        {/* The Two Portals */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-right">
+          {/* Doctor Portal */}
+          <Link
+            href="/doctor"
+            className="group bg-white p-6 rounded-3xl border border-slate-200 hover:border-slate-900 shadow-sm hover:shadow-md transition-all duration-200"
+          >
+            <div className="w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center mb-4 group-hover:bg-clinic-600 transition-colors">
+              <Stethoscope className="w-6 h-6" />
             </div>
-          </div>
+            <h3 className="text-lg font-black text-slate-900 group-hover:text-clinic-700 transition-colors">
+              بوابة الطبيب (الكشف السريري)
+            </h3>
+            <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+              البحث الفوري عن الطفل، استعراض تاريخ الزيارات والتحاليل السابقة، وتوثيق التشخيص واعتماد الوصفة.
+            </p>
+            <div className="mt-4 flex items-center gap-1 text-xs font-bold text-slate-900 group-hover:text-clinic-700">
+              <span>فتح شاشة الطبيب</span>
+              <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+            </div>
+          </Link>
+
+          {/* Secretary Portal */}
+          <Link
+            href="/secretary"
+            className="group bg-white p-6 rounded-3xl border border-slate-200 hover:border-teal-700 shadow-sm hover:shadow-md transition-all duration-200"
+          >
+            <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-800 flex items-center justify-center mb-4 group-hover:bg-teal-700 group-hover:text-white transition-colors">
+              <UserCheck className="w-6 h-6" />
+            </div>
+            <h3 className="text-lg font-black text-slate-900 group-hover:text-teal-700 transition-colors">
+              بوابة السكرتير (الاستقبال)
+            </h3>
+            <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+              إضافة طفل جديد، البحث الفوري لفتح زيارة وتسجيل القياسات، ومتابعة الانتظار وسلة المحذوفات.
+            </p>
+            <div className="mt-4 flex items-center gap-1 text-xs font-bold text-teal-700">
+              <span>فتح شاشة الاستقبال</span>
+              <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+            </div>
+          </Link>
         </div>
       </main>
 
-      {/* 3. Bottom Features Bar */}
-      <footer className="w-full border-t border-slate-200/80 bg-white/70 backdrop-blur-xs py-5 px-4 sm:px-8 mt-4 relative z-20">
-        <div className="max-w-4xl mx-auto flex flex-wrap items-center justify-around gap-4 sm:gap-8">
-          {/* Feature 1: سرية السجلات */}
-          <div className="flex items-center gap-2.5 text-slate-700 font-extrabold text-xs sm:text-sm">
-            <ShieldCheck className="w-5 h-5 sm:w-6 sm:h-6 text-teal-700" />
-            <span>سرية السجلات</span>
-          </div>
-
-          {/* Divider */}
-          <div className="hidden sm:block w-px h-6 bg-slate-200" />
-
-          {/* Feature 2: سهولة الوصول */}
-          <div className="flex items-center gap-2.5 text-slate-700 font-extrabold text-xs sm:text-sm">
-            <UserCircle2 className="w-5 h-5 sm:w-6 sm:h-6 text-teal-700" />
-            <span>سهولة الوصول</span>
-          </div>
-
-          {/* Divider */}
-          <div className="hidden sm:block w-px h-6 bg-slate-200" />
-
-          {/* Feature 3: إدارة متكاملة */}
-          <div className="flex items-center gap-2.5 text-slate-700 font-extrabold text-xs sm:text-sm">
-            <Layers className="w-5 h-5 sm:w-6 sm:h-6 text-teal-700" />
-            <span>إدارة متكاملة</span>
-          </div>
+      {/* Footer */}
+      <footer className="max-w-5xl mx-auto w-full flex flex-col sm:flex-row items-center justify-between gap-2 py-4 border-t border-slate-200/60 text-xs text-slate-500">
+        <div className="flex items-center gap-1.5 font-bold">
+          <ShieldCheck className="w-4 h-4 text-clinic-600" />
+          <span>جميع الحقوق محفوظة © {new Date().getFullYear()} عيادة الدكتور عبد الكريم عليوي</span>
+        </div>
+        <div className="flex items-center gap-1.5 font-extrabold text-slate-700 bg-white px-3 py-1 rounded-full border border-slate-200">
+          <Sparkles className="w-3.5 h-3.5 text-clinic-600" />
+          <span>تم التصميم والتطوير بواسطة فريق Trimindesai</span>
         </div>
       </footer>
     </div>
