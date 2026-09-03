@@ -52,10 +52,17 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         {children}
 
         {/* Footer */}
-        <div className="text-center mt-6 text-xs text-slate-400">
-          {language === "ar"
-            ? `منظومة إدارة العيادة الطبية الآمنة © ${new Date().getFullYear()}`
-            : `Secure Medical Clinic System © ${new Date().getFullYear()}`}
+        <div className="text-center mt-6 text-xs text-slate-500 space-y-1">
+          <div>
+            {language === "ar"
+              ? `جميع الحقوق محفوظة © ${new Date().getFullYear()} عيادة الدكتور عبد الكريم عليوي`
+              : `All Rights Reserved © ${new Date().getFullYear()} Dr. Kareem Clinic`}
+          </div>
+          <div className="text-[11px] font-extrabold text-clinic-700">
+            {language === "ar"
+              ? "تم التصميم والتطوير بواسطة فريق Trimindesai"
+              : "Designed & Developed by Trimindesai Team"}
+          </div>
         </div>
       </div>
     </div>

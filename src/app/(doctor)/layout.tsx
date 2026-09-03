@@ -2,6 +2,7 @@ import React from "react";
 import { Header } from "@/components/layout/Header";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { MobileNav } from "@/components/layout/MobileNav";
+import { Footer } from "@/components/layout/Footer";
 import { RoleGuard } from "@/components/auth/RoleGuard";
 
 export default function DoctorLayout({ children }: { children: React.ReactNode }) {
@@ -15,6 +16,7 @@ export default function DoctorLayout({ children }: { children: React.ReactNode }
             {children}
           </main>
         </div>
+        <Footer />
         <MobileNav role="doctor" />
       </div>
     </RoleGuard>

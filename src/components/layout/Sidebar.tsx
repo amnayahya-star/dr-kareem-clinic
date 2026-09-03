@@ -79,6 +79,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ role }) => {
         {t("sidebarFooterTitle")}
         <br />
         <span className="font-bold text-slate-700">{t("sidebarFooterSubtitle")}</span>
+        <div className="pt-2 mt-2 border-t border-slate-200/60 font-black text-clinic-800 text-[9px]">
+          Design by <span className="text-clinic-600">Trimindesai</span>
+        </div>
       </div>
     </aside>
   );
