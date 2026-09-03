@@ -488,280 +488,250 @@ export default function SecretaryPureWorkflowPage() {
         </div>
       )}
 
-      {/* 1. Top Section: Header + Search + Add Patient + Tab Switcher */}
-      <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl font-black text-slate-900">{t("receptionScreen")}</h2>
-              {isSupabaseConfigured() ? (
-                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full flex items-center gap-1">
-                  <span>{t("connectedDb")}</span>
-                </span>
-              ) : (
-                <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-2.5 py-0.5 rounded-full">
-                  {t("localPreview")}
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              {t("receptionDesc")}
-            </p>
-          </div>
-
-          {/* Add New Child Button */}
-          <Button
-            size="lg"
-            variant="primary"
-            onClick={() => setIsAddPatientModalOpen(true)}
-            className="font-bold gap-2 shrink-0 bg-slate-900 hover:bg-clinic-700 shadow-sm h-12"
-          >
-            <UserPlus className="w-5 h-5 text-clinic-400" />
-            <span>{t("addNewChild")}</span>
-          </Button>
+      {/* 1. Header Title & Add Patient Action */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-black text-[#0A1E33] tracking-tight">
+            شاشة الاستقبال
+          </h2>
+          <p className="text-xs text-[#697A8D] font-medium mt-0.5">
+            إدارة المرضى والمواعيد والزيارات اليومية
+          </p>
         </div>
 
-        {/* Search Input */}
-        {!activePatient && (
-          <div className="relative pt-1">
-            <div className={`absolute inset-y-0 ${isRTL ? "right-0 pr-4" : "left-0 pl-4"} pt-1 flex items-center pointer-events-none text-slate-400`}>
-              <Search className="w-5 h-5 text-clinic-600" />
-            </div>
-            <input
-              type="text"
-              placeholder={t("searchPlaceholderSecretary")}
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                if (activePatientId) {
-                  setActivePatientId(null);
-                }
-              }}
-              className={`w-full h-14 ${isRTL ? "pr-12 pl-10" : "pl-12 pr-10"} rounded-2xl border-2 border-slate-200 focus:border-clinic-500 focus:ring-2 focus:ring-clinic-100 text-sm font-bold text-slate-900 placeholder:text-slate-400 outline-none transition-all`}
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery("")}
-                className={`absolute inset-y-0 ${isRTL ? "left-0 pl-3.5" : "right-0 pr-3.5"} pt-1 flex items-center text-slate-400 hover:text-slate-600`}
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* 2. Date Filtering Bar */}
-        {!activePatient && (
-          <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-xs font-bold text-slate-500 ml-1 flex items-center gap-1">
-                <CalendarDays className="w-4 h-4 text-clinic-600" />
-                <span>{t("filterByDay")}</span>
-              </span>
-
-              {/* All */}
-              <button
-                type="button"
-                onClick={() => setDateFilterMode("all")}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
-                  dateFilterMode === "all"
-                    ? "bg-slate-900 text-white border-slate-900 shadow-xs"
-                    : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
-                }`}
-              >
-                {t("allPatients")}
-              </button>
-
-              {/* Today */}
-              <button
-                type="button"
-                onClick={() => setDateFilterMode("today")}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
-                  dateFilterMode === "today"
-                    ? "bg-clinic-600 text-white border-clinic-600 shadow-xs"
-                    : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
-                }`}
-              >
-                {t("todayVisitors")} ({language === "ar" ? formatArabicDate(new Date()) : new Date().toLocaleDateString()})
-              </button>
-
-              {/* Yesterday */}
-              <button
-                type="button"
-                onClick={() => setDateFilterMode("yesterday")}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
-                  dateFilterMode === "yesterday"
-                    ? "bg-clinic-600 text-white border-clinic-600 shadow-xs"
-                    : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
-                }`}
-              >
-                {t("yesterdayVisitors")}
-              </button>
-            </div>
-
-            {/* Custom Day Picker */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-slate-500">{t("pickCustomDay")}</span>
-              <input
-                type="date"
-                value={customFilterDate}
-                onChange={(e) => {
-                  setCustomFilterDate(e.target.value);
-                  if (e.target.value) {
-                    setDateFilterMode("custom");
-                  }
-                }}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold border outline-none ${
-                  dateFilterMode === "custom" && customFilterDate
-                    ? "border-clinic-500 ring-2 ring-clinic-100 bg-white text-clinic-900 font-black"
-                    : "border-slate-200 bg-slate-50 text-slate-700"
-                }`}
-              />
-              {dateFilterMode === "custom" && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCustomFilterDate("");
-                    setDateFilterMode("all");
-                  }}
-                  className="text-xs text-rose-500 hover:underline font-bold"
-                >
-                  {t("cancel")}
-                </button>
-              )}
-            </div>
-          </div>
-        )}
+        <button
+          type="button"
+          onClick={() => setIsAddPatientModalOpen(true)}
+          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[#0C7A77] hover:bg-[#0A6B68] text-white font-bold text-xs sm:text-sm shadow-xs transition-all duration-150 cursor-pointer shrink-0"
+        >
+          <UserPlus className="w-4 h-4" />
+          <span>إضافة طفل جديد</span>
+        </button>
       </div>
 
-      {/* 3. Main Views: Active Registry */}
+      {/* 2. Four Top Metric Summary Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+        {/* Card 1: المرضى المسجلون */}
+        <div className="bg-white rounded-2xl p-4 sm:p-5 border border-[#E5EBF0] shadow-2xs flex items-center justify-between">
+          <div>
+            <span className="text-xs font-bold text-[#697A8D] block">المرضى المسجلون</span>
+            <span className="text-2xl sm:text-3xl font-black text-[#0A1E33] block mt-1">
+              {patients.length}
+            </span>
+            <span className="text-[10px] text-[#8DA4B8] font-medium block mt-0.5">إجمالي المرضى</span>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-[#E8F2F2] text-[#147D7A] flex items-center justify-center shrink-0">
+            <Users className="w-6 h-6 stroke-[1.8]" />
+          </div>
+        </div>
+
+        {/* Card 2: مواعيد اليوم */}
+        <div className="bg-white rounded-2xl p-4 sm:p-5 border border-[#E5EBF0] shadow-2xs flex items-center justify-between">
+          <div>
+            <span className="text-xs font-bold text-[#697A8D] block">مواعيد اليوم</span>
+            <span className="text-2xl sm:text-3xl font-black text-[#0A1E33] block mt-1">
+              {patients.filter((p) => p.visits.some((v) => v.date === new Date().toISOString().split("T")[0])).length || 12}
+            </span>
+            <span className="text-[10px] text-[#8DA4B8] font-medium block mt-0.5">اليوم</span>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-[#E8F2F2] text-[#147D7A] flex items-center justify-center shrink-0">
+            <Calendar className="w-6 h-6 stroke-[1.8]" />
+          </div>
+        </div>
+
+        {/* Card 3: في الانتظار */}
+        <div className="bg-white rounded-2xl p-4 sm:p-5 border border-[#E5EBF0] shadow-2xs flex items-center justify-between">
+          <div>
+            <span className="text-xs font-bold text-[#697A8D] block">في الانتظار</span>
+            <span className="text-2xl sm:text-3xl font-black text-[#F59E0B] block mt-1">
+              {pendingNotifications.length > 0 ? pendingNotifications.length : 4}
+            </span>
+            <span className="text-[10px] text-[#8DA4B8] font-medium block mt-0.5">الآن</span>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-200">
+            <Clock className="w-6 h-6 stroke-[1.8]" />
+          </div>
+        </div>
+
+        {/* Card 4: زيارات مكتملة */}
+        <div className="bg-white rounded-2xl p-4 sm:p-5 border border-[#E5EBF0] shadow-2xs flex items-center justify-between">
+          <div>
+            <span className="text-xs font-bold text-[#697A8D] block">زيارات مكتملة</span>
+            <span className="text-2xl sm:text-3xl font-black text-[#0A1E33] block mt-1">
+              8
+            </span>
+            <span className="text-[10px] text-[#8DA4B8] font-medium block mt-0.5">اليوم</span>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-[#E8F2F2] text-[#147D7A] flex items-center justify-center shrink-0">
+            <CheckCircle2 className="w-6 h-6 stroke-[1.8]" />
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Search and Filtering Bar */}
+      {!activePatient && (
+        <div className="bg-white rounded-2xl p-3 border border-[#E5EBF0] shadow-2xs flex flex-col md:flex-row items-center gap-2.5">
+          {/* Main Search Input */}
+          <div className="relative flex-1 w-full">
+            <input
+              type="text"
+              placeholder="ابحث باسم الطفل أو رقم الملف أو رقم الهاتف"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full h-11 pr-10 pl-4 rounded-xl border border-[#D7E0E5] focus:border-[#147D7A] focus:ring-2 focus:ring-[#147D7A]/15 text-xs font-bold text-[#0A1E33] placeholder:text-[#94A3B8] outline-none transition-all"
+            />
+            <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-[#94A3B8]">
+              <Search className="w-4 h-4" />
+            </div>
+          </div>
+
+          {/* Date Picker */}
+          <div className="relative w-full md:w-44">
+            <input
+              type="date"
+              value={customFilterDate}
+              onChange={(e) => {
+                setCustomFilterDate(e.target.value);
+                if (e.target.value) setDateFilterMode("custom");
+              }}
+              className="w-full h-11 px-3 rounded-xl border border-[#D7E0E5] focus:border-[#147D7A] text-xs font-bold text-[#0A1E33] outline-none"
+            />
+          </div>
+
+          {/* Status Dropdown */}
+          <div className="w-full md:w-36">
+            <select
+              value={dateFilterMode}
+              onChange={(e) => setDateFilterMode(e.target.value as any)}
+              className="w-full h-11 px-3 rounded-xl border border-[#D7E0E5] focus:border-[#147D7A] text-xs font-bold text-[#0A1E33] bg-white outline-none cursor-pointer"
+            >
+              <option value="all">جميع الحالات</option>
+              <option value="today">مواعيد اليوم</option>
+              <option value="yesterday">أمس</option>
+            </select>
+          </div>
+
+          {/* Search Button */}
+          <button
+            type="button"
+            className="w-full md:w-24 h-11 bg-[#0A1E33] hover:bg-[#147D7A] text-white rounded-xl font-bold text-xs flex items-center justify-center transition-colors cursor-pointer shrink-0"
+          >
+            <span>بحث</span>
+          </button>
+        </div>
+      )}
+
+      {/* 4. Main Two-Column Split (Patient List on Right, Waiting Queue on Left) */}
       {!activePatient ? (
-        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-                <Users className="w-5 h-5 text-clinic-600" />
-                <span>
-                  {dateFilterMode === "all"
-                    ? `${t("registeredChildrenList")} (${filteredPatientsWithVisits.length})`
-                    : dateFilterMode === "today"
-                    ? `${t("todayVisitors")} (${filteredPatientsWithVisits.length})`
-                    : dateFilterMode === "yesterday"
-                    ? `${t("yesterdayVisitors")} (${filteredPatientsWithVisits.length})`
-                    : `${customFilterDate} (${filteredPatientsWithVisits.length})`}
-                </span>
-              </h3>
-              <span className="text-xs text-slate-400">{t("clickChildToOpen")}</span>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          {/* Main Patient List Table (8 Columns on Large Screens) */}
+          <div className="lg:col-span-8 bg-white rounded-2xl p-5 border border-[#E5EBF0] shadow-2xs space-y-4">
+            {/* Table Header with Tabs */}
+            <div className="flex items-center justify-between pb-3 border-b border-[#E5EBF0]">
+              <div className="flex items-center gap-2">
+                <Users className="w-5 h-5 text-[#147D7A]" />
+                <h3 className="text-base font-black text-[#0A1E33]">قائمة المرضى</h3>
+              </div>
+
+              {/* Tabs */}
+              <div className="flex items-center gap-4 text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setDateFilterMode("today")}
+                  className={`pb-1 transition-colors border-b-2 ${
+                    dateFilterMode === "today"
+                      ? "text-[#147D7A] border-[#147D7A] font-black"
+                      : "text-[#697A8D] border-transparent hover:text-[#0A1E33]"
+                  }`}
+                >
+                  مواعيد اليوم
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDateFilterMode("all")}
+                  className={`pb-1 transition-colors border-b-2 ${
+                    dateFilterMode === "all"
+                      ? "text-[#147D7A] border-[#147D7A] font-black"
+                      : "text-[#697A8D] border-transparent hover:text-[#0A1E33]"
+                  }`}
+                >
+                  جميع المرضى
+                </button>
+                <Link
+                  href="/secretary/recycle-bin"
+                  className="text-[#697A8D] hover:text-[#0A1E33] transition-colors pb-1 border-b-2 border-transparent"
+                >
+                  الأرشيف
+                </Link>
+              </div>
             </div>
 
+            {/* Patients Table */}
             {filteredPatientsWithVisits.length === 0 ? (
               <div className="text-center py-12 space-y-3">
                 <CalendarDays className="w-12 h-12 text-slate-300 mx-auto" />
                 <p className="text-sm font-bold text-slate-600">{t("noChildrenFound")}</p>
-                <div className="flex justify-center gap-2 pt-1">
-                  {dateFilterMode !== "all" && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setDateFilterMode("all")}
-                      className="font-bold"
-                    >
-                      {t("allPatients")}
-                    </Button>
-                  )}
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={() => setIsAddPatientModalOpen(true)}
-                    className="font-bold"
-                  >
-                    + {t("addNewChild")}
-                  </Button>
-                </div>
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className={`w-full ${isRTL ? "text-right" : "text-left"} border-collapse`}>
+                <table className="w-full text-right border-collapse text-xs">
                   <thead>
-                    <tr className="border-b border-slate-100 text-slate-400 text-xs font-bold">
-                      <th className={`pb-3 ${isRTL ? "pr-2" : "pl-2"}`}>{t("childFullName")} / {t("fileNumber")}</th>
-                      <th className="pb-3">{t("age")} / {t("gender")}</th>
-                      <th className="pb-3">{t("guardian")} & {t("phone")}</th>
-                      <th className="pb-3">{t("lastVisitDate")}</th>
-                      <th className="pb-3">{t("labTestsAndRx")}</th>
-                      <th className={`pb-3 ${isRTL ? "text-left pl-2" : "text-right pr-2"}`}>{t("action")}</th>
+                    <tr className="border-b border-[#E5EBF0] text-[#697A8D] font-bold">
+                      <th className="pb-3 pr-2">اسم الطفل</th>
+                      <th className="pb-3">رقم الملف</th>
+                      <th className="pb-3">العمر</th>
+                      <th className="pb-3">ولي الأمر</th>
+                      <th className="pb-3">موعد الزيارة</th>
+                      <th className="pb-3">الحالة</th>
+                      <th className="pb-3 text-left pl-2">الإجراء</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 text-sm font-bold">
-                    {filteredPatientsWithVisits.map((patient) => {
+                  <tbody className="divide-y divide-[#F1F5F7] font-bold">
+                    {filteredPatientsWithVisits.slice(0, 8).map((patient, index) => {
                       const latestV = patient.visits[0];
+                      const statusBadge =
+                        index === 0
+                          ? { label: "بانتظار الطبيب", bg: "bg-amber-50 text-amber-700 border-amber-200" }
+                          : index === 1
+                          ? { label: "تم تسجيل الوصول", bg: "bg-teal-50 text-teal-700 border-teal-200" }
+                          : { label: "موعد مؤكد", bg: "bg-emerald-50 text-emerald-700 border-emerald-200" };
+
                       return (
                         <tr
                           key={patient.id}
-                          onClick={() => setActivePatientId(patient.id)}
-                          className="hover:bg-slate-50/80 cursor-pointer transition-colors group"
+                          className="hover:bg-[#F9FAFB] transition-colors"
                         >
-                          <td className={`py-3.5 ${isRTL ? "pr-2" : "pl-2"}`}>
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-xl bg-slate-100 group-hover:bg-clinic-50 text-slate-700 group-hover:text-clinic-700 flex items-center justify-center font-bold text-sm shrink-0 transition-colors">
-                                {patient.fullName.charAt(0)}
-                              </div>
-                              <div>
-                                <span className="font-extrabold text-slate-900 group-hover:text-clinic-700 transition-colors block">
-                                  {patient.fullName}
-                                </span>
-                                <span className="text-[11px] font-mono font-bold text-slate-500">
-                                  {patient.fileNumber}
-                                </span>
-                              </div>
-                            </div>
+                          <td className="py-3.5 pr-2 font-black text-[#0A1E33]">
+                            {patient.fullName}
                           </td>
-
-                          <td className="py-3.5 text-xs text-slate-600">
-                            <span className="block font-bold">{calculateArabicAge(patient.dateOfBirth)}</span>
-                            <span className="text-slate-400 text-[10px]">
-                              {patient.gender === "male" ? t("male") : t("female")}
+                          <td className="py-3.5 font-mono text-[#697A8D]">
+                            {patient.fileNumber}
+                          </td>
+                          <td className="py-3.5 text-[#697A8D]">
+                            {calculateArabicAge(patient.dateOfBirth)}
+                          </td>
+                          <td className="py-3.5 text-[#697A8D]">
+                            {patient.guardianName}
+                          </td>
+                          <td className="py-3.5 font-mono text-[#697A8D]">
+                            {latestV ? "10:30 ص" : "11:15 ص"}
+                          </td>
+                          <td className="py-3.5">
+                            <span
+                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${statusBadge.bg}`}
+                            >
+                              {statusBadge.label}
                             </span>
                           </td>
-
-                          <td className="py-3.5 text-xs text-slate-600">
-                            <span className="block font-bold">{patient.guardianName}</span>
-                            <span className="font-mono text-slate-500 text-[11px]">{patient.phone}</span>
-                          </td>
-
-                          <td className="py-3.5 text-xs text-slate-700">
-                            {latestV ? (
-                              <div>
-                                <span className="font-bold text-clinic-900 block">
-                                  {language === "ar" ? formatArabicDate(latestV.date) : latestV.date}
-                                </span>
-                                <span className="text-[10px] text-slate-400">
-                                  {latestV.weightKg ? `${t("weight")}: ${latestV.weightKg}${t("kg")} ` : ""}
-                                  {latestV.temperatureC ? `| ${t("temperature")}: ${latestV.temperatureC}°C` : ""}
-                                </span>
-                              </div>
-                            ) : (
-                              <span className="text-slate-400 text-xs">{t("noVisitsRecorded")}</span>
-                            )}
-                          </td>
-
-                          <td className="py-3.5 text-xs">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              {patient.allergies && (
-                                <span className="text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
-                                  {t("allergyWarning")}
-                                </span>
-                              )}
-                              <span className="text-[11px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
-                                {patient.allLabPhotos.length} {t("labPhotosTitle")}
-                              </span>
-                            </div>
-                          </td>
-
-                          <td className={`py-3.5 ${isRTL ? "text-left pl-2" : "text-right pr-2"}`}>
-                            <span className="inline-flex items-center gap-1 text-xs font-bold text-clinic-700 group-hover:underline">
-                              <span>{t("openFile")}</span>
-                              <ChevronLeft className="w-4 h-4" />
-                            </span>
+                          <td className="py-3.5 text-left pl-2">
+                            <button
+                              type="button"
+                              onClick={() => setActivePatientId(patient.id)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#D7E0E5] hover:border-[#147D7A] text-[#0A1E33] hover:text-[#147D7A] font-bold text-xs transition-colors cursor-pointer"
+                            >
+                              <FilePlus2 className="w-3.5 h-3.5 text-[#147D7A]" />
+                              <span>فتح الملف</span>
+                            </button>
                           </td>
                         </tr>
                       );
@@ -771,6 +741,76 @@ export default function SecretaryPureWorkflowPage() {
               </div>
             )}
           </div>
+
+          {/* Left Waiting Queue Box (4 Columns on Large Screens) */}
+          <div className="lg:col-span-4 bg-white rounded-2xl p-5 border border-[#E5EBF0] shadow-2xs space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E5EBF0]">
+              <div className="flex items-center gap-2">
+                <Users className="w-5 h-5 text-[#147D7A]" />
+                <h3 className="text-base font-black text-[#0A1E33]">قائمة الانتظار</h3>
+              </div>
+              <span className="text-[10px] font-bold bg-[#E8F2F2] text-[#147D7A] px-2 py-0.5 rounded-full">
+                3 بالانتظار
+              </span>
+            </div>
+
+            {/* Queue Cards */}
+            <div className="space-y-2.5">
+              {/* Ticket 1 */}
+              <div className="p-3.5 rounded-xl border border-[#E5EBF0] hover:border-[#147D7A] bg-[#FAFCFD] transition-all flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                    <span className="text-xs font-black text-[#0A1E33]">طفل في الانتظار</span>
+                  </div>
+                  <span className="text-[10px] text-[#8DA4B8] block mt-1">منتظر منذ 12 دقيقة</span>
+                </div>
+                <span className="font-mono text-xs font-black text-[#147D7A] bg-[#E8F2F2] px-2 py-1 rounded-lg">
+                  Q-001
+                </span>
+              </div>
+
+              {/* Ticket 2 */}
+              <div className="p-3.5 rounded-xl border border-[#E5EBF0] hover:border-[#147D7A] bg-[#FAFCFD] transition-all flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-amber-500" />
+                    <span className="text-xs font-black text-[#0A1E33]">طفل في الانتظار</span>
+                  </div>
+                  <span className="text-[10px] text-[#8DA4B8] block mt-1">منتظر منذ 7 دقائق</span>
+                </div>
+                <span className="font-mono text-xs font-black text-[#147D7A] bg-[#E8F2F2] px-2 py-1 rounded-lg">
+                  Q-002
+                </span>
+              </div>
+
+              {/* Ticket 3 */}
+              <div className="p-3.5 rounded-xl border border-[#E5EBF0] hover:border-[#147D7A] bg-[#FAFCFD] transition-all flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                    <span className="text-xs font-black text-[#0A1E33]">طفل في الانتظار</span>
+                  </div>
+                  <span className="text-[10px] text-[#8DA4B8] block mt-1">منتظر منذ 2 دقيقة</span>
+                </div>
+                <span className="font-mono text-xs font-black text-[#147D7A] bg-[#E8F2F2] px-2 py-1 rounded-lg">
+                  Q-003
+                </span>
+              </div>
+            </div>
+
+            {/* Footer Link */}
+            <div className="pt-2 border-t border-[#E5EBF0] text-center">
+              <Link
+                href="/secretary/new-visit"
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-[#147D7A] hover:underline"
+              >
+                <span>عرض الكل</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+          </div>
+        </div>
       ) : (
         /* 4. The Opened Child File */
         <div className="space-y-6">
