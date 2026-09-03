@@ -21,7 +21,7 @@ interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({ role }) => {
   const pathname = usePathname();
-  const { t, isRTL } = useLanguage();
+  const { language, t, isRTL } = useLanguage();
 
   const doctorLinks = [
     { href: "/doctor", label: t("navDoctorWorkstation"), icon: Stethoscope },
@@ -79,8 +79,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ role }) => {
         {t("sidebarFooterTitle")}
         <br />
         <span className="font-bold text-slate-700">{t("sidebarFooterSubtitle")}</span>
-        <div className="pt-2 mt-2 border-t border-slate-200/60 font-black text-clinic-800 text-[9px]">
-          Design by <span className="text-clinic-600">Trimindesai</span>
+        <div className="pt-2 mt-2 border-t border-slate-200/60 font-black text-slate-800 text-[10px]">
+          {language === "ar" ? "تصميم وتطوير: فريق Trimindesai © 2026" : "Design & Dev: Trimindesai Team © 2026"}
         </div>
       </div>
     </aside>
