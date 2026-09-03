@@ -13,6 +13,7 @@ import {
   FilePlus2,
   Stethoscope,
   ClipboardList,
+  Trash2,
 } from "lucide-react";
 
 interface MobileNavProps {
@@ -33,6 +34,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({ role }) => {
     { href: "/secretary", label: t("navReceptionBoard"), icon: Clock },
     { href: "/secretary/new-patient", label: t("navAddNewChild"), icon: UserPlus },
     { href: "/secretary/new-visit", label: t("navNewVisitVitals"), icon: FilePlus2 },
+    { href: "/secretary/recycle-bin", label: t("navRecycleBin"), icon: Trash2 },
   ];
 
   const links = role === "doctor" ? doctorLinks : secretaryLinks;

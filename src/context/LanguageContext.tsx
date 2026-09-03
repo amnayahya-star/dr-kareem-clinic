@@ -35,6 +35,7 @@ const translations: Record<Language, Record<string, string>> = {
     navReceptionBoard: "لوحة الاستقبال والبحث",
     navAddNewChild: "إضافة طفل جديد",
     navNewVisitVitals: "فتح زيارة وقياسات",
+    navRecycleBin: "سلة المهملات (3 أشهر)",
     sidebarFooterTitle: "عيادة د. عبد الكريم عليوي",
     sidebarFooterSubtitle: "طب الأطفال وحديثي الولادة",
 
@@ -218,6 +219,7 @@ const translations: Record<Language, Record<string, string>> = {
     navReceptionBoard: "Reception & Live Search",
     navAddNewChild: "Add New Child",
     navNewVisitVitals: "New Visit & Vitals",
+    navRecycleBin: "Recycle Bin (3 Months)",
     sidebarFooterTitle: "Dr. Abdul Karim Aliwi Clinic",
     sidebarFooterSubtitle: "Pediatrics & Neonatology",
 

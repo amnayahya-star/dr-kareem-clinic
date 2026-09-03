@@ -521,39 +521,8 @@ export default function SecretaryPureWorkflowPage() {
           </Button>
         </div>
 
-        {/* Tab Switcher: Active Registry vs Recycle Bin (3 Months) */}
+        {/* Search Input */}
         {!activePatient && (
-          <div className="flex items-center gap-2 p-1.5 bg-slate-100 rounded-2xl w-fit">
-            <button
-              type="button"
-              onClick={() => setActiveTabMode("active")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all ${
-                activeTabMode === "active"
-                  ? "bg-white text-slate-900 shadow-sm"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              <Users className="w-4 h-4 text-clinic-600" />
-              <span>{t("activePatientsTab")} ({patients.length})</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTabMode("recycle_bin")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all ${
-                activeTabMode === "recycle_bin"
-                  ? "bg-rose-600 text-white shadow-sm"
-                  : "text-rose-700 hover:bg-rose-50"
-              }`}
-            >
-              <Trash2 className="w-4 h-4" />
-              <span>{t("recycleBinTab")} ({deletedPatients.length})</span>
-            </button>
-          </div>
-        )}
-
-        {/* Search Input (Active Mode) */}
-        {!activePatient && activeTabMode === "active" && (
           <div className="relative pt-1">
             <div className={`absolute inset-y-0 ${isRTL ? "right-0 pr-4" : "left-0 pl-4"} pt-1 flex items-center pointer-events-none text-slate-400`}>
               <Search className="w-5 h-5 text-clinic-600" />
@@ -581,8 +550,8 @@ export default function SecretaryPureWorkflowPage() {
           </div>
         )}
 
-        {/* 2. Date Filtering Bar (Active Mode) */}
-        {!activePatient && activeTabMode === "active" && (
+        {/* 2. Date Filtering Bar */}
+        {!activePatient && (
           <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-1.5 flex-wrap">
               <span className="text-xs font-bold text-slate-500 ml-1 flex items-center gap-1">
@@ -665,11 +634,9 @@ export default function SecretaryPureWorkflowPage() {
         )}
       </div>
 
-      {/* 3. Main Views: Active Registry OR Recycle Bin */}
+      {/* 3. Main Views: Active Registry */}
       {!activePatient ? (
-        activeTabMode === "active" ? (
-          /* ACTIVE CHILDREN TABLE */
-          <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4">
+        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
                 <Users className="w-5 h-5 text-clinic-600" />
@@ -804,110 +771,6 @@ export default function SecretaryPureWorkflowPage() {
               </div>
             )}
           </div>
-        ) : (
-          /* 3.5. RECYCLE BIN (3-MONTH ARCHIVE) VIEW */
-          <div className="bg-white rounded-3xl p-6 border-2 border-rose-100 shadow-sm space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-rose-100">
-              <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
-                  <Trash2 className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-black text-rose-950">
-                    {t("recycleBinTitle")} ({deletedPatients.length})
-                  </h3>
-                  <p className="text-xs text-rose-600/80">
-                    {t("recycleBinDesc")}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {deletedPatients.length === 0 ? (
-              <div className="text-center py-12 space-y-3">
-                <Archive className="w-12 h-12 text-slate-300 mx-auto" />
-                <p className="text-sm font-bold text-slate-600">{t("emptyRecycleBin")}</p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setActiveTabMode("active")}
-                  className="font-bold"
-                >
-                  {t("activePatientsTab")}
-                </Button>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className={`w-full ${isRTL ? "text-right" : "text-left"} border-collapse`}>
-                  <thead>
-                    <tr className="border-b border-slate-100 text-slate-400 text-xs font-bold">
-                      <th className={`pb-3 ${isRTL ? "pr-2" : "pl-2"}`}>{t("childFullName")} / {t("fileNumber")}</th>
-                      <th className="pb-3">{t("guardian")} & {t("phone")}</th>
-                      <th className="pb-3">{t("daysRemainingLabel")}</th>
-                      <th className={`pb-3 ${isRTL ? "text-left pl-2" : "text-right pr-2"}`}>{t("action")}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-sm font-bold">
-                    {deletedPatients.map((patient) => {
-                      const daysLeft = calculateRemainingDays(patient.deletedAt);
-                      return (
-                        <tr key={patient.id} className="hover:bg-rose-50/40 transition-colors">
-                          <td className={`py-3.5 ${isRTL ? "pr-2" : "pl-2"}`}>
-                            <div>
-                              <span className="font-extrabold text-slate-900 block">
-                                {patient.fullName}
-                              </span>
-                              <span className="text-[11px] font-mono text-slate-500 font-bold">
-                                {patient.fileNumber}
-                              </span>
-                            </div>
-                          </td>
-
-                          <td className="py-3.5 text-xs text-slate-600">
-                            <span className="block font-bold">{patient.guardianName}</span>
-                            <span className="font-mono text-slate-500 text-[11px]">{patient.phone}</span>
-                          </td>
-
-                          <td className="py-3.5 text-xs">
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-50 text-amber-900 border border-amber-200 font-black">
-                              <Clock className="w-3.5 h-3.5 text-amber-600" />
-                              <span>
-                                {daysLeft} {t("daysCount")}
-                              </span>
-                            </span>
-                          </td>
-
-                          <td className={`py-3.5 ${isRTL ? "text-left pl-2" : "text-right pr-2"}`}>
-                            <div className="flex items-center gap-2 justify-end">
-                              <Button
-                                size="sm"
-                                variant="primary"
-                                onClick={() => handleRestorePatient(patient.id)}
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs gap-1.5 shadow-xs"
-                              >
-                                <RotateCcw className="w-3.5 h-3.5" />
-                                <span>{t("restoreChildBtn")}</span>
-                              </Button>
-
-                              <button
-                                type="button"
-                                onClick={() => handlePermanentDelete(patient.id)}
-                                className="p-2 text-rose-500 hover:text-rose-700 hover:bg-rose-100/60 rounded-xl transition-colors"
-                                title={t("permanentDeleteBtn")}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )
       ) : (
         /* 4. The Opened Child File */
         <div className="space-y-6">
