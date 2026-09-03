@@ -127,6 +127,22 @@ const translations: Record<Language, Record<string, string>> = {
     testNameOrType: "اسم أو نوع التحليل",
     saveLabPhotoBtn: "حفظ التحليل في الزيارة",
 
+    // Deleted Records & Recycle Bin
+    recycleBinTitle: "سلة المحذوفات (أرشيف 3 أشهر)",
+    recycleBinDesc: "الأطفال المحذوفون مؤقتاً. يُحفظ الملف لمدة 3 أشهر (90 يوماً) مع إمكانية الاستعادة في أي وقت، ثم يُحذف نهائياً وتلقائياً.",
+    activePatientsTab: "سجل الأطفال النشطين",
+    recycleBinTab: "🗑️ سلة المحذوفات (3 أشهر)",
+    deleteChildBtn: "نقل الطفل إلى سلة المحذوفات",
+    confirmDeleteModalTitle: "تأكيد نقل ملف الطفل إلى سلة المحذوفات",
+    confirmDeleteModalDesc: "سيتم إخفاء ملف الطفل من السجل الرئيسي ونقله إلى سلة المحذوفات المؤقتة لمدة 3 أشهر (90 يوماً). يمكنك استعادته بضغطة زر واحدة قبل انقضاء المدة.",
+    confirmDeleteAction: "نعم، انقل للمحذوفات",
+    restoreChildBtn: "استعادة الملف للسجل النشط",
+    permanentDeleteBtn: "حذف نهائي فوري",
+    confirmPermanentDelete: "هل أنت متأكد من الحذف النهائي الفوري لملف الطفل؟ لا يمكن التراجع بعد ذلك.",
+    daysRemainingLabel: "المدة المتبقية قبل الحذف النهائي:",
+    daysCount: "يوم",
+    emptyRecycleBin: "سلة المحذوفات فارغة حالياً.",
+
     // Doctor Screen
     doctorSearchTitle: "البحث السريري وتقسيم المراجعين حسب الأيام",
     searchPlaceholderDoctor: "ابحث باسم الطفل، رقم الهاتف، أو رقم الملف (مثال: يوسف، مريم، 0770)...",
@@ -293,6 +309,22 @@ const translations: Record<Language, Record<string, string>> = {
     addExtraLabModalDesc: "Capture or upload a new lab test photo and attach it to this visit",
     testNameOrType: "Test Name or Type",
     saveLabPhotoBtn: "Save Lab Test to Visit",
+
+    // Deleted Records & Recycle Bin
+    recycleBinTitle: "Recycle Bin (3 Months Archive)",
+    recycleBinDesc: "Temporarily deleted children. Files are kept for 3 months (90 days) with restore capability before permanent deletion.",
+    activePatientsTab: "Active Children Registry",
+    recycleBinTab: "🗑️ Recycle Bin (3 Months)",
+    deleteChildBtn: "Move Child to Recycle Bin",
+    confirmDeleteModalTitle: "Confirm Moving Child to Recycle Bin",
+    confirmDeleteModalDesc: "The child file will be moved to the 3-month recycle bin. You can restore it anytime during this period before permanent deletion.",
+    confirmDeleteAction: "Yes, Move to Recycle Bin",
+    restoreChildBtn: "Restore to Active Records",
+    permanentDeleteBtn: "Permanent Delete Now",
+    confirmPermanentDelete: "Are you sure you want to permanently delete this file? This cannot be undone.",
+    daysRemainingLabel: "Remaining before permanent purge:",
+    daysCount: "days",
+    emptyRecycleBin: "Recycle bin is currently empty.",
 
     // Doctor Screen
     doctorSearchTitle: "Clinical Search & Daily Visitors",

@@ -48,6 +48,7 @@ export interface PatientFile {
   visits: VisitRecord[];
   allLabPhotos: MedicalPhoto[];
   allPrescriptionPhotos: MedicalPhoto[];
+  deletedAt?: string; // ISO date string when moved to 3-month recycle bin
 }
 
 export const MOCK_PATIENT_FILES: PatientFile[] = [

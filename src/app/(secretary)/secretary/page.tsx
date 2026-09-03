@@ -6,7 +6,15 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { MOCK_PATIENT_FILES, PatientFile, VisitRecord, MedicalPhoto } from "@/lib/mock-data/patients";
-import { fetchPatients, createPatientRecord } from "@/services/patientService";
+import {
+  fetchPatients,
+  createPatientRecord,
+  fetchDeletedPatients,
+  softDeletePatient,
+  restorePatient,
+  permanentDeletePatient,
+  calculateRemainingDays,
+} from "@/services/patientService";
 import { attachPrescriptionPhoto, addExtraLabPhotoToVisit } from "@/services/visitService";
 import {
   ClinicNotification,
@@ -44,11 +52,18 @@ import {
   Bell,
   BellRing,
   Sparkles,
+  Trash2,
+  RotateCcw,
+  Clock,
+  Archive,
+  ShieldAlert,
 } from "lucide-react";
 
 export default function SecretaryPureWorkflowPage() {
   const { language, t, isRTL } = useLanguage();
   const [patients, setPatients] = useState<PatientFile[]>(MOCK_PATIENT_FILES);
+  const [deletedPatients, setDeletedPatients] = useState<PatientFile[]>([]);
+  const [activeTabMode, setActiveTabMode] = useState<"active" | "recycle_bin">("active");
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -70,6 +85,8 @@ export default function SecretaryPureWorkflowPage() {
   const [isAddPatientModalOpen, setIsAddPatientModalOpen] = useState(false);
   const [isSnapRxModalOpen, setIsSnapRxModalOpen] = useState(false);
   const [isAddExtraLabModalOpen, setIsAddExtraLabModalOpen] = useState(false);
+  const [isDeleteConfirmModalOpen, setIsDeleteConfirmModalOpen] = useState(false);
+  const [childToDelete, setChildToDelete] = useState<PatientFile | null>(null);
   const [previewPhoto, setPreviewPhoto] = useState<MedicalPhoto | null>(null);
 
   // New Patient Form State
@@ -100,10 +117,14 @@ export default function SecretaryPureWorkflowPage() {
     async function loadData() {
       setIsLoading(true);
       try {
-        const data = await fetchPatients();
-        if (data && data.length > 0) {
-          setPatients(data);
+        const [activeData, deletedData] = await Promise.all([
+          fetchPatients(),
+          fetchDeletedPatients(),
+        ]);
+        if (activeData && activeData.length > 0) {
+          setPatients(activeData);
         }
+        setDeletedPatients(deletedData);
       } catch (err) {
         console.error("Error loading patients:", err);
       } finally {
@@ -117,12 +138,14 @@ export default function SecretaryPureWorkflowPage() {
 
     // Listen for Realtime alerts from the Doctor
     const unsubscribe = subscribeToClinicNotifications((notif) => {
-      playNotificationChime();
-      setActiveAlert(notif);
-      setPendingNotifications((prev) => [
-        notif,
-        ...prev.filter((n) => n.visitId !== notif.visitId),
-      ]);
+      if (notif.type === "visit_approved_needs_rx") {
+        playNotificationChime();
+        setActiveAlert(notif);
+        setPendingNotifications((prev) => [
+          notif,
+          ...prev.filter((n) => n.visitId !== notif.visitId),
+        ]);
+      }
     });
 
     const handleUpdate = () => {
@@ -224,6 +247,47 @@ export default function SecretaryPureWorkflowPage() {
       setNewAddress("");
     } catch (err: any) {
       alert(language === "ar" ? `حدث خطأ أثناء حفظ ملف الطفل: ${err.message}` : `Error saving child record: ${err.message}`);
+    }
+  };
+
+  // Handler: Soft Delete Child (Move to 3-month Recycle Bin)
+  const handleConfirmSoftDelete = async () => {
+    if (!childToDelete) return;
+
+    try {
+      await softDeletePatient(childToDelete);
+      setPatients((prev) => prev.filter((p) => p.id !== childToDelete.id));
+      const updatedDeleted = await fetchDeletedPatients();
+      setDeletedPatients(updatedDeleted);
+      setActivePatientId(null);
+      setIsDeleteConfirmModalOpen(false);
+      setChildToDelete(null);
+    } catch (err: any) {
+      alert(`خطأ في نقل الملف للمحذوفات: ${err.message}`);
+    }
+  };
+
+  // Handler: Restore Patient from Recycle Bin
+  const handleRestorePatient = async (patientId: string) => {
+    try {
+      const restored = await restorePatient(patientId);
+      if (restored) {
+        setPatients([restored, ...patients]);
+        setDeletedPatients((prev) => prev.filter((p) => p.id !== patientId));
+      }
+    } catch (err: any) {
+      alert(`خطأ في استعادة الملف: ${err.message}`);
+    }
+  };
+
+  // Handler: Permanent Delete Patient
+  const handlePermanentDelete = async (patientId: string) => {
+    if (!window.confirm(t("confirmPermanentDelete"))) return;
+    try {
+      await permanentDeletePatient(patientId);
+      setDeletedPatients((prev) => prev.filter((p) => p.id !== patientId));
+    } catch (err: any) {
+      alert(`خطأ في الحذف النهائي: ${err.message}`);
     }
   };
 
@@ -378,7 +442,7 @@ export default function SecretaryPureWorkflowPage() {
       )}
 
       {/* 0.5. Persistent Pending Prescriptions Queue */}
-      {pendingNotifications.length > 0 && !activePatient && (
+      {pendingNotifications.length > 0 && !activePatient && activeTabMode === "active" && (
         <div className="bg-amber-50/80 border-2 border-amber-300 rounded-3xl p-5 shadow-xs space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 font-black text-amber-950 text-sm">
@@ -424,7 +488,7 @@ export default function SecretaryPureWorkflowPage() {
         </div>
       )}
 
-      {/* 1. Top Section: Header + Search + Add Patient */}
+      {/* 1. Top Section: Header + Search + Add Patient + Tab Switcher */}
       <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
@@ -457,35 +521,68 @@ export default function SecretaryPureWorkflowPage() {
           </Button>
         </div>
 
-        {/* Search Input */}
-        <div className="relative pt-1">
-          <div className={`absolute inset-y-0 ${isRTL ? "right-0 pr-4" : "left-0 pl-4"} pt-1 flex items-center pointer-events-none text-slate-400`}>
-            <Search className="w-5 h-5 text-clinic-600" />
-          </div>
-          <input
-            type="text"
-            placeholder={t("searchPlaceholderSecretary")}
-            value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              if (activePatientId) {
-                setActivePatientId(null);
-              }
-            }}
-            className={`w-full h-14 ${isRTL ? "pr-12 pl-10" : "pl-12 pr-10"} rounded-2xl border-2 border-slate-200 focus:border-clinic-500 focus:ring-2 focus:ring-clinic-100 text-sm font-bold text-slate-900 placeholder:text-slate-400 outline-none transition-all`}
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery("")}
-              className={`absolute inset-y-0 ${isRTL ? "left-0 pl-3.5" : "right-0 pr-3.5"} pt-1 flex items-center text-slate-400 hover:text-slate-600`}
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-
-        {/* 2. Date Filtering Bar */}
+        {/* Tab Switcher: Active Registry vs Recycle Bin (3 Months) */}
         {!activePatient && (
+          <div className="flex items-center gap-2 p-1.5 bg-slate-100 rounded-2xl w-fit">
+            <button
+              type="button"
+              onClick={() => setActiveTabMode("active")}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all ${
+                activeTabMode === "active"
+                  ? "bg-white text-slate-900 shadow-sm"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Users className="w-4 h-4 text-clinic-600" />
+              <span>{t("activePatientsTab")} ({patients.length})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTabMode("recycle_bin")}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all ${
+                activeTabMode === "recycle_bin"
+                  ? "bg-rose-600 text-white shadow-sm"
+                  : "text-rose-700 hover:bg-rose-50"
+              }`}
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>{t("recycleBinTab")} ({deletedPatients.length})</span>
+            </button>
+          </div>
+        )}
+
+        {/* Search Input (Active Mode) */}
+        {!activePatient && activeTabMode === "active" && (
+          <div className="relative pt-1">
+            <div className={`absolute inset-y-0 ${isRTL ? "right-0 pr-4" : "left-0 pl-4"} pt-1 flex items-center pointer-events-none text-slate-400`}>
+              <Search className="w-5 h-5 text-clinic-600" />
+            </div>
+            <input
+              type="text"
+              placeholder={t("searchPlaceholderSecretary")}
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                if (activePatientId) {
+                  setActivePatientId(null);
+                }
+              }}
+              className={`w-full h-14 ${isRTL ? "pr-12 pl-10" : "pl-12 pr-10"} rounded-2xl border-2 border-slate-200 focus:border-clinic-500 focus:ring-2 focus:ring-clinic-100 text-sm font-bold text-slate-900 placeholder:text-slate-400 outline-none transition-all`}
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className={`absolute inset-y-0 ${isRTL ? "left-0 pl-3.5" : "right-0 pr-3.5"} pt-1 flex items-center text-slate-400 hover:text-slate-600`}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* 2. Date Filtering Bar (Active Mode) */}
+        {!activePatient && activeTabMode === "active" && (
           <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-1.5 flex-wrap">
               <span className="text-xs font-bold text-slate-500 ml-1 flex items-center gap-1">
@@ -568,153 +665,275 @@ export default function SecretaryPureWorkflowPage() {
         )}
       </div>
 
-      {/* 3. Registered Children Table / List */}
+      {/* 3. Main Views: Active Registry OR Recycle Bin */}
       {!activePatient ? (
-        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-            <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-              <Users className="w-5 h-5 text-clinic-600" />
-              <span>
-                {dateFilterMode === "all"
-                  ? `${t("registeredChildrenList")} (${filteredPatientsWithVisits.length})`
-                  : dateFilterMode === "today"
-                  ? `${t("todayVisitors")} (${filteredPatientsWithVisits.length})`
-                  : dateFilterMode === "yesterday"
-                  ? `${t("yesterdayVisitors")} (${filteredPatientsWithVisits.length})`
-                  : `${customFilterDate} (${filteredPatientsWithVisits.length})`}
-              </span>
-            </h3>
-            <span className="text-xs text-slate-400">{t("clickChildToOpen")}</span>
-          </div>
+        activeTabMode === "active" ? (
+          /* ACTIVE CHILDREN TABLE */
+          <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                <Users className="w-5 h-5 text-clinic-600" />
+                <span>
+                  {dateFilterMode === "all"
+                    ? `${t("registeredChildrenList")} (${filteredPatientsWithVisits.length})`
+                    : dateFilterMode === "today"
+                    ? `${t("todayVisitors")} (${filteredPatientsWithVisits.length})`
+                    : dateFilterMode === "yesterday"
+                    ? `${t("yesterdayVisitors")} (${filteredPatientsWithVisits.length})`
+                    : `${customFilterDate} (${filteredPatientsWithVisits.length})`}
+                </span>
+              </h3>
+              <span className="text-xs text-slate-400">{t("clickChildToOpen")}</span>
+            </div>
 
-          {filteredPatientsWithVisits.length === 0 ? (
-            <div className="text-center py-12 space-y-3">
-              <CalendarDays className="w-12 h-12 text-slate-300 mx-auto" />
-              <p className="text-sm font-bold text-slate-600">{t("noChildrenFound")}</p>
-              <div className="flex justify-center gap-2 pt-1">
-                {dateFilterMode !== "all" && (
+            {filteredPatientsWithVisits.length === 0 ? (
+              <div className="text-center py-12 space-y-3">
+                <CalendarDays className="w-12 h-12 text-slate-300 mx-auto" />
+                <p className="text-sm font-bold text-slate-600">{t("noChildrenFound")}</p>
+                <div className="flex justify-center gap-2 pt-1">
+                  {dateFilterMode !== "all" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setDateFilterMode("all")}
+                      className="font-bold"
+                    >
+                      {t("allPatients")}
+                    </Button>
+                  )}
                   <Button
-                    variant="outline"
+                    variant="primary"
                     size="sm"
-                    onClick={() => setDateFilterMode("all")}
+                    onClick={() => setIsAddPatientModalOpen(true)}
                     className="font-bold"
                   >
-                    {t("allPatients")}
+                    + {t("addNewChild")}
                   </Button>
-                )}
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => setIsAddPatientModalOpen(true)}
-                  className="font-bold"
-                >
-                  + {t("addNewChild")}
-                </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className={`w-full ${isRTL ? "text-right" : "text-left"} border-collapse`}>
+                  <thead>
+                    <tr className="border-b border-slate-100 text-slate-400 text-xs font-bold">
+                      <th className={`pb-3 ${isRTL ? "pr-2" : "pl-2"}`}>{t("childFullName")} / {t("fileNumber")}</th>
+                      <th className="pb-3">{t("age")} / {t("gender")}</th>
+                      <th className="pb-3">{t("guardian")} & {t("phone")}</th>
+                      <th className="pb-3">{t("lastVisitDate")}</th>
+                      <th className="pb-3">{t("labTestsAndRx")}</th>
+                      <th className={`pb-3 ${isRTL ? "text-left pl-2" : "text-right pr-2"}`}>{t("action")}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-sm font-bold">
+                    {filteredPatientsWithVisits.map((patient) => {
+                      const latestV = patient.visits[0];
+                      return (
+                        <tr
+                          key={patient.id}
+                          onClick={() => setActivePatientId(patient.id)}
+                          className="hover:bg-slate-50/80 cursor-pointer transition-colors group"
+                        >
+                          <td className={`py-3.5 ${isRTL ? "pr-2" : "pl-2"}`}>
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-xl bg-slate-100 group-hover:bg-clinic-50 text-slate-700 group-hover:text-clinic-700 flex items-center justify-center font-bold text-sm shrink-0 transition-colors">
+                                {patient.fullName.charAt(0)}
+                              </div>
+                              <div>
+                                <span className="font-extrabold text-slate-900 group-hover:text-clinic-700 transition-colors block">
+                                  {patient.fullName}
+                                </span>
+                                <span className="text-[11px] font-mono font-bold text-slate-500">
+                                  {patient.fileNumber}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="py-3.5 text-xs text-slate-600">
+                            <span className="block font-bold">{calculateArabicAge(patient.dateOfBirth)}</span>
+                            <span className="text-slate-400 text-[10px]">
+                              {patient.gender === "male" ? t("male") : t("female")}
+                            </span>
+                          </td>
+
+                          <td className="py-3.5 text-xs text-slate-600">
+                            <span className="block font-bold">{patient.guardianName}</span>
+                            <span className="font-mono text-slate-500 text-[11px]">{patient.phone}</span>
+                          </td>
+
+                          <td className="py-3.5 text-xs text-slate-700">
+                            {latestV ? (
+                              <div>
+                                <span className="font-bold text-clinic-900 block">
+                                  {language === "ar" ? formatArabicDate(latestV.date) : latestV.date}
+                                </span>
+                                <span className="text-[10px] text-slate-400">
+                                  {latestV.weightKg ? `${t("weight")}: ${latestV.weightKg}${t("kg")} ` : ""}
+                                  {latestV.temperatureC ? `| ${t("temperature")}: ${latestV.temperatureC}°C` : ""}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 text-xs">{t("noVisitsRecorded")}</span>
+                            )}
+                          </td>
+
+                          <td className="py-3.5 text-xs">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {patient.allergies && (
+                                <span className="text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                                  {t("allergyWarning")}
+                                </span>
+                              )}
+                              <span className="text-[11px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
+                                {patient.allLabPhotos.length} {t("labPhotosTitle")}
+                              </span>
+                            </div>
+                          </td>
+
+                          <td className={`py-3.5 ${isRTL ? "text-left pl-2" : "text-right pr-2"}`}>
+                            <span className="inline-flex items-center gap-1 text-xs font-bold text-clinic-700 group-hover:underline">
+                              <span>{t("openFile")}</span>
+                              <ChevronLeft className="w-4 h-4" />
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ) : (
+          /* 3.5. RECYCLE BIN (3-MONTH ARCHIVE) VIEW */
+          <div className="bg-white rounded-3xl p-6 border-2 border-rose-100 shadow-sm space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-rose-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-rose-950">
+                    {t("recycleBinTitle")} ({deletedPatients.length})
+                  </h3>
+                  <p className="text-xs text-rose-600/80">
+                    {t("recycleBinDesc")}
+                  </p>
+                </div>
               </div>
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className={`w-full ${isRTL ? "text-right" : "text-left"} border-collapse`}>
-                <thead>
-                  <tr className="border-b border-slate-100 text-slate-400 text-xs font-bold">
-                    <th className={`pb-3 ${isRTL ? "pr-2" : "pl-2"}`}>{t("childFullName")} / {t("fileNumber")}</th>
-                    <th className="pb-3">{t("age")} / {t("gender")}</th>
-                    <th className="pb-3">{t("guardian")} & {t("phone")}</th>
-                    <th className="pb-3">{t("lastVisitDate")}</th>
-                    <th className="pb-3">{t("labTestsAndRx")}</th>
-                    <th className={`pb-3 ${isRTL ? "text-left pl-2" : "text-right pr-2"}`}>{t("action")}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-sm font-bold">
-                  {filteredPatientsWithVisits.map((patient) => {
-                    const latestV = patient.visits[0];
-                    return (
-                      <tr
-                        key={patient.id}
-                        onClick={() => setActivePatientId(patient.id)}
-                        className="hover:bg-slate-50/80 cursor-pointer transition-colors group"
-                      >
-                        <td className={`py-3.5 ${isRTL ? "pr-2" : "pl-2"}`}>
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-slate-100 group-hover:bg-clinic-50 text-slate-700 group-hover:text-clinic-700 flex items-center justify-center font-bold text-sm shrink-0 transition-colors">
-                              {patient.fullName.charAt(0)}
-                            </div>
+
+            {deletedPatients.length === 0 ? (
+              <div className="text-center py-12 space-y-3">
+                <Archive className="w-12 h-12 text-slate-300 mx-auto" />
+                <p className="text-sm font-bold text-slate-600">{t("emptyRecycleBin")}</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setActiveTabMode("active")}
+                  className="font-bold"
+                >
+                  {t("activePatientsTab")}
+                </Button>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className={`w-full ${isRTL ? "text-right" : "text-left"} border-collapse`}>
+                  <thead>
+                    <tr className="border-b border-slate-100 text-slate-400 text-xs font-bold">
+                      <th className={`pb-3 ${isRTL ? "pr-2" : "pl-2"}`}>{t("childFullName")} / {t("fileNumber")}</th>
+                      <th className="pb-3">{t("guardian")} & {t("phone")}</th>
+                      <th className="pb-3">{t("daysRemainingLabel")}</th>
+                      <th className={`pb-3 ${isRTL ? "text-left pl-2" : "text-right pr-2"}`}>{t("action")}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-sm font-bold">
+                    {deletedPatients.map((patient) => {
+                      const daysLeft = calculateRemainingDays(patient.deletedAt);
+                      return (
+                        <tr key={patient.id} className="hover:bg-rose-50/40 transition-colors">
+                          <td className={`py-3.5 ${isRTL ? "pr-2" : "pl-2"}`}>
                             <div>
-                              <span className="font-extrabold text-slate-900 group-hover:text-clinic-700 transition-colors block">
+                              <span className="font-extrabold text-slate-900 block">
                                 {patient.fullName}
                               </span>
-                              <span className="text-[11px] font-mono font-bold text-slate-500">
+                              <span className="text-[11px] font-mono text-slate-500 font-bold">
                                 {patient.fileNumber}
                               </span>
                             </div>
-                          </div>
-                        </td>
+                          </td>
 
-                        <td className="py-3.5 text-xs text-slate-600">
-                          <span className="block font-bold">{calculateArabicAge(patient.dateOfBirth)}</span>
-                          <span className="text-slate-400 text-[10px]">
-                            {patient.gender === "male" ? t("male") : t("female")}
-                          </span>
-                        </td>
+                          <td className="py-3.5 text-xs text-slate-600">
+                            <span className="block font-bold">{patient.guardianName}</span>
+                            <span className="font-mono text-slate-500 text-[11px]">{patient.phone}</span>
+                          </td>
 
-                        <td className="py-3.5 text-xs text-slate-600">
-                          <span className="block font-bold">{patient.guardianName}</span>
-                          <span className="font-mono text-slate-500 text-[11px]">{patient.phone}</span>
-                        </td>
-
-                        <td className="py-3.5 text-xs text-slate-700">
-                          {latestV ? (
-                            <div>
-                              <span className="font-bold text-clinic-900 block">
-                                {language === "ar" ? formatArabicDate(latestV.date) : latestV.date}
+                          <td className="py-3.5 text-xs">
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-50 text-amber-900 border border-amber-200 font-black">
+                              <Clock className="w-3.5 h-3.5 text-amber-600" />
+                              <span>
+                                {daysLeft} {t("daysCount")}
                               </span>
-                              <span className="text-[10px] text-slate-400">
-                                {latestV.weightKg ? `${t("weight")}: ${latestV.weightKg}${t("kg")} ` : ""}
-                                {latestV.temperatureC ? `| ${t("temperature")}: ${latestV.temperatureC}°C` : ""}
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-slate-400 text-xs">{t("noVisitsRecorded")}</span>
-                          )}
-                        </td>
-
-                        <td className="py-3.5 text-xs">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            {patient.allergies && (
-                              <span className="text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
-                                {t("allergyWarning")}
-                              </span>
-                            )}
-                            <span className="text-[11px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
-                              {patient.allLabPhotos.length} {t("labPhotosTitle")}
                             </span>
-                          </div>
-                        </td>
+                          </td>
 
-                        <td className={`py-3.5 ${isRTL ? "text-left pl-2" : "text-right pr-2"}`}>
-                          <span className="inline-flex items-center gap-1 text-xs font-bold text-clinic-700 group-hover:underline">
-                            <span>{t("openFile")}</span>
-                            <ChevronLeft className="w-4 h-4" />
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+                          <td className={`py-3.5 ${isRTL ? "text-left pl-2" : "text-right pr-2"}`}>
+                            <div className="flex items-center gap-2 justify-end">
+                              <Button
+                                size="sm"
+                                variant="primary"
+                                onClick={() => handleRestorePatient(patient.id)}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs gap-1.5 shadow-xs"
+                              >
+                                <RotateCcw className="w-3.5 h-3.5" />
+                                <span>{t("restoreChildBtn")}</span>
+                              </Button>
+
+                              <button
+                                type="button"
+                                onClick={() => handlePermanentDelete(patient.id)}
+                                className="p-2 text-rose-500 hover:text-rose-700 hover:bg-rose-100/60 rounded-xl transition-colors"
+                                title={t("permanentDeleteBtn")}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )
       ) : (
         /* 4. The Opened Child File */
         <div className="space-y-6">
-          <button
-            onClick={() => setActivePatientId(null)}
-            className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 bg-white border border-slate-200 px-3.5 py-2 rounded-xl transition-colors shadow-xs"
-          >
-            <ArrowRight className="w-4 h-4" />
-            <span>{t("backToChildrenTable")}</span>
-          </button>
+          <div className="flex items-center justify-between gap-3">
+            <button
+              onClick={() => setActivePatientId(null)}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 bg-white border border-slate-200 px-3.5 py-2 rounded-xl transition-colors shadow-xs"
+            >
+              <ArrowRight className="w-4 h-4" />
+              <span>{t("backToChildrenTable")}</span>
+            </button>
+
+            {/* Soft Delete Child Button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setChildToDelete(activePatient);
+                setIsDeleteConfirmModalOpen(true);
+              }}
+              className="text-rose-600 border-rose-200 hover:bg-rose-50 hover:border-rose-300 font-bold gap-1.5"
+            >
+              <Trash2 className="w-4 h-4 text-rose-500" />
+              <span>{t("deleteChildBtn")}</span>
+            </Button>
+          </div>
 
           <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
@@ -974,6 +1193,49 @@ export default function SecretaryPureWorkflowPage() {
           </div>
         </div>
       )}
+
+      {/* Modal: Confirm Soft Delete (Move to 3-month Recycle Bin) */}
+      <Modal
+        isOpen={isDeleteConfirmModalOpen}
+        onClose={() => setIsDeleteConfirmModalOpen(false)}
+        title={t("confirmDeleteModalTitle")}
+        description={t("confirmDeleteModalDesc")}
+        maxWidth="md"
+      >
+        <div className="space-y-4">
+          {childToDelete && (
+            <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl space-y-2">
+              <div className="flex items-center gap-2 text-rose-950 font-black text-sm">
+                <ShieldAlert className="w-5 h-5 text-rose-600" />
+                <span>{childToDelete.fullName} ({childToDelete.fileNumber})</span>
+              </div>
+              <p className="text-xs text-rose-700">
+                {language === "ar"
+                  ? "سيتم حفظ هذا الملف في سلة المحذوفات لمدة 90 يوماً مع كافة زياراته وتحاليله، ويمكن استعادته في أي وقت."
+                  : "This record will be safely stored in the recycle bin for 90 days with all its visits and lab tests, and can be restored anytime."}
+              </p>
+            </div>
+          )}
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setIsDeleteConfirmModalOpen(false)}
+            >
+              {t("cancel")}
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              onClick={handleConfirmSoftDelete}
+              className="bg-rose-600 hover:bg-rose-700 text-white font-bold"
+            >
+              {t("confirmDeleteAction")}
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Modal 1: Add New Patient */}
       <Modal

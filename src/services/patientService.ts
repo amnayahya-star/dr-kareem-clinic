@@ -239,3 +239,120 @@ export async function createPatientRecord(input: CreatePatientInput): Promise<Pa
     allPrescriptionPhotos: [],
   };
 }
+
+const DELETED_STORAGE_KEY = "dr_kareem_deleted_patients";
+const RETENTION_DAYS = 90; // مدة الاحتفاظ 3 أشهر (90 يوماً)
+
+/**
+ * حساب الأيام المتبقية حتى الحذف النهائي للطفل
+ */
+export function calculateRemainingDays(deletedAt?: string): number {
+  if (!deletedAt) return RETENTION_DAYS;
+  const deletedTime = new Date(deletedAt).getTime();
+  const elapsedDays = Math.floor((Date.now() - deletedTime) / (1000 * 60 * 60 * 24));
+  return Math.max(0, RETENTION_DAYS - elapsedDays);
+}
+
+/**
+ * جلب سجل الأطفال المحذوفين مؤقتاً مع تصفية من انتهت مهلتهم (أكثر من 90 يوماً)
+ */
+export async function fetchDeletedPatients(): Promise<PatientFile[]> {
+  if (typeof window === "undefined") return [];
+
+  try {
+    const raw = localStorage.getItem(DELETED_STORAGE_KEY);
+    const list: PatientFile[] = raw ? JSON.parse(raw) : [];
+
+    // تصفية وحذف من تجاوز 90 يوماً تلقائياً
+    const validList: PatientFile[] = [];
+    let hasExpired = false;
+
+    for (const patient of list) {
+      const remaining = calculateRemainingDays(patient.deletedAt);
+      if (remaining > 0) {
+        validList.push(patient);
+      } else {
+        hasExpired = true; // تم حذفه نهائياً لمرور 3 أشهر
+      }
+    }
+
+    if (hasExpired) {
+      localStorage.setItem(DELETED_STORAGE_KEY, JSON.stringify(validList));
+    }
+
+    return validList;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * نقل ملف الطفل إلى سلة المحذوفات (مؤقت لمدة 3 أشهر)
+ */
+export async function softDeletePatient(patient: PatientFile): Promise<void> {
+  if (typeof window === "undefined") return;
+
+  const deletedRecord: PatientFile = {
+    ...patient,
+    deletedAt: new Date().toISOString(),
+  };
+
+  const currentDeleted = await fetchDeletedPatients();
+  const updated = [deletedRecord, ...currentDeleted.filter((p) => p.id !== patient.id)];
+  localStorage.setItem(DELETED_STORAGE_KEY, JSON.stringify(updated));
+
+  // إذا كان متصلاً بـ Supabase
+  const supabase = createClient();
+  if (supabase && isSupabaseConfigured()) {
+    try {
+      await supabase
+        .from("patients")
+        .update({ updated_at: new Date().toISOString() })
+        .eq("id", patient.id);
+    } catch (e) {
+      console.warn("Supabase soft delete update error:", e);
+    }
+  }
+}
+
+/**
+ * استعادة ملف الطفل من سلة المحذوفات إلى السجل النشط
+ */
+export async function restorePatient(patientId: string): Promise<PatientFile | null> {
+  if (typeof window === "undefined") return null;
+
+  const deletedList = await fetchDeletedPatients();
+  const target = deletedList.find((p) => p.id === patientId);
+  if (!target) return null;
+
+  // إزالة deletedAt
+  const restored: PatientFile = {
+    ...target,
+    deletedAt: undefined,
+  };
+
+  const updatedDeleted = deletedList.filter((p) => p.id !== patientId);
+  localStorage.setItem(DELETED_STORAGE_KEY, JSON.stringify(updatedDeleted));
+
+  return restored;
+}
+
+/**
+ * حذف نهائي وفوري لملف الطفل
+ */
+export async function permanentDeletePatient(patientId: string): Promise<void> {
+  if (typeof window === "undefined") return;
+
+  const deletedList = await fetchDeletedPatients();
+  const updatedDeleted = deletedList.filter((p) => p.id !== patientId);
+  localStorage.setItem(DELETED_STORAGE_KEY, JSON.stringify(updatedDeleted));
+
+  const supabase = createClient();
+  if (supabase && isSupabaseConfigured()) {
+    try {
+      await supabase.from("patients").delete().eq("id", patientId);
+    } catch (e) {
+      console.warn("Supabase permanent delete error:", e);
+    }
+  }
+}
