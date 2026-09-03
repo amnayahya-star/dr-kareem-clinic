@@ -15,10 +15,13 @@ import {
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 flex flex-col justify-between font-sans selection:bg-teal-100 selection:text-teal-900 relative overflow-hidden" dir="rtl">
+    <div
+      className="min-h-screen bg-[#F8FAFC] text-slate-900 flex flex-col justify-between font-sans selection:bg-teal-100 selection:text-teal-900 relative"
+      dir="rtl"
+    >
       {/* 1. Top Header */}
-      <header className="w-full max-w-7xl mx-auto px-4 sm:px-8 py-5 flex items-center justify-between z-20">
-        {/* Logo & Clinic Titles (Right) */}
+      <header className="w-full max-w-7xl mx-auto px-4 sm:px-8 py-5 flex items-center justify-between relative z-20">
+        {/* Logo & Clinic Titles (Right in RTL) */}
         <div className="flex items-center gap-3">
           {/* Hexagonal Medical Pulse Logo */}
           <div className="relative w-12 h-12 flex items-center justify-center shrink-0">
@@ -48,10 +51,10 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Login Button (Left) */}
+        {/* Login Button (Left in RTL) */}
         <Link
           href="/login"
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl border-2 border-teal-700 text-teal-950 hover:bg-teal-50 text-xs sm:text-sm font-bold transition-all shadow-xs"
+          className="inline-flex items-center gap-2 px-5 py-2 rounded-xl border-2 border-teal-700 text-teal-900 hover:bg-teal-50 text-xs sm:text-sm font-bold transition-all shadow-xs"
         >
           <User className="w-4 h-4 text-teal-700" />
           <span>تسجيل الدخول</span>
@@ -59,15 +62,15 @@ export default function HomePage() {
       </header>
 
       {/* 2. Main Hero Section */}
-      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-8 py-4 sm:py-6 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-8 items-center z-10">
-        {/* Text & Portals Content (Left in visual / Col-7) */}
+      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-8 py-3 sm:py-6 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-6 items-center relative z-10">
+        {/* Left Side (Visual): Tagline, Main Title, Subtitle, and Two Action Cards */}
         <div className="lg:col-span-7 space-y-6 sm:space-y-7 order-2 lg:order-1">
           {/* Tagline Badge */}
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#E6F4F4] text-[#0A6C74] text-xs sm:text-sm font-black border border-teal-100">
             <span>منظومة إدارة العيادة الطبية</span>
           </div>
 
-          {/* Main Title */}
+          {/* Main Headline */}
           <div className="space-y-3">
             <h2 className="text-3xl sm:text-5xl lg:text-[54px] font-black text-[#0B2545] tracking-tight leading-[1.18]">
               رعاية أدق، وتنظيم أفضل
@@ -77,9 +80,9 @@ export default function HomePage() {
             </p>
           </div>
 
-          {/* Two Portals Cards */}
+          {/* The Two Portals Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5 pt-2 max-w-2xl">
-            {/* 1. بوابة الاستقبال */}
+            {/* Card 1: بوابة الاستقبال */}
             <div className="bg-white rounded-3xl p-5 sm:p-6 border-2 border-slate-100 shadow-sm hover:shadow-md hover:border-teal-400 transition-all flex flex-col justify-between gap-5 text-center">
               <div className="space-y-3">
                 {/* Calendar / Clock Icon */}
@@ -115,7 +118,7 @@ export default function HomePage() {
               </Link>
             </div>
 
-            {/* 2. بوابة الطبيب */}
+            {/* Card 2: بوابة الطبيب */}
             <div className="bg-white rounded-3xl p-5 sm:p-6 border-2 border-slate-100 shadow-sm hover:shadow-md hover:border-teal-400 transition-all flex flex-col justify-between gap-5 text-center">
               <div className="space-y-3">
                 {/* Stethoscope Icon */}
@@ -150,29 +153,22 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Doctor Photo with Curved Crescent Border (Right in visual / Col-5) */}
+        {/* Right Side (Visual): The Exact Doctor Crescent Image */}
         <div className="lg:col-span-5 flex justify-center lg:justify-end order-1 lg:order-2">
           <div className="relative w-full max-w-md lg:max-w-lg">
-            {/* The Outer Curved Crescent Border SVG Frame matching the exact mockup */}
-            <div className="relative rounded-[40px] sm:rounded-[56px] overflow-hidden border-4 sm:border-8 border-[#0B2545] shadow-2xl aspect-[4/5] bg-slate-900 group">
+            <div className="relative overflow-hidden rounded-[36px] sm:rounded-[48px] shadow-2xl bg-white border border-slate-200 group">
               <img
-                src="/dr-kareem.jpg"
+                src="/doctor-hero-crescent.png"
                 alt="الدكتور عبد الكريم عليوي"
-                className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500"
+                className="w-full h-auto object-cover object-left group-hover:scale-102 transition-transform duration-500"
               />
-
-              {/* Inner subtle glow gradient */}
-              <div className="absolute inset-0 bg-gradient-to-t from-[#0B2545]/40 via-transparent to-transparent pointer-events-none" />
             </div>
-
-            {/* Decorative Crescent Curve Line on outer left edge */}
-            <div className="hidden lg:block absolute -left-6 top-1/2 -translate-y-1/2 w-12 h-[90%] border-l-4 border-teal-600/40 rounded-full pointer-events-none" />
           </div>
         </div>
       </main>
 
       {/* 3. Bottom Features Bar */}
-      <footer className="w-full border-t border-slate-200/80 bg-white/70 backdrop-blur-xs py-5 px-4 sm:px-8 mt-4 z-20">
+      <footer className="w-full border-t border-slate-200/80 bg-white/70 backdrop-blur-xs py-5 px-4 sm:px-8 mt-4 relative z-20">
         <div className="max-w-4xl mx-auto flex flex-wrap items-center justify-around gap-4 sm:gap-8">
           {/* Feature 1: سرية السجلات */}
           <div className="flex items-center gap-2.5 text-slate-700 font-extrabold text-xs sm:text-sm">
