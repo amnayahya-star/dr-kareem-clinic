@@ -15,7 +15,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#0d9488",
+  themeColor: "#147D7A",
 };
 
 export default function RootLayout({
@@ -25,7 +25,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ar" dir="rtl" suppressHydrationWarning>
-      <body className="min-h-screen bg-slate-50 antialiased font-sans text-slate-800 selection:bg-clinic-500 selection:text-white">
+      <body className="min-h-screen bg-[#F7F9FA] antialiased font-sans text-slate-800 selection:bg-[#147D7A] selection:text-white">
         <Providers>{children}</Providers>
       </body>
     </html>
