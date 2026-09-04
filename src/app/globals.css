@@ -41,6 +41,52 @@
   -webkit-backdrop-filter: blur(12px);
 }
 
+/* Gentle Star Twinkle & Floating Keyframes */
+@keyframes star-float-slow {
+  0%, 100% {
+    transform: translateY(0px) scale(1);
+    opacity: 0.2;
+  }
+  50% {
+    transform: translateY(-8px) scale(1.25);
+    opacity: 0.65;
+  }
+}
+
+@keyframes star-float-medium {
+  0%, 100% {
+    transform: translateY(0px) translateX(0px) scale(0.9);
+    opacity: 0.15;
+  }
+  50% {
+    transform: translateY(-12px) translateX(4px) scale(1.3);
+    opacity: 0.55;
+  }
+}
+
+@keyframes star-pulse-gentle {
+  0%, 100% {
+    opacity: 0.2;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.35);
+  }
+}
+
+.animate-star-slow {
+  animation: star-float-slow 6s ease-in-out infinite;
+}
+
+.animate-star-medium {
+  animation: star-float-medium 8s ease-in-out infinite;
+}
+
+.animate-star-pulse {
+  animation: star-pulse-gentle 5s ease-in-out infinite;
+}
+
 /* Custom print rules for doctor prescription print template */
 @media print {
   body {

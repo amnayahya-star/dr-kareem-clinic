@@ -17,16 +17,77 @@ import {
   Sparkles,
 } from "lucide-react";
 
+// Peaceful ambient stars configuration
+const AMBIENT_STARS = [
+  { top: "12%", left: "8%", size: 10, color: "#147D7A", isFourPoint: true, animation: "animate-star-slow", delay: "0s", duration: "7s" },
+  { top: "25%", left: "18%", size: 3.5, color: "#0C9A96", isFourPoint: false, animation: "animate-star-pulse", delay: "1.2s", duration: "5s" },
+  { top: "38%", left: "6%", size: 8, color: "#F59E0B", isFourPoint: true, animation: "animate-star-medium", delay: "2.4s", duration: "8s" },
+  { top: "52%", left: "22%", size: 3, color: "#147D7A", isFourPoint: false, animation: "animate-star-slow", delay: "0.8s", duration: "6s" },
+  { top: "68%", left: "10%", size: 9, color: "#0C9A96", isFourPoint: true, animation: "animate-star-pulse", delay: "3.1s", duration: "7.5s" },
+  { top: "82%", left: "15%", size: 4, color: "#F59E0B", isFourPoint: false, animation: "animate-star-medium", delay: "1.7s", duration: "6.5s" },
+
+  { top: "15%", left: "35%", size: 3.5, color: "#147D7A", isFourPoint: false, animation: "animate-star-slow", delay: "2s", duration: "8s" },
+  { top: "45%", left: "42%", size: 9, color: "#F59E0B", isFourPoint: true, animation: "animate-star-pulse", delay: "0.5s", duration: "6s" },
+  { top: "75%", left: "38%", size: 3, color: "#0C9A96", isFourPoint: false, animation: "animate-star-medium", delay: "3.5s", duration: "7s" },
+
+  { top: "8%", left: "65%", size: 8, color: "#147D7A", isFourPoint: true, animation: "animate-star-slow", delay: "1s", duration: "9s" },
+  { top: "22%", left: "78%", size: 3.5, color: "#F59E0B", isFourPoint: false, animation: "animate-star-pulse", delay: "2.8s", duration: "5.5s" },
+  { top: "58%", left: "72%", size: 9, color: "#0C9A96", isFourPoint: true, animation: "animate-star-medium", delay: "0.3s", duration: "8s" },
+  { top: "85%", left: "82%", size: 4, color: "#147D7A", isFourPoint: false, animation: "animate-star-slow", delay: "2.2s", duration: "6.8s" },
+
+  { top: "18%", left: "92%", size: 7, color: "#F59E0B", isFourPoint: true, animation: "animate-star-pulse", delay: "1.9s", duration: "7.2s" },
+  { top: "48%", left: "88%", size: 3, color: "#0C9A96", isFourPoint: false, animation: "animate-star-medium", delay: "3.8s", duration: "6.2s" },
+  { top: "78%", left: "95%", size: 8, color: "#147D7A", isFourPoint: true, animation: "animate-star-slow", delay: "0.9s", duration: "8.5s" },
+];
+
 export default function HomePage() {
   const { language, toggleLanguage, isRTL } = useLanguage();
 
   return (
     <div
-      className="min-h-screen bg-[#F7F9FA] flex flex-col font-sans text-[#0A1E33] selection:bg-[#147D7A] selection:text-white"
+      className="min-h-screen bg-[#F7F9FA] flex flex-col font-sans text-[#0A1E33] selection:bg-[#147D7A] selection:text-white relative overflow-hidden"
       dir={isRTL ? "rtl" : "ltr"}
     >
+      {/* Ambient Peaceful Floating Stars Layer */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden z-10 select-none">
+        {AMBIENT_STARS.map((star, idx) => (
+          <div
+            key={idx}
+            className={`absolute ${star.animation}`}
+            style={{
+              top: star.top,
+              left: star.left,
+              animationDelay: star.delay,
+              animationDuration: star.duration,
+            }}
+          >
+            {star.isFourPoint ? (
+              <svg
+                width={star.size}
+                height={star.size}
+                viewBox="0 0 24 24"
+                fill={star.color}
+                className="opacity-60 drop-shadow-[0_0_6px_rgba(20,125,122,0.4)]"
+              >
+                <path d="M12 0L14.5 9.5L24 12L14.5 14.5L12 24L9.5 14.5L0 12L9.5 9.5L12 0Z" />
+              </svg>
+            ) : (
+              <div
+                className="rounded-full"
+                style={{
+                  width: `${star.size}px`,
+                  height: `${star.size}px`,
+                  backgroundColor: star.color,
+                  boxShadow: `0 0 ${star.size * 3}px ${star.color}`,
+                }}
+              />
+            )}
+          </div>
+        ))}
+      </div>
+
       {/* 1. Header (Approx 96px-104px height, White, Clean) */}
-      <header className="w-full bg-white border-b border-[#D7E0E5] h-[92px] sm:h-[104px] px-5 sm:px-10 lg:px-14 flex items-center justify-between z-30 shrink-0 shadow-2xs">
+      <header className="w-full bg-white/95 backdrop-blur-md border-b border-[#D7E0E5] h-[92px] sm:h-[104px] px-5 sm:px-10 lg:px-14 flex items-center justify-between z-30 shrink-0 shadow-2xs">
         {/* Right in RTL: Hexagonal Medical Logo FIRST, then Clinic Title */}
         <Link href="/" className="flex items-center gap-3.5 group cursor-pointer select-none">
           {/* Hexagonal Medical Logo (Rightmost) */}
@@ -98,7 +159,7 @@ export default function HomePage() {
       </header>
 
       {/* 2. Main Hero Section (Right: Doctor Image + Curve | Left: Content & Portals) */}
-      <main className="flex-1 flex flex-col lg:flex-row relative w-full overflow-hidden">
+      <main className="flex-1 flex flex-col lg:flex-row relative w-full overflow-hidden z-20">
         {/* ========================================================================= */}
         {/* RIGHT COLUMN (In RTL: Doctor Photograph with Multi-layer Curved Divider)   */}
         {/* ========================================================================= */}
@@ -315,7 +376,7 @@ export default function HomePage() {
           <div className="pt-6 mt-6 border-t border-[#D7E0E5]/90">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {/* Feature 1: سرية السجلات */}
-              <div className="group bg-white/80 hover:bg-white p-3 rounded-2xl border border-[#D7E0E5] hover:border-[#147D7A] shadow-2xs hover:shadow-sm transition-all duration-200 flex items-center gap-3 cursor-default">
+              <div className="group bg-white/85 hover:bg-white p-3.5 rounded-2xl border border-[#D7E0E5] hover:border-[#147D7A] shadow-2xs hover:shadow-md transition-all duration-200 flex items-center gap-3 cursor-default">
                 <div className="w-10 h-10 rounded-xl bg-[#E8F2F2] text-[#147D7A] group-hover:bg-[#147D7A] group-hover:text-white flex items-center justify-center shrink-0 transition-colors duration-200 shadow-2xs">
                   <ShieldCheck className="w-5 h-5 stroke-[2.2]" />
                 </div>
@@ -330,7 +391,7 @@ export default function HomePage() {
               </div>
 
               {/* Feature 2: سهولة الوصول */}
-              <div className="group bg-white/80 hover:bg-white p-3 rounded-2xl border border-[#D7E0E5] hover:border-[#147D7A] shadow-2xs hover:shadow-sm transition-all duration-200 flex items-center gap-3 cursor-default">
+              <div className="group bg-white/85 hover:bg-white p-3.5 rounded-2xl border border-[#D7E0E5] hover:border-[#147D7A] shadow-2xs hover:shadow-md transition-all duration-200 flex items-center gap-3 cursor-default">
                 <div className="w-10 h-10 rounded-xl bg-[#E8F2F2] text-[#147D7A] group-hover:bg-[#147D7A] group-hover:text-white flex items-center justify-center shrink-0 transition-colors duration-200 shadow-2xs">
                   <UserCheck className="w-5 h-5 stroke-[2.2]" />
                 </div>
@@ -345,7 +406,7 @@ export default function HomePage() {
               </div>
 
               {/* Feature 3: إدارة متكاملة */}
-              <div className="group bg-white/80 hover:bg-white p-3 rounded-2xl border border-[#D7E0E5] hover:border-[#147D7A] shadow-2xs hover:shadow-sm transition-all duration-200 flex items-center gap-3 cursor-default">
+              <div className="group bg-white/85 hover:bg-white p-3.5 rounded-2xl border border-[#D7E0E5] hover:border-[#147D7A] shadow-2xs hover:shadow-md transition-all duration-200 flex items-center gap-3 cursor-default">
                 <div className="w-10 h-10 rounded-xl bg-[#E8F2F2] text-[#147D7A] group-hover:bg-[#147D7A] group-hover:text-white flex items-center justify-center shrink-0 transition-colors duration-200 shadow-2xs">
                   <Layers className="w-5 h-5 stroke-[2.2]" />
                 </div>
