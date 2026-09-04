@@ -2,33 +2,34 @@
 
 import React from "react";
 import Link from "next/link";
+import { useLanguage } from "@/context/LanguageContext";
 import {
   Stethoscope,
   Calendar,
   Clock,
   User,
-  Shield,
+  ShieldCheck,
   UserCheck,
   Layers,
   ChevronLeft,
+  ChevronRight,
+  Globe,
+  Sparkles,
 } from "lucide-react";
 
 export default function HomePage() {
-  return (
-    <div className="min-h-screen bg-[#F7F9FA] flex flex-col font-sans text-[#0A1E33] selection:bg-[#147D7A] selection:text-white" dir="rtl">
-      {/* 1. Header (~96px - 104px height, White, Clean RTL Header) */}
-      <header className="w-full bg-white border-b border-[#D7E0E5] h-[92px] sm:h-[104px] px-6 sm:px-12 lg:px-16 flex items-center justify-between z-30 shrink-0">
-        {/* Right in RTL: Hexagonal Medical Logo + Clinic Title */}
-        <Link href="/" className="flex items-center gap-3.5 group cursor-pointer select-none">
-          <div className="text-right">
-            <h1 className="text-xl sm:text-[23px] font-black text-[#0A1E33] tracking-tight leading-tight">
-              عيادة د. عبد الكريم عليوي
-            </h1>
-            <p className="text-xs sm:text-[13px] font-bold text-[#147D7A] mt-0.5">
-              بورد طب الأطفال وحديثي الولادة
-            </p>
-          </div>
+  const { language, toggleLanguage, isRTL } = useLanguage();
 
+  return (
+    <div
+      className="min-h-screen bg-[#F7F9FA] flex flex-col font-sans text-[#0A1E33] selection:bg-[#147D7A] selection:text-white"
+      dir={isRTL ? "rtl" : "ltr"}
+    >
+      {/* 1. Header (Approx 96px-104px height, White, Clean) */}
+      <header className="w-full bg-white border-b border-[#D7E0E5] h-[92px] sm:h-[104px] px-5 sm:px-10 lg:px-14 flex items-center justify-between z-30 shrink-0 shadow-2xs">
+        {/* Right in RTL: Hexagonal Medical Logo FIRST, then Clinic Title */}
+        <Link href="/" className="flex items-center gap-3.5 group cursor-pointer select-none">
+          {/* Hexagonal Medical Logo (Rightmost) */}
           <div className="shrink-0 transition-transform duration-300 group-hover:scale-105">
             <svg
               width="46"
@@ -56,27 +57,63 @@ export default function HomePage() {
               />
             </svg>
           </div>
+
+          {/* Clinic Name & Specialty */}
+          <div className={isRTL ? "text-right" : "text-left"}>
+            <h1 className="text-xl sm:text-[23px] font-black text-[#0A1E33] tracking-tight leading-tight">
+              {language === "ar"
+                ? "عيادة الدكتور عبد الكريم عليوي"
+                : "Dr. Abdul Karim Aliwi Clinic"}
+            </h1>
+            <p className="text-xs sm:text-[13px] font-bold text-[#147D7A] mt-0.5">
+              {language === "ar"
+                ? "بورد طب الأطفال وحديثي الولادة"
+                : "Board Certified in Pediatrics & Neonatology"}
+            </p>
+          </div>
         </Link>
 
-        {/* Left in RTL: Outlined Login Button with User Icon */}
-        <Link
-          href="/login"
-          className="inline-flex items-center gap-2 px-4 py-2 sm:px-5 sm:py-2.5 rounded-[12px] border border-[#147D7A] bg-transparent text-[#147D7A] hover:bg-[#147D7A] hover:text-white transition-all duration-200 text-xs sm:text-sm font-bold shadow-2xs group"
-        >
-          <span>تسجيل الدخول</span>
-          <User className="w-4 h-4 text-[#147D7A] group-hover:text-white transition-colors" />
-        </Link>
+        {/* Left in RTL: Language Switcher Button + Outlined Login Button */}
+        <div className="flex items-center gap-2.5 sm:gap-3.5">
+          {/* Language Switcher Toggle */}
+          <button
+            type="button"
+            onClick={toggleLanguage}
+            className="inline-flex items-center gap-1.5 px-3 py-2 sm:px-4 sm:py-2.5 rounded-[12px] border border-[#D7E0E5] bg-white hover:border-[#147D7A] hover:bg-[#F0FDF4] text-[#0A1E33] hover:text-[#147D7A] transition-all text-xs sm:text-sm font-bold shadow-2xs cursor-pointer group"
+            title={language === "ar" ? "Switch to English" : "التحويل للغة العربية"}
+          >
+            <Globe className="w-4 h-4 text-[#147D7A] group-hover:rotate-45 transition-transform duration-300" />
+            <span>{language === "ar" ? "English" : "عربي"}</span>
+          </button>
+
+          {/* Login Button */}
+          <Link
+            href="/login"
+            className="inline-flex items-center gap-2 px-4 py-2 sm:px-5 sm:py-2.5 rounded-[12px] border-2 border-[#147D7A] bg-transparent text-[#147D7A] hover:bg-[#147D7A] hover:text-white transition-all duration-200 text-xs sm:text-sm font-black shadow-2xs group cursor-pointer"
+          >
+            <User className="w-4 h-4 text-[#147D7A] group-hover:text-white transition-colors" />
+            <span>{language === "ar" ? "تسجيل الدخول" : "Sign In"}</span>
+          </Link>
+        </div>
       </header>
 
-      {/* 2. Main Hero Section (Two-part layout with curved divider) */}
+      {/* 2. Main Hero Section (Right: Doctor Image + Curve | Left: Content & Portals) */}
       <main className="flex-1 flex flex-col lg:flex-row relative w-full overflow-hidden">
-        {/* RIGHT COLUMN (In RTL visual layout: Doctor Photograph with Curved Divider ~46% width) */}
-        <div className="w-full lg:w-[46%] relative h-72 sm:h-96 lg:h-auto min-h-[320px] lg:min-h-[calc(100vh-104px)] overflow-hidden order-1 lg:order-2 bg-[#F7F9FA]">
-          {/* SVG Clip Path Definition for Smooth Curve */}
+        {/* ========================================================================= */}
+        {/* RIGHT COLUMN (In RTL: Doctor Photograph with Multi-layer Curved Divider)   */}
+        {/* ========================================================================= */}
+        <div className="w-full lg:w-[46%] xl:w-[45%] relative h-72 sm:h-96 lg:h-auto min-h-[340px] lg:min-h-[calc(100vh-104px)] overflow-hidden order-1 lg:order-1 bg-[#F7F9FA] select-none">
+          {/* SVG Clip Path Definition for Smooth Inner Curve */}
           <svg width="0" height="0" className="absolute">
             <defs>
               <clipPath id="doctor-hero-curve" clipPathUnits="objectBoundingBox">
-                <path d="M 0.16 0 C -0.02 0.32, -0.02 0.68, 0.16 1 L 1 1 L 1 0 Z" />
+                {isRTL ? (
+                  /* Arch curving inwards from left of the photo */
+                  <path d="M 0.16 0 C -0.02 0.32, -0.02 0.68, 0.16 1 L 1 1 L 1 0 Z" />
+                ) : (
+                  /* Arch curving inwards from right of the photo in LTR */
+                  <path d="M 0 0 L 0.84 0 C 1.02 0.32, 1.02 0.68, 0.84 1 L 0 1 Z" />
+                )}
               </clipPath>
             </defs>
           </svg>
@@ -92,7 +129,7 @@ export default function HomePage() {
             <img
               src="/doctor-clinic-photo.jpg"
               alt="الدكتور عبد الكريم عليوي - بورد طب الأطفال وحديثي الولادة"
-              className="w-full h-full object-cover object-[75%_top] sm:object-[70%_center] lg:object-[80%_center]"
+              className="w-full h-full object-cover object-[75%_top] sm:object-[70%_center] lg:object-[80%_center] filter contrast-[1.03]"
             />
           </div>
 
@@ -105,148 +142,222 @@ export default function HomePage() {
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
             >
-              {/* 1. Thin Teal Accent Outer Line */}
-              <path
-                d="M 13.5 0 C -4.5 32, -4.5 68, 13.5 100"
-                stroke="#0C9A96"
-                strokeWidth="0.8"
-                vectorEffect="non-scaling-stroke"
-              />
-
-              {/* 2. White Separation Gap */}
-              <path
-                d="M 14.8 0 C -3.2 32, -3.2 68, 14.8 100"
-                stroke="#FFFFFF"
-                strokeWidth="1.2"
-                vectorEffect="non-scaling-stroke"
-              />
-
-              {/* 3. Main Dark Navy Thick Arch */}
-              <path
-                d="M 16 0 C -2 32, -2 68, 16 100"
-                stroke="#0A1E33"
-                strokeWidth="2.8"
-                vectorEffect="non-scaling-stroke"
-              />
+              {isRTL ? (
+                <>
+                  {/* 1. Thin Teal Accent Outer Line */}
+                  <path
+                    d="M 13.5 0 C -4.5 32, -4.5 68, 13.5 100"
+                    stroke="#0C9A96"
+                    strokeWidth="0.85"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                  {/* 2. White Separation Gap */}
+                  <path
+                    d="M 14.8 0 C -3.2 32, -3.2 68, 14.8 100"
+                    stroke="#FFFFFF"
+                    strokeWidth="1.3"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                  {/* 3. Main Dark Navy Thick Arch */}
+                  <path
+                    d="M 16 0 C -2 32, -2 68, 16 100"
+                    stroke="#0A1E33"
+                    strokeWidth="2.8"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                </>
+              ) : (
+                <>
+                  {/* LTR Curve Borders */}
+                  <path
+                    d="M 86.5 0 C 104.5 32, 104.5 68, 86.5 100"
+                    stroke="#0C9A96"
+                    strokeWidth="0.85"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                  <path
+                    d="M 85.2 0 C 103.2 32, 103.2 68, 85.2 100"
+                    stroke="#FFFFFF"
+                    strokeWidth="1.3"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                  <path
+                    d="M 84 0 C 102 32, 102 68, 84 100"
+                    stroke="#0A1E33"
+                    strokeWidth="2.8"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                </>
+              )}
             </svg>
           </div>
         </div>
 
-        {/* LEFT COLUMN (In RTL visual layout: Content Area ~54% width) */}
-        <div className="w-full lg:w-[54%] flex flex-col justify-between p-6 sm:p-10 lg:py-8 lg:px-12 xl:px-16 z-20 order-2 lg:order-1">
+        {/* ========================================================================= */}
+        {/* LEFT COLUMN (In RTL: Content Area ~54% width)                              */}
+        {/* ========================================================================= */}
+        <div className="w-full lg:w-[54%] xl:w-[55%] flex flex-col justify-between p-6 sm:p-10 lg:py-8 lg:px-12 xl:px-16 z-20 order-2 lg:order-2">
           <div className="space-y-4 max-w-xl">
             {/* Tag Label */}
-            <div className="inline-flex items-center px-4 py-1 rounded-full bg-[#E2EDF0] text-[#147D7A] text-[11px] sm:text-xs font-black w-fit">
-              <span>منظومة إدارة العيادة الطبية</span>
+            <div className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-[#E2EDF0] text-[#147D7A] text-[11px] sm:text-xs font-black w-fit shadow-2xs border border-[#CDE1E6]">
+              <Sparkles className="w-3.5 h-3.5 text-[#147D7A]" />
+              <span>
+                {language === "ar"
+                  ? "منظومة إدارة العيادة الطبية"
+                  : "Clinical Medical Management System"}
+              </span>
             </div>
 
             {/* Main Headline */}
             <h2 className="text-3xl sm:text-4xl lg:text-[42px] xl:text-[46px] font-black text-[#0A1E33] leading-[1.2] tracking-tight">
-              رعاية أدق، وتنظيم أفضل
+              {language === "ar"
+                ? "رعاية أدق، وتنظيم أفضل"
+                : "Accurate Care, Superior Organization"}
             </h2>
 
             {/* Subtitle */}
             <p className="text-xs sm:text-sm lg:text-[15px] text-[#697A8D] font-medium leading-relaxed">
-              نظام موحّد لإدارة ملفات المرضى والزيارات والمواعيد والوصفات الطبية بكفاءة وأمان.
+              {language === "ar"
+                ? "نظام موحّد لإدارة ملفات المرضى والزيارات والمواعيد والوصفات الطبية بكفاءة وأمان."
+                : "A unified clinical workstation to manage pediatric patient records, vitals, visits, and prescriptions with high efficiency and security."}
             </p>
 
-            {/* Portal Cards (Doctor Portal on Right, Reception Portal on Left in RTL) */}
+            {/* Portal Cards (Doctor on Right, Reception on Left in RTL) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-4 pt-2">
-              {/* Card 1: بوابة الطبيب (Appears on Right in RTL) */}
-              <div className="bg-white rounded-[18px] p-5 border border-[#D7E0E5] shadow-xs hover:border-[#147D7A] transition-all flex flex-col justify-between min-h-[215px] text-center group">
+              {/* Card 1: بوابة الطبيب (Doctor Portal) */}
+              <div className="bg-white rounded-[20px] p-5 border border-[#D7E0E5] shadow-xs hover:border-[#147D7A] hover:shadow-md transition-all duration-200 flex flex-col justify-between min-h-[220px] text-center group">
                 <div>
                   <div className="text-[#147D7A] mb-2.5 flex justify-center">
-                    <Stethoscope className="w-9 h-9 stroke-[1.8]" />
+                    <div className="w-12 h-12 rounded-2xl bg-[#E8F2F2] flex items-center justify-center group-hover:bg-[#147D7A] group-hover:text-white transition-colors duration-200 shadow-2xs">
+                      <Stethoscope className="w-6 h-6 stroke-[2]" />
+                    </div>
                   </div>
 
-                  <h3 className="text-base sm:text-lg font-black text-[#0A1E33]">
-                    بوابة الطبيب
+                  <h3 className="text-base sm:text-lg font-black text-[#0A1E33] group-hover:text-[#147D7A] transition-colors">
+                    {language === "ar" ? "بوابة الطبيب" : "Doctor Portal"}
                   </h3>
                   <span className="text-xs sm:text-sm font-bold text-[#147D7A] block mt-0.5">
-                    الكشف السريري
+                    {language === "ar" ? "الكشف السريري" : "Clinical Examination"}
                   </span>
 
                   <p className="text-[11px] sm:text-xs text-[#697A8D] mt-2 leading-relaxed font-normal">
-                    استعراض السجل الطبي، توثيق التشخيص وإدارة الوصفات.
+                    {language === "ar"
+                      ? "استعراض السجل الطبي، توثيق التشخيص وإدارة الوصفات."
+                      : "Review medical history, document clinical diagnoses and approve Rx."}
                   </p>
                 </div>
 
                 <Link href="/doctor" className="mt-4">
                   <button
                     type="button"
-                    className="w-full py-2 px-3 rounded-[10px] border border-[#147D7A] text-[#147D7A] hover:bg-[#147D7A] hover:text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-colors group cursor-pointer"
+                    className="w-full py-2.5 px-3 rounded-[12px] border-2 border-[#147D7A] text-[#147D7A] hover:bg-[#147D7A] hover:text-white font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-colors group cursor-pointer shadow-2xs"
                   >
-                    <span>فتح شاشة الطبيب</span>
-                    <ChevronLeft className="w-4 h-4 text-[#147D7A] group-hover:text-white group-hover:-translate-x-1 transition-transform" />
+                    <span>
+                      {language === "ar" ? "فتح شاشة الطبيب" : "Open Doctor Station"}
+                    </span>
+                    {isRTL ? (
+                      <ChevronLeft className="w-4 h-4 text-[#147D7A] group-hover:text-white group-hover:-translate-x-1 transition-transform" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4 text-[#147D7A] group-hover:text-white group-hover:translate-x-1 transition-transform" />
+                    )}
                   </button>
                 </Link>
               </div>
 
-              {/* Card 2: بوابة الاستقبال (Appears on Left in RTL) */}
-              <div className="bg-white rounded-[18px] p-5 border border-[#D7E0E5] shadow-xs hover:border-[#147D7A] transition-all flex flex-col justify-between min-h-[215px] text-center group">
+              {/* Card 2: بوابة الاستقبال (Reception Portal) */}
+              <div className="bg-white rounded-[20px] p-5 border border-[#D7E0E5] shadow-xs hover:border-[#147D7A] hover:shadow-md transition-all duration-200 flex flex-col justify-between min-h-[220px] text-center group">
                 <div>
                   <div className="text-[#147D7A] mb-2.5 flex justify-center">
-                    <div className="relative inline-block">
-                      <Calendar className="w-9 h-9 stroke-[1.8]" />
-                      <Clock className="w-4 h-4 absolute -bottom-0.5 -right-0.5 bg-white rounded-full text-[#147D7A] stroke-[2.2]" />
+                    <div className="w-12 h-12 rounded-2xl bg-[#E8F2F2] flex items-center justify-center group-hover:bg-[#147D7A] group-hover:text-white transition-colors duration-200 shadow-2xs">
+                      <div className="relative inline-block">
+                        <Calendar className="w-6 h-6 stroke-[2]" />
+                        <Clock className="w-3 h-3 absolute -bottom-0.5 -right-0.5 bg-white rounded-full text-[#147D7A] stroke-[2.5]" />
+                      </div>
                     </div>
                   </div>
 
-                  <h3 className="text-base sm:text-lg font-black text-[#0A1E33]">
-                    بوابة الاستقبال
+                  <h3 className="text-base sm:text-lg font-black text-[#0A1E33] group-hover:text-[#147D7A] transition-colors">
+                    {language === "ar" ? "بوابة الاستقبال" : "Reception Portal"}
                   </h3>
                   <span className="text-xs sm:text-sm font-bold text-[#147D7A] block mt-0.5">
-                    إدارة المواعيد
+                    {language === "ar" ? "إدارة المواعيد" : "Appointment & Vitals"}
                   </span>
 
                   <p className="text-[11px] sm:text-xs text-[#697A8D] mt-2 leading-relaxed font-normal">
-                    تسجيل المرضى، تنظيم الزيارات ومتابعة قائمة الانتظار.
+                    {language === "ar"
+                      ? "تسجيل المرضى، تنظيم الزيارات ومتابعة قائمة الانتظار."
+                      : "Register children, record vitals, manage visits and live queue."}
                   </p>
                 </div>
 
                 <Link href="/secretary" className="mt-4">
                   <button
                     type="button"
-                    className="w-full py-2 px-3 rounded-[10px] border border-[#147D7A] text-[#147D7A] hover:bg-[#147D7A] hover:text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-colors group cursor-pointer"
+                    className="w-full py-2.5 px-3 rounded-[12px] border-2 border-[#147D7A] text-[#147D7A] hover:bg-[#147D7A] hover:text-white font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-colors group cursor-pointer shadow-2xs"
                   >
-                    <span>فتح شاشة الاستقبال</span>
-                    <ChevronLeft className="w-4 h-4 text-[#147D7A] group-hover:text-white group-hover:-translate-x-1 transition-transform" />
+                    <span>
+                      {language === "ar" ? "فتح شاشة الاستقبال" : "Open Reception Desk"}
+                    </span>
+                    {isRTL ? (
+                      <ChevronLeft className="w-4 h-4 text-[#147D7A] group-hover:text-white group-hover:-translate-x-1 transition-transform" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4 text-[#147D7A] group-hover:text-white group-hover:translate-x-1 transition-transform" />
+                    )}
                   </button>
                 </Link>
               </div>
             </div>
           </div>
 
-          {/* Bottom Benefits Row */}
-          <div className="pt-6 mt-6 border-t border-[#D7E0E5]/80 flex items-center justify-between sm:justify-start sm:gap-8 text-xs font-bold text-[#0A1E33]">
-            {/* 1. سرية السجلات (Right in RTL) */}
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-[#E8F2F2] text-[#147D7A] flex items-center justify-center shrink-0">
-                <Shield className="w-4 h-4 stroke-[2]" />
+          {/* ========================================================================= */}
+          {/* 3. ENHANCED & INTERACTIVE BENEFITS ROW (More clear, vivid and interactive) */}
+          {/* ========================================================================= */}
+          <div className="pt-6 mt-6 border-t border-[#D7E0E5]/90">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* Feature 1: سرية السجلات */}
+              <div className="group bg-white/80 hover:bg-white p-3 rounded-2xl border border-[#D7E0E5] hover:border-[#147D7A] shadow-2xs hover:shadow-sm transition-all duration-200 flex items-center gap-3 cursor-default">
+                <div className="w-10 h-10 rounded-xl bg-[#E8F2F2] text-[#147D7A] group-hover:bg-[#147D7A] group-hover:text-white flex items-center justify-center shrink-0 transition-colors duration-200 shadow-2xs">
+                  <ShieldCheck className="w-5 h-5 stroke-[2.2]" />
+                </div>
+                <div className="min-w-0">
+                  <h4 className="text-xs font-black text-[#0A1E33] group-hover:text-[#147D7A] transition-colors truncate">
+                    {language === "ar" ? "سرية السجلات" : "Confidential Records"}
+                  </h4>
+                  <p className="text-[10px] text-[#697A8D] truncate mt-0.5">
+                    {language === "ar" ? "أمان وتشفير معتمد" : "Certified Encryption"}
+                  </p>
+                </div>
               </div>
-              <span className="text-[#0A1E33] font-bold">سرية السجلات</span>
-            </div>
 
-            {/* Divider */}
-            <div className="w-px h-5 bg-[#D7E0E5]" />
-
-            {/* 2. سهولة الوصول (Middle in RTL) */}
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-[#E8F2F2] text-[#147D7A] flex items-center justify-center shrink-0">
-                <UserCheck className="w-4 h-4 stroke-[2]" />
+              {/* Feature 2: سهولة الوصول */}
+              <div className="group bg-white/80 hover:bg-white p-3 rounded-2xl border border-[#D7E0E5] hover:border-[#147D7A] shadow-2xs hover:shadow-sm transition-all duration-200 flex items-center gap-3 cursor-default">
+                <div className="w-10 h-10 rounded-xl bg-[#E8F2F2] text-[#147D7A] group-hover:bg-[#147D7A] group-hover:text-white flex items-center justify-center shrink-0 transition-colors duration-200 shadow-2xs">
+                  <UserCheck className="w-5 h-5 stroke-[2.2]" />
+                </div>
+                <div className="min-w-0">
+                  <h4 className="text-xs font-black text-[#0A1E33] group-hover:text-[#147D7A] transition-colors truncate">
+                    {language === "ar" ? "سهولة الوصول" : "Instant Access"}
+                  </h4>
+                  <p className="text-[10px] text-[#697A8D] truncate mt-0.5">
+                    {language === "ar" ? "متاح على كافة الأجهزة" : "All Devices & Mobile"}
+                  </p>
+                </div>
               </div>
-              <span className="text-[#0A1E33] font-bold">سهولة الوصول</span>
-            </div>
 
-            {/* Divider */}
-            <div className="w-px h-5 bg-[#D7E0E5]" />
-
-            {/* 3. إدارة متكاملة (Left in RTL) */}
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-[#E8F2F2] text-[#147D7A] flex items-center justify-center shrink-0">
-                <Layers className="w-4 h-4 stroke-[2]" />
+              {/* Feature 3: إدارة متكاملة */}
+              <div className="group bg-white/80 hover:bg-white p-3 rounded-2xl border border-[#D7E0E5] hover:border-[#147D7A] shadow-2xs hover:shadow-sm transition-all duration-200 flex items-center gap-3 cursor-default">
+                <div className="w-10 h-10 rounded-xl bg-[#E8F2F2] text-[#147D7A] group-hover:bg-[#147D7A] group-hover:text-white flex items-center justify-center shrink-0 transition-colors duration-200 shadow-2xs">
+                  <Layers className="w-5 h-5 stroke-[2.2]" />
+                </div>
+                <div className="min-w-0">
+                  <h4 className="text-xs font-black text-[#0A1E33] group-hover:text-[#147D7A] transition-colors truncate">
+                    {language === "ar" ? "إدارة متكاملة" : "Integrated Workflow"}
+                  </h4>
+                  <p className="text-[10px] text-[#697A8D] truncate mt-0.5">
+                    {language === "ar" ? "ربط الطبيب بالاستقبال" : "Doctor & Reception Sync"}
+                  </p>
+                </div>
               </div>
-              <span className="text-[#0A1E33] font-bold">إدارة متكاملة</span>
             </div>
           </div>
         </div>
