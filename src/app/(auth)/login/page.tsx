@@ -20,6 +20,7 @@ import {
   ShieldAlert,
   Sparkles,
   Play,
+  Film,
 } from "lucide-react";
 
 // Peaceful ambient stars configuration
@@ -42,8 +43,8 @@ const LOGIN_STARS = [
   { top: "75%", left: "92%", size: 8, color: "#147D7A", isFourPoint: true, animation: "animate-star-slow", delay: "0.9s", duration: "8.5s" },
 ];
 
-// Curated high quality pediatric healthcare YouTube video
-const YOUTUBE_VIDEO_ID = "lxhy4eF0yv8";
+// Universal, reliable, unrestricted embeddable YouTube video ID
+const YOUTUBE_VIDEO_ID = "7e90gBu4pas";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -57,6 +58,7 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [currentVideoId, setCurrentVideoId] = useState(YOUTUBE_VIDEO_ID);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -128,8 +130,8 @@ export default function LoginPage() {
       {/* ========================================================================= */}
       {/* 1. RIGHT COLUMN (Medical Clinic YouTube Video with Curved Arch Divider)   */}
       {/* ========================================================================= */}
-      <div className="w-full lg:w-[48%] xl:w-[46%] relative h-80 sm:h-96 lg:h-auto min-h-[380px] lg:min-h-screen overflow-hidden order-1 lg:order-1 bg-[#061524] select-none shadow-2xl">
-        {/* SVG Clip Path Definition for Smooth Inner Curve */}
+      <div className="w-full lg:w-[48%] xl:w-[46%] relative h-[420px] sm:h-[480px] lg:h-auto min-h-[420px] lg:min-h-screen overflow-hidden order-1 lg:order-1 bg-[#061524] shadow-2xl flex flex-col justify-between">
+        {/* SVG Clip Path Definition for Smooth Inner Curve on Desktop */}
         <svg width="0" height="0" className="absolute">
           <defs>
             <clipPath id="login-video-curve" clipPathUnits="objectBoundingBox">
@@ -144,30 +146,27 @@ export default function LoginPage() {
           </defs>
         </svg>
 
-        {/* Video Wrapper with Curve Clipping on Desktop */}
+        {/* Video Frame with Curve Clipping on Large Screens */}
         <div
-          className="w-full h-full relative overflow-hidden"
+          className="w-full h-full relative overflow-hidden flex flex-col justify-between"
           style={{
             clipPath: "url(#login-video-curve)",
             WebkitClipPath: "url(#login-video-curve)",
           }}
         >
-          {/* YouTube Iframe Video Background Player */}
-          <div className="absolute inset-0 w-full h-full pointer-events-none overflow-hidden">
+          {/* Direct Embedded YouTube Video Player */}
+          <div className="absolute inset-0 w-full h-full bg-[#061524]">
             <iframe
-              src={`https://www.youtube.com/embed/${YOUTUBE_VIDEO_ID}?autoplay=1&mute=1&loop=1&playlist=${YOUTUBE_VIDEO_ID}&controls=0&showinfo=0&rel=0&iv_load_policy=3&modestbranding=1&playsinline=1&enablejsapi=1`}
-              title="Pediatric Clinic Video"
-              className="absolute top-1/2 left-1/2 w-[300%] h-[300%] -translate-x-1/2 -translate-y-1/2 object-cover opacity-85 pointer-events-none"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              src={`https://www.youtube-nocookie.com/embed/${currentVideoId}?autoplay=1&mute=1&loop=1&playlist=${currentVideoId}&controls=1&modestbranding=1&rel=0&playsinline=1`}
+              title="Clinic Video Player"
+              className="w-full h-full border-0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
               allowFullScreen
             />
           </div>
 
-          {/* Gentle Gradient Dark Overlay to guarantee luxury feel and text legibility */}
-          <div className="absolute inset-0 bg-gradient-to-t from-[#061524] via-[#061524]/40 to-[#061524]/30 pointer-events-none" />
-
           {/* Top Logo and Clinic Brand Overlay */}
-          <div className="absolute top-6 inset-x-6 flex items-center justify-between z-20">
+          <div className="relative top-0 inset-x-0 p-6 flex items-center justify-between z-20 bg-gradient-to-b from-[#061524]/90 via-[#061524]/50 to-transparent pointer-events-none">
             <div className="flex items-center gap-3">
               <div className="w-11 h-11 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white shadow-sm">
                 <svg
@@ -209,20 +208,20 @@ export default function LoginPage() {
             </div>
 
             {/* Live Video Indicator Badge */}
-            <div className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/40 backdrop-blur-md border border-white/15 text-white text-[10px] font-bold">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/50 backdrop-blur-md border border-white/15 text-white text-[10px] font-bold">
               <span className="w-2 h-2 rounded-full bg-[#0C9A96] animate-pulse" />
-              <span>{language === "ar" ? "فيديو العيادة" : "Clinic View"}</span>
+              <span>{language === "ar" ? "فيديو مباشر" : "Live Video"}</span>
             </div>
           </div>
 
-          {/* Bottom subtle text overlay on the video */}
-          <div className="absolute inset-x-0 bottom-0 p-6 sm:p-8 pt-20 flex flex-col justify-end text-white z-20">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#0C7A77]/40 backdrop-blur-md border border-[#0C9A96]/40 text-[#0C9A96] text-[11px] font-bold w-fit mb-2">
+          {/* Bottom text overlay on the video */}
+          <div className="relative inset-x-0 bottom-0 p-6 sm:p-8 pt-12 flex flex-col justify-end text-white z-20 bg-gradient-to-t from-[#061524] via-[#061524]/80 to-transparent pointer-events-none">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#0C7A77]/50 backdrop-blur-md border border-[#0C9A96]/40 text-[#0C9A96] text-[11px] font-bold w-fit mb-2">
               <Sparkles className="w-3.5 h-3.5" />
               <span>{language === "ar" ? "رعاية طبية متقدمة" : "Advanced Pediatric Care"}</span>
             </div>
 
-            <h2 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight text-white">
+            <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white">
               {language === "ar"
                 ? "رعاية موثوقة. إدارة آمنة."
                 : "Trusted Care. Secure Management."}
@@ -235,7 +234,7 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Multi-layered Vector Curve Borders */}
+        {/* Multi-layered Vector Curve Borders on Desktop */}
         <div className="hidden lg:block absolute inset-0 w-full h-full pointer-events-none z-30">
           <svg
             className="w-full h-full"
