@@ -18,7 +18,7 @@ import {
   ArrowLeft,
   ArrowRight,
   ShieldAlert,
-  Sparkles,
+  Home,
 } from "lucide-react";
 
 // Peaceful ambient stars configuration on deep indigo background
@@ -79,11 +79,11 @@ export default function LoginPage() {
 
   return (
     <div
-      className="min-h-screen bg-gradient-to-b from-[#061524] via-[#0A1E33] to-[#040D17] flex flex-col justify-between items-center p-4 sm:p-6 lg:p-8 relative w-full overflow-x-hidden font-sans text-white selection:bg-[#0C9A96] selection:text-white"
+      className="min-h-screen bg-gradient-to-b from-[#061524] via-[#0A1E33] to-[#040D17] flex items-center justify-center p-4 sm:p-6 lg:p-8 relative w-full overflow-x-hidden font-sans text-white selection:bg-[#0C9A96] selection:text-white"
       dir={isRTL ? "rtl" : "ltr"}
     >
       {/* Background Radial Glow in the Center */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] sm:w-[800px] h-[600px] sm:h-[800px] bg-[#0C7A77]/15 blur-[120px] rounded-full pointer-events-none z-0" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] sm:w-[750px] h-[550px] sm:h-[750px] bg-[#0C7A77]/15 blur-[120px] rounded-full pointer-events-none z-0" />
 
       {/* Ambient Floating Stars in Deep Indigo Background */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden z-0 select-none">
@@ -123,40 +123,36 @@ export default function LoginPage() {
         ))}
       </div>
 
-      {/* 1. Top Bar: Back to Home & Language Switcher */}
-      <header className="w-full max-w-4xl flex items-center justify-between z-20 mb-4 sm:mb-6">
-        {/* Back to Home Link */}
-        <Link
-          href="/"
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs sm:text-sm font-bold text-slate-200 hover:text-white transition-all shadow-sm backdrop-blur-md group"
-        >
-          {isRTL ? (
-            <ChevronRight className="w-4 h-4 text-[#0C9A96] transition-transform group-hover:translate-x-0.5" />
-          ) : (
-            <ChevronLeft className="w-4 h-4 text-[#0C9A96] transition-transform group-hover:-translate-x-0.5" />
-          )}
-          <span>{language === "ar" ? "العودة للرئيسية" : "Back to Home"}</span>
-        </Link>
+      {/* Main Centered Unified Container */}
+      <div className="w-full max-w-md z-20 space-y-4 my-auto">
+        {/* Navigation & Language Switcher Row */}
+        <div className="flex items-center justify-between px-1">
+          {/* Back to Home Link */}
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-slate-300 hover:text-white transition-all shadow-xs backdrop-blur-md group"
+          >
+            <Home className="w-3.5 h-3.5 text-[#0C9A96]" />
+            <span>{language === "ar" ? "الرئيسية" : "Home"}</span>
+          </Link>
 
-        {/* Language Switcher Pill */}
-        <button
-          type="button"
-          onClick={toggleLanguage}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs sm:text-sm font-bold text-slate-200 hover:text-white transition-all shadow-sm backdrop-blur-md cursor-pointer group"
-          title={language === "ar" ? "Switch to English" : "التحويل للغة العربية"}
-        >
-          <Globe className="w-4 h-4 text-[#0C9A96] group-hover:rotate-45 transition-transform duration-300" />
-          <span>{language === "ar" ? "English" : "عربي"}</span>
-        </button>
-      </header>
+          {/* Language Switcher Button */}
+          <button
+            type="button"
+            onClick={toggleLanguage}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-slate-300 hover:text-white transition-all shadow-xs backdrop-blur-md cursor-pointer group"
+            title={language === "ar" ? "Switch to English" : "التحويل للغة العربية"}
+          >
+            <Globe className="w-3.5 h-3.5 text-[#0C9A96] group-hover:rotate-45 transition-transform duration-300" />
+            <span>{language === "ar" ? "English" : "عربي"}</span>
+          </button>
+        </div>
 
-      {/* 2. Main Centered Login Card Container */}
-      <main className="w-full max-w-md my-auto z-20 space-y-4">
-        {/* Clinic Brand Header above Card */}
-        <div className="text-center space-y-2 select-none">
-          <Link href="/" className="inline-flex flex-col items-center gap-2 group cursor-pointer">
-            {/* Hexagon Logo */}
-            <div className="w-14 h-14 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white shadow-lg group-hover:scale-105 transition-transform duration-200">
+        {/* Floating Centered Login Card */}
+        <div className="bg-white text-[#0A1E33] rounded-[24px] p-6 sm:p-8 border border-white/20 shadow-2xl space-y-5">
+          {/* Clinic Brand & Logo Centered Inside the Card */}
+          <div className="text-center space-y-2 select-none border-b border-[#E5EBF0] pb-4">
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-[#061524] flex items-center justify-center text-white shadow-md">
               <svg
                 width="34"
                 height="34"
@@ -181,24 +177,21 @@ export default function LoginPage() {
               </svg>
             </div>
 
-            <h1 className="text-lg sm:text-xl font-black text-white tracking-tight leading-tight">
+            <h1 className="text-lg font-black text-[#0A1E33] tracking-tight leading-tight">
               {language === "ar"
                 ? "عيادة الدكتور عبد الكريم عليوي"
                 : "Dr. Abdul Karim Aliwi Clinic"}
             </h1>
-            <p className="text-xs font-bold text-[#0C9A96]">
+            <p className="text-[11px] sm:text-xs font-bold text-[#147D7A]">
               {language === "ar"
                 ? "بورد طب الأطفال وحديثي الولادة"
                 : "Board Certified in Pediatrics & Neonatology"}
             </p>
-          </Link>
-        </div>
+          </div>
 
-        {/* Floating White Login Card */}
-        <div className="bg-white text-[#0A1E33] rounded-[24px] p-6 sm:p-8 border border-white/20 shadow-2xl space-y-5">
           {/* Card Title */}
           <div className="text-center space-y-1">
-            <h2 className="text-2xl font-black text-[#0A1E33] tracking-tight">
+            <h2 className="text-xl font-black text-[#0A1E33] tracking-tight">
               {language === "ar" ? "تسجيل الدخول" : "Account Sign In"}
             </h2>
             <p className="text-xs text-[#697A8D] font-medium">
@@ -354,25 +347,25 @@ export default function LoginPage() {
             </span>
           </div>
         </div>
-      </main>
 
-      {/* 3. Security Badge & Copyright Footer */}
-      <footer className="w-full max-w-md text-center mt-6 space-y-2 z-20 select-none">
-        {/* Encrypted Connection Badge */}
-        <div className="inline-flex items-center gap-2 text-xs text-slate-300 font-bold">
-          <div className="w-10 h-px bg-white/15" />
-          <ShieldCheck className="w-4 h-4 text-[#0C9A96]" />
-          <span>{language === "ar" ? "اتصال آمن ومشفر" : "Secure & Encrypted Connection"}</span>
-          <div className="w-10 h-px bg-white/15" />
+        {/* Centered Security Badge & Copyright Footer */}
+        <div className="text-center space-y-2 select-none pt-1">
+          {/* Encrypted Connection Badge */}
+          <div className="inline-flex items-center gap-2 text-xs text-slate-300 font-bold">
+            <div className="w-8 h-px bg-white/15" />
+            <ShieldCheck className="w-4 h-4 text-[#0C9A96]" />
+            <span>{language === "ar" ? "اتصال آمن ومشفر" : "Secure & Encrypted Connection"}</span>
+            <div className="w-8 h-px bg-white/15" />
+          </div>
+
+          {/* Copyright */}
+          <p className="text-[11px] text-slate-400 font-medium">
+            {language === "ar"
+              ? "جميع الحقوق محفوظة © 2026 عيادة الدكتور عبد الكريم عليوي"
+              : "All Rights Reserved © 2026 Dr. Abdul Karim Aliwi Clinic"}
+          </p>
         </div>
-
-        {/* Copyright */}
-        <p className="text-[11px] text-slate-400 font-medium">
-          {language === "ar"
-            ? "جميع الحقوق محفوظة © 2026 عيادة الدكتور عبد الكريم عليوي"
-            : "All Rights Reserved © 2026 Dr. Abdul Karim Aliwi Clinic"}
-        </p>
-      </footer>
+      </div>
     </div>
   );
 }
