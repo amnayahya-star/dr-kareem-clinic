@@ -17,27 +17,41 @@ import {
   Sparkles,
 } from "lucide-react";
 
-// Peaceful ambient stars configuration
+// Vivid & Elegant Ambient Stars & Sparkles Configuration
 const AMBIENT_STARS = [
-  { top: "12%", left: "8%", size: 10, color: "#147D7A", isFourPoint: true, animation: "animate-star-slow", delay: "0s", duration: "7s" },
-  { top: "25%", left: "18%", size: 3.5, color: "#0C9A96", isFourPoint: false, animation: "animate-star-pulse", delay: "1.2s", duration: "5s" },
-  { top: "38%", left: "6%", size: 8, color: "#F59E0B", isFourPoint: true, animation: "animate-star-medium", delay: "2.4s", duration: "8s" },
-  { top: "52%", left: "22%", size: 3, color: "#147D7A", isFourPoint: false, animation: "animate-star-slow", delay: "0.8s", duration: "6s" },
-  { top: "68%", left: "10%", size: 9, color: "#0C9A96", isFourPoint: true, animation: "animate-star-pulse", delay: "3.1s", duration: "7.5s" },
-  { top: "82%", left: "15%", size: 4, color: "#F59E0B", isFourPoint: false, animation: "animate-star-medium", delay: "1.7s", duration: "6.5s" },
+  // Left Zone Sparkles
+  { top: "10%", left: "5%", size: 14, color: "#0C9A96", isSparkle: true, animation: "animate-star-slow", delay: "0s", duration: "6s" },
+  { top: "18%", left: "12%", size: 5, color: "#147D7A", isSparkle: false, animation: "animate-star-pulse", delay: "0.8s", duration: "4.5s" },
+  { top: "32%", left: "4%", size: 12, color: "#F59E0B", isSparkle: true, animation: "animate-star-medium", delay: "1.5s", duration: "7s" },
+  { top: "44%", left: "15%", size: 6, color: "#0C9A96", isSparkle: false, animation: "animate-star-slow", delay: "2.2s", duration: "5.5s" },
+  { top: "62%", left: "7%", size: 15, color: "#147D7A", isSparkle: true, animation: "animate-star-pulse", delay: "0.4s", duration: "6.5s" },
+  { top: "76%", left: "14%", size: 5, color: "#F59E0B", isSparkle: false, animation: "animate-star-medium", delay: "1.9s", duration: "5s" },
+  { top: "90%", left: "8%", size: 13, color: "#0C9A96", isSparkle: true, animation: "animate-star-slow", delay: "2.7s", duration: "7.5s" },
 
-  { top: "15%", left: "35%", size: 3.5, color: "#147D7A", isFourPoint: false, animation: "animate-star-slow", delay: "2s", duration: "8s" },
-  { top: "45%", left: "42%", size: 9, color: "#F59E0B", isFourPoint: true, animation: "animate-star-pulse", delay: "0.5s", duration: "6s" },
-  { top: "75%", left: "38%", size: 3, color: "#0C9A96", isFourPoint: false, animation: "animate-star-medium", delay: "3.5s", duration: "7s" },
+  // Center-Left Zone Sparkles
+  { top: "14%", left: "26%", size: 6, color: "#F59E0B", isSparkle: false, animation: "animate-star-pulse", delay: "1.1s", duration: "5s" },
+  { top: "28%", left: "32%", size: 13, color: "#147D7A", isSparkle: true, animation: "animate-star-slow", delay: "2.5s", duration: "6.5s" },
+  { top: "48%", left: "28%", size: 5, color: "#0C9A96", isSparkle: false, animation: "animate-star-medium", delay: "0.2s", duration: "4.5s" },
+  { top: "66%", left: "35%", size: 14, color: "#F59E0B", isSparkle: true, animation: "animate-star-pulse", delay: "1.7s", duration: "7s" },
+  { top: "84%", left: "30%", size: 6, color: "#147D7A", isSparkle: false, animation: "animate-star-slow", delay: "3s", duration: "6s" },
 
-  { top: "8%", left: "65%", size: 8, color: "#147D7A", isFourPoint: true, animation: "animate-star-slow", delay: "1s", duration: "9s" },
-  { top: "22%", left: "78%", size: 3.5, color: "#F59E0B", isFourPoint: false, animation: "animate-star-pulse", delay: "2.8s", duration: "5.5s" },
-  { top: "58%", left: "72%", size: 9, color: "#0C9A96", isFourPoint: true, animation: "animate-star-medium", delay: "0.3s", duration: "8s" },
-  { top: "85%", left: "82%", size: 4, color: "#147D7A", isFourPoint: false, animation: "animate-star-slow", delay: "2.2s", duration: "6.8s" },
+  // Middle Content Zone Sparkles
+  { top: "8%", left: "48%", size: 12, color: "#0C9A96", isSparkle: true, animation: "animate-star-medium", delay: "0.9s", duration: "6s" },
+  { top: "36%", left: "45%", size: 5, color: "#F59E0B", isSparkle: false, animation: "animate-star-pulse", delay: "2.1s", duration: "5s" },
+  { top: "72%", left: "47%", size: 13, color: "#147D7A", isSparkle: true, animation: "animate-star-slow", delay: "1.3s", duration: "7.5s" },
 
-  { top: "18%", left: "92%", size: 7, color: "#F59E0B", isFourPoint: true, animation: "animate-star-pulse", delay: "1.9s", duration: "7.2s" },
-  { top: "48%", left: "88%", size: 3, color: "#0C9A96", isFourPoint: false, animation: "animate-star-medium", delay: "3.8s", duration: "6.2s" },
-  { top: "78%", left: "95%", size: 8, color: "#147D7A", isFourPoint: true, animation: "animate-star-slow", delay: "0.9s", duration: "8.5s" },
+  // Center-Right Zone Sparkles
+  { top: "12%", left: "62%", size: 6, color: "#147D7A", isSparkle: false, animation: "animate-star-pulse", delay: "0.6s", duration: "4.8s" },
+  { top: "24%", left: "70%", size: 14, color: "#F59E0B", isSparkle: true, animation: "animate-star-slow", delay: "1.8s", duration: "6.8s" },
+  { top: "54%", left: "65%", size: 5, color: "#0C9A96", isSparkle: false, animation: "animate-star-medium", delay: "2.9s", duration: "5.2s" },
+  { top: "80%", left: "68%", size: 15, color: "#147D7A", isSparkle: true, animation: "animate-star-pulse", delay: "0.7s", duration: "7.2s" },
+
+  // Right Zone Sparkles
+  { top: "6%", left: "82%", size: 13, color: "#F59E0B", isSparkle: true, animation: "animate-star-slow", delay: "1.2s", duration: "6.5s" },
+  { top: "20%", left: "90%", size: 5, color: "#0C9A96", isSparkle: false, animation: "animate-star-pulse", delay: "2.4s", duration: "4.5s" },
+  { top: "42%", left: "85%", size: 14, color: "#147D7A", isSparkle: true, animation: "animate-star-medium", delay: "0.5s", duration: "7s" },
+  { top: "64%", left: "92%", size: 6, color: "#F59E0B", isSparkle: false, animation: "animate-star-slow", delay: "3.2s", duration: "5.5s" },
+  { top: "86%", left: "88%", size: 12, color: "#0C9A96", isSparkle: true, animation: "animate-star-pulse", delay: "1.6s", duration: "6.2s" },
 ];
 
 export default function HomePage() {
@@ -48,7 +62,7 @@ export default function HomePage() {
       className="min-h-screen bg-[#F7F9FA] flex flex-col font-sans text-[#0A1E33] selection:bg-[#147D7A] selection:text-white relative overflow-hidden"
       dir={isRTL ? "rtl" : "ltr"}
     >
-      {/* Ambient Peaceful Floating Stars Layer */}
+      {/* Ambient Vivid & Peaceful Floating Stars Layer */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden z-10 select-none">
         {AMBIENT_STARS.map((star, idx) => (
           <div
@@ -61,15 +75,18 @@ export default function HomePage() {
               animationDuration: star.duration,
             }}
           >
-            {star.isFourPoint ? (
+            {star.isSparkle ? (
               <svg
                 width={star.size}
                 height={star.size}
                 viewBox="0 0 24 24"
                 fill={star.color}
-                className="opacity-60 drop-shadow-[0_0_6px_rgba(20,125,122,0.4)]"
+                style={{
+                  filter: `drop-shadow(0 0 ${star.size * 0.7}px ${star.color})`,
+                }}
               >
-                <path d="M12 0L14.5 9.5L24 12L14.5 14.5L12 24L9.5 14.5L0 12L9.5 9.5L12 0Z" />
+                {/* 4-point Diamond Star */}
+                <path d="M12 0L14.8 9.2L24 12L14.8 14.8L12 24L9.2 14.8L0 12L9.2 9.2L12 0Z" />
               </svg>
             ) : (
               <div
@@ -78,7 +95,7 @@ export default function HomePage() {
                   width: `${star.size}px`,
                   height: `${star.size}px`,
                   backgroundColor: star.color,
-                  boxShadow: `0 0 ${star.size * 3}px ${star.color}`,
+                  boxShadow: `0 0 ${star.size * 2.5}px ${star.color}, 0 0 ${star.size * 5}px ${star.color}`,
                 }}
               />
             )}
