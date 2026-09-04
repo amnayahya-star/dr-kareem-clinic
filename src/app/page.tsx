@@ -68,11 +68,11 @@ export default function HomePage() {
         </Link>
       </header>
 
-      {/* 2. Main Hero Section (Two-part layout with curved divider) */}
+      {/* 2. Main Hero Section (Doctor on the RIGHT, Content on the LEFT in RTL) */}
       <main className="flex-1 flex flex-col lg:flex-row relative w-full overflow-hidden">
-        {/* RIGHT COLUMN (In RTL visual layout: Doctor Photograph with Curved Divider ~46% width) */}
-        <div className="w-full lg:w-[46%] relative h-72 sm:h-96 lg:h-auto min-h-[320px] lg:min-h-[calc(100vh-104px)] overflow-hidden order-1 lg:order-2 bg-[#F7F9FA]">
-          {/* SVG Clip Path Definition for Smooth Curve */}
+        {/* RIGHT COLUMN (In RTL layout: Doctor Photograph with Curved Divider ~46% width) */}
+        <div className="w-full lg:w-[46%] relative h-72 sm:h-96 lg:h-auto min-h-[320px] lg:min-h-[calc(100vh-104px)] overflow-hidden order-1 lg:order-1 bg-[#F7F9FA]">
+          {/* SVG Clip Path Definition for Smooth Curve on Inner Left Edge */}
           <svg width="0" height="0" className="absolute">
             <defs>
               <clipPath id="doctor-hero-curve" clipPathUnits="objectBoundingBox">
@@ -132,8 +132,8 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* LEFT COLUMN (In RTL visual layout: Content Area ~54% width) */}
-        <div className="w-full lg:w-[54%] flex flex-col justify-between p-6 sm:p-10 lg:py-8 lg:px-12 xl:px-16 z-20 order-2 lg:order-1">
+        {/* LEFT COLUMN (In RTL layout: Content Area ~54% width) */}
+        <div className="w-full lg:w-[54%] flex flex-col justify-between p-6 sm:p-10 lg:py-8 lg:px-12 xl:px-16 z-20 order-2 lg:order-2">
           <div className="space-y-4 max-w-xl">
             {/* Tag Label */}
             <div className="inline-flex items-center px-4 py-1 rounded-full bg-[#E2EDF0] text-[#147D7A] text-[11px] sm:text-xs font-black w-fit">
