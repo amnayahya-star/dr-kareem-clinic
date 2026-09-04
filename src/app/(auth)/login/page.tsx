@@ -18,27 +18,26 @@ import {
   ArrowLeft,
   ArrowRight,
   ShieldAlert,
-  Sparkles,
 } from "lucide-react";
 
 // Peaceful ambient stars configuration
 const LOGIN_STARS = [
-  { top: "10%", left: "6%", size: 9, color: "#147D7A", isFourPoint: true, animation: "animate-star-slow", delay: "0s", duration: "7s" },
-  { top: "28%", left: "14%", size: 3.5, color: "#0C9A96", isFourPoint: false, animation: "animate-star-pulse", delay: "1.2s", duration: "5s" },
-  { top: "42%", left: "5%", size: 8, color: "#F59E0B", isFourPoint: true, animation: "animate-star-medium", delay: "2.4s", duration: "8s" },
-  { top: "60%", left: "18%", size: 3, color: "#147D7A", isFourPoint: false, animation: "animate-star-slow", delay: "0.8s", duration: "6s" },
-  { top: "78%", left: "8%", size: 8.5, color: "#0C9A96", isFourPoint: true, animation: "animate-star-pulse", delay: "3.1s", duration: "7.5s" },
+  { top: "8%", left: "5%", size: 8, color: "#147D7A", isFourPoint: true, animation: "animate-star-slow", delay: "0s", duration: "7s" },
+  { top: "25%", left: "12%", size: 3.5, color: "#0C9A96", isFourPoint: false, animation: "animate-star-pulse", delay: "1.2s", duration: "5s" },
+  { top: "45%", left: "4%", size: 7.5, color: "#F59E0B", isFourPoint: true, animation: "animate-star-medium", delay: "2.4s", duration: "8s" },
+  { top: "65%", left: "15%", size: 3, color: "#147D7A", isFourPoint: false, animation: "animate-star-slow", delay: "0.8s", duration: "6s" },
+  { top: "82%", left: "8%", size: 8, color: "#0C9A96", isFourPoint: true, animation: "animate-star-pulse", delay: "3.1s", duration: "7.5s" },
 
-  { top: "14%", left: "32%", size: 3.5, color: "#147D7A", isFourPoint: false, animation: "animate-star-slow", delay: "2s", duration: "8s" },
-  { top: "72%", left: "35%", size: 8, color: "#F59E0B", isFourPoint: true, animation: "animate-star-pulse", delay: "0.5s", duration: "6s" },
+  { top: "12%", left: "30%", size: 3.5, color: "#147D7A", isFourPoint: false, animation: "animate-star-slow", delay: "2s", duration: "8s" },
+  { top: "70%", left: "32%", size: 8, color: "#F59E0B", isFourPoint: true, animation: "animate-star-pulse", delay: "0.5s", duration: "6s" },
 
-  { top: "12%", left: "62%", size: 8, color: "#147D7A", isFourPoint: true, animation: "animate-star-slow", delay: "1s", duration: "9s" },
-  { top: "30%", left: "75%", size: 3.5, color: "#F59E0B", isFourPoint: false, animation: "animate-star-pulse", delay: "2.8s", duration: "5.5s" },
-  { top: "65%", left: "70%", size: 9, color: "#0C9A96", isFourPoint: true, animation: "animate-star-medium", delay: "0.3s", duration: "8s" },
-  { top: "84%", left: "80%", size: 4, color: "#147D7A", isFourPoint: false, animation: "animate-star-slow", delay: "2.2s", duration: "6.8s" },
+  { top: "10%", left: "60%", size: 8, color: "#147D7A", isFourPoint: true, animation: "animate-star-slow", delay: "1s", duration: "9s" },
+  { top: "28%", left: "72%", size: 3.5, color: "#F59E0B", isFourPoint: false, animation: "animate-star-pulse", delay: "2.8s", duration: "5.5s" },
+  { top: "62%", left: "68%", size: 9, color: "#0C9A96", isFourPoint: true, animation: "animate-star-medium", delay: "0.3s", duration: "8s" },
+  { top: "86%", left: "78%", size: 4, color: "#147D7A", isFourPoint: false, animation: "animate-star-slow", delay: "2.2s", duration: "6.8s" },
 
-  { top: "20%", left: "90%", size: 7, color: "#F59E0B", isFourPoint: true, animation: "animate-star-pulse", delay: "1.9s", duration: "7.2s" },
-  { top: "75%", left: "92%", size: 8, color: "#147D7A", isFourPoint: true, animation: "animate-star-slow", delay: "0.9s", duration: "8.5s" },
+  { top: "18%", left: "90%", size: 7, color: "#F59E0B", isFourPoint: true, animation: "animate-star-pulse", delay: "1.9s", duration: "7.2s" },
+  { top: "74%", left: "92%", size: 8, color: "#147D7A", isFourPoint: true, animation: "animate-star-slow", delay: "0.9s", duration: "8.5s" },
 ];
 
 export default function LoginPage() {
@@ -122,53 +121,22 @@ export default function LoginPage() {
       </div>
 
       {/* ========================================================================= */}
-      {/* 1. RIGHT COLUMN (Doctor Photograph with Multi-layer Curved Divider)       */}
+      {/* 1. RIGHT COLUMN (Distinct Dark Navy Doctor Portrait Hero in RTL)          */}
       {/* ========================================================================= */}
-      <div className="w-full lg:w-[46%] xl:w-[45%] relative h-72 sm:h-96 lg:h-auto min-h-[340px] lg:min-h-screen overflow-hidden order-1 lg:order-1 bg-[#F7F9FA] select-none">
-        {/* SVG Clip Path Definition for Smooth Inner Curve */}
-        <svg width="0" height="0" className="absolute">
-          <defs>
-            <clipPath id="login-doctor-curve" clipPathUnits="objectBoundingBox">
-              {isRTL ? (
-                /* Arch curving inwards from left of the photo */
-                <path d="M 0.16 0 C -0.02 0.32, -0.02 0.68, 0.16 1 L 1 1 L 1 0 Z" />
-              ) : (
-                /* Arch curving inwards from right of the photo in LTR */
-                <path d="M 0 0 L 0.84 0 C 1.02 0.32, 1.02 0.68, 0.84 1 L 0 1 Z" />
-              )}
-            </clipPath>
-          </defs>
-        </svg>
+      <div className="w-full lg:w-[48%] xl:w-[46%] relative bg-[#061524] text-white flex flex-col justify-between p-6 sm:p-10 lg:p-12 min-h-[420px] lg:min-h-screen overflow-hidden order-1 lg:order-1 shadow-2xl select-none">
+        {/* Background Subtle Hexagon Pattern */}
+        <div className="absolute inset-0 pointer-events-none opacity-20 bg-[radial-gradient(#147D7A_1px,transparent_1px)] [background-size:24px_24px] z-0" />
 
-        {/* Doctor Image with Curve Clipping on Desktop */}
-        <div
-          className="w-full h-full relative"
-          style={{
-            clipPath: "url(#login-doctor-curve)",
-            WebkitClipPath: "url(#login-doctor-curve)",
-          }}
-        >
-          <img
-            src="/doctor-clinic-photo.jpg"
-            alt="الدكتور عبد الكريم عليوي - بورد طب الأطفال وحديثي الولادة"
-            className="w-full h-full object-cover object-[75%_top] sm:object-[70%_center] lg:object-[80%_center] filter contrast-[1.03]"
-          />
-
-          {/* Bottom subtle gradient text overlay on the photo */}
-          <div className="hidden lg:flex absolute inset-x-0 bottom-0 p-8 pt-20 bg-gradient-to-t from-[#0A1E33]/90 via-[#0A1E33]/50 to-transparent flex-col justify-end text-white text-right">
-            <h2 className="text-xl sm:text-2xl font-black tracking-tight">
-              {language === "ar" ? "رعاية موثوقة. إدارة آمنة." : "Trusted Care. Secure Management."}
-            </h2>
-            <p className="text-xs text-slate-200 mt-1 font-medium">
-              {language === "ar"
-                ? "دخول مخصص للكادر الطبي والإداري في العيادة."
-                : "Authorized access for medical and administrative staff."}
-            </p>
-          </div>
+        {/* Decorative Hexagon Molecules */}
+        <div className="absolute top-28 right-8 pointer-events-none opacity-25 z-0">
+          <svg width="120" height="120" viewBox="0 0 100 100" fill="none" stroke="#0C9A96" strokeWidth="1.2">
+            <path d="M50 5 L85 25 L85 65 L50 85 L15 65 L15 25 Z" />
+            <path d="M85 25 L120 45 L120 85 L85 105 L50 85" />
+          </svg>
         </div>
 
-        {/* Multi-layered Vector Curve Borders */}
-        <div className="hidden lg:block absolute inset-0 w-full h-full pointer-events-none z-20">
+        {/* Multi-layered Curve Vector Divider */}
+        <div className="hidden lg:block absolute inset-0 w-full h-full pointer-events-none z-30">
           <svg
             className="w-full h-full"
             viewBox="0 0 100 100"
@@ -178,59 +146,131 @@ export default function LoginPage() {
           >
             {isRTL ? (
               <>
-                {/* 1. Thin Teal Accent Outer Line */}
                 <path
-                  d="M 13.5 0 C -4.5 32, -4.5 68, 13.5 100"
+                  d="M 12 0 C -5 32, -5 68, 12 100"
                   stroke="#0C9A96"
-                  strokeWidth="0.85"
+                  strokeWidth="0.9"
                   vectorEffect="non-scaling-stroke"
                 />
-                {/* 2. White Separation Gap */}
                 <path
-                  d="M 14.8 0 C -3.2 32, -3.2 68, 14.8 100"
+                  d="M 13.5 0 C -3.5 32, -3.5 68, 13.5 100"
                   stroke="#FFFFFF"
-                  strokeWidth="1.3"
+                  strokeWidth="1.2"
                   vectorEffect="non-scaling-stroke"
                 />
-                {/* 3. Main Dark Navy Thick Arch */}
                 <path
-                  d="M 16 0 C -2 32, -2 68, 16 100"
-                  stroke="#0A1E33"
-                  strokeWidth="2.8"
+                  d="M 14.8 0 C -2.2 32, -2.2 68, 14.8 100"
+                  stroke="#061524"
+                  strokeWidth="2.6"
                   vectorEffect="non-scaling-stroke"
                 />
               </>
             ) : (
               <>
-                {/* LTR Curve Borders */}
                 <path
-                  d="M 86.5 0 C 104.5 32, 104.5 68, 86.5 100"
+                  d="M 88 0 C 105 32, 105 68, 88 100"
                   stroke="#0C9A96"
-                  strokeWidth="0.85"
+                  strokeWidth="0.9"
                   vectorEffect="non-scaling-stroke"
                 />
                 <path
-                  d="M 85.2 0 C 103.2 32, 103.2 68, 85.2 100"
+                  d="M 86.5 0 C 103.5 32, 103.5 68, 86.5 100"
                   stroke="#FFFFFF"
-                  strokeWidth="1.3"
+                  strokeWidth="1.2"
                   vectorEffect="non-scaling-stroke"
                 />
                 <path
-                  d="M 84 0 C 102 32, 102 68, 84 100"
-                  stroke="#0A1E33"
-                  strokeWidth="2.8"
+                  d="M 85.2 0 C 102.2 32, 102.2 68, 85.2 100"
+                  stroke="#061524"
+                  strokeWidth="2.6"
                   vectorEffect="non-scaling-stroke"
                 />
               </>
             )}
           </svg>
         </div>
+
+        {/* Top Header: Hexagon Logo & Clinic Title */}
+        <div className={`flex items-center ${isRTL ? "justify-start" : "justify-start"} gap-3.5 relative z-20`}>
+          <div className="shrink-0">
+            <svg
+              width="44"
+              height="44"
+              viewBox="0 0 48 48"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              className="drop-shadow-sm"
+            >
+              <path
+                d="M24 3.5L42.5 13.8V34.2L24 44.5L5.5 34.2V13.8L24 3.5Z"
+                stroke="#FFFFFF"
+                strokeWidth="2.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M5.5 24H15.5L19.5 14.5L24.5 34.5L29.5 18L33.5 24H42.5"
+                stroke="#0C9A96"
+                strokeWidth="2.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </div>
+
+          <div className={isRTL ? "text-right" : "text-left"}>
+            <h1 className="text-lg sm:text-xl font-black text-white tracking-tight leading-tight">
+              {language === "ar"
+                ? "عيادة د. عبد الكريم عليوي"
+                : "Dr. Abdul Karim Aliwi Clinic"}
+            </h1>
+            <p className="text-xs sm:text-[13px] font-bold text-[#0C9A96] mt-0.5">
+              {language === "ar"
+                ? "بورد طب الأطفال وحديثي الولادة"
+                : "Board Certified in Pediatrics & Neonatology"}
+            </p>
+          </div>
+        </div>
+
+        {/* Center: Distinct Doctor Cutout Portrait on Dark Navy Backdrop */}
+        <div className="relative my-auto flex justify-center items-center py-4 z-10">
+          <div className="relative w-64 sm:w-72 lg:w-80 max-w-full aspect-[4/5] flex items-center justify-center">
+            <img
+              src="/doctor-portrait-cutout.png"
+              alt="الدكتور عبد الكريم عليوي"
+              className="w-full h-full object-contain filter drop-shadow-2xl contrast-105"
+            />
+            {/* Smooth gradient blend at the bottom */}
+            <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[#061524] to-transparent" />
+          </div>
+        </div>
+
+        {/* Bottom Headline & Subtitle of Dark Navy Hero */}
+        <div className="text-center relative z-20 space-y-2 pb-2">
+          <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+            {language === "ar" ? (
+              <>
+                رعاية موثوقة. إدارة آمنة<span className="text-[#0C9A96]">.</span>
+              </>
+            ) : (
+              <>
+                Trusted Care. Secure Management<span className="text-[#0C9A96]">.</span>
+              </>
+            )}
+          </h2>
+          <p className="text-xs sm:text-sm text-[#8DA4B8] font-medium max-w-md mx-auto">
+            {language === "ar"
+              ? "دخول مخصص للكادر الطبي والإداري في العيادة."
+              : "Authorized clinical and administrative access."}
+          </p>
+          <div className="w-12 h-1 bg-[#0C9A96] mx-auto rounded-full mt-3 opacity-90" />
+        </div>
       </div>
 
       {/* ========================================================================= */}
       {/* 2. LEFT COLUMN (Bilingual Floating Login Card with Language Switcher)     */}
       {/* ========================================================================= */}
-      <div className="w-full lg:w-[54%] xl:w-[55%] flex flex-col justify-between p-6 sm:p-10 lg:p-12 relative z-20 order-2 lg:order-2">
+      <div className="w-full lg:w-[52%] xl:w-[54%] flex flex-col justify-between p-6 sm:p-10 lg:p-12 relative z-20 order-2 lg:order-2">
         {/* Top Header Actions: Language Switcher & Back to Home */}
         <div className="flex items-center justify-between w-full max-w-md mx-auto mb-6 z-20">
           {/* Back to Home Link */}
