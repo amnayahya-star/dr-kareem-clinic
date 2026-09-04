@@ -19,32 +19,26 @@ import {
   ArrowRight,
   ShieldAlert,
   Sparkles,
-  Play,
-  Film,
 } from "lucide-react";
 
-// Peaceful ambient stars configuration
+// Peaceful ambient stars configuration on deep indigo background
 const LOGIN_STARS = [
-  { top: "10%", left: "6%", size: 9, color: "#147D7A", isFourPoint: true, animation: "animate-star-slow", delay: "0s", duration: "7s" },
-  { top: "28%", left: "14%", size: 3.5, color: "#0C9A96", isFourPoint: false, animation: "animate-star-pulse", delay: "1.2s", duration: "5s" },
-  { top: "42%", left: "5%", size: 8, color: "#F59E0B", isFourPoint: true, animation: "animate-star-medium", delay: "2.4s", duration: "8s" },
-  { top: "60%", left: "18%", size: 3, color: "#147D7A", isFourPoint: false, animation: "animate-star-slow", delay: "0.8s", duration: "6s" },
-  { top: "78%", left: "8%", size: 8.5, color: "#0C9A96", isFourPoint: true, animation: "animate-star-pulse", delay: "3.1s", duration: "7.5s" },
+  { top: "8%", left: "10%", size: 9, color: "#0C9A96", isFourPoint: true, animation: "animate-star-slow", delay: "0s", duration: "7s" },
+  { top: "18%", left: "22%", size: 3.5, color: "#38BDF8", isFourPoint: false, animation: "animate-star-pulse", delay: "1.2s", duration: "5s" },
+  { top: "32%", left: "8%", size: 8, color: "#F59E0B", isFourPoint: true, animation: "animate-star-medium", delay: "2.4s", duration: "8s" },
+  { top: "50%", left: "15%", size: 3, color: "#0C9A96", isFourPoint: false, animation: "animate-star-slow", delay: "0.8s", duration: "6s" },
+  { top: "72%", left: "12%", size: 8.5, color: "#38BDF8", isFourPoint: true, animation: "animate-star-pulse", delay: "3.1s", duration: "7.5s" },
+  { top: "88%", left: "20%", size: 4, color: "#F59E0B", isFourPoint: false, animation: "animate-star-medium", delay: "1.5s", duration: "6.5s" },
 
-  { top: "14%", left: "32%", size: 3.5, color: "#147D7A", isFourPoint: false, animation: "animate-star-slow", delay: "2s", duration: "8s" },
-  { top: "72%", left: "35%", size: 8, color: "#F59E0B", isFourPoint: true, animation: "animate-star-pulse", delay: "0.5s", duration: "6s" },
+  { top: "12%", left: "50%", size: 3.5, color: "#0C9A96", isFourPoint: false, animation: "animate-star-slow", delay: "2s", duration: "8s" },
+  { top: "85%", left: "48%", size: 7, color: "#F59E0B", isFourPoint: true, animation: "animate-star-pulse", delay: "0.5s", duration: "6s" },
 
-  { top: "12%", left: "62%", size: 8, color: "#147D7A", isFourPoint: true, animation: "animate-star-slow", delay: "1s", duration: "9s" },
-  { top: "30%", left: "75%", size: 3.5, color: "#F59E0B", isFourPoint: false, animation: "animate-star-pulse", delay: "2.8s", duration: "5.5s" },
-  { top: "65%", left: "70%", size: 9, color: "#0C9A96", isFourPoint: true, animation: "animate-star-medium", delay: "0.3s", duration: "8s" },
-  { top: "84%", left: "80%", size: 4, color: "#147D7A", isFourPoint: false, animation: "animate-star-slow", delay: "2.2s", duration: "6.8s" },
-
-  { top: "20%", left: "90%", size: 7, color: "#F59E0B", isFourPoint: true, animation: "animate-star-pulse", delay: "1.9s", duration: "7.2s" },
-  { top: "75%", left: "92%", size: 8, color: "#147D7A", isFourPoint: true, animation: "animate-star-slow", delay: "0.9s", duration: "8.5s" },
+  { top: "10%", left: "85%", size: 8, color: "#0C9A96", isFourPoint: true, animation: "animate-star-slow", delay: "1s", duration: "9s" },
+  { top: "25%", left: "78%", size: 3.5, color: "#38BDF8", isFourPoint: false, animation: "animate-star-pulse", delay: "2.8s", duration: "5.5s" },
+  { top: "45%", left: "90%", size: 9, color: "#F59E0B", isFourPoint: true, animation: "animate-star-medium", delay: "0.3s", duration: "8s" },
+  { top: "68%", left: "82%", size: 3, color: "#0C9A96", isFourPoint: false, animation: "animate-star-slow", delay: "2.2s", duration: "6.8s" },
+  { top: "84%", left: "88%", size: 8, color: "#38BDF8", isFourPoint: true, animation: "animate-star-pulse", delay: "1.9s", duration: "7.2s" },
 ];
-
-// Public Unrestricted Official WHO / UNICEF Pediatric Healthcare Video ID
-const YOUTUBE_VIDEO_ID = "L_7_WjEeVJ4";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -58,7 +52,6 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [currentVideoId, setCurrentVideoId] = useState(YOUTUBE_VIDEO_ID);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,11 +79,14 @@ export default function LoginPage() {
 
   return (
     <div
-      className="min-h-screen bg-[#F7F9FA] flex flex-col lg:flex-row relative w-full overflow-x-hidden font-sans text-[#0A1E33] selection:bg-[#147D7A] selection:text-white"
+      className="min-h-screen bg-gradient-to-b from-[#061524] via-[#0A1E33] to-[#040D17] flex flex-col justify-between items-center p-4 sm:p-6 lg:p-8 relative w-full overflow-x-hidden font-sans text-white selection:bg-[#0C9A96] selection:text-white"
       dir={isRTL ? "rtl" : "ltr"}
     >
-      {/* Ambient Floating Stars in Background */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden z-10 select-none">
+      {/* Background Radial Glow in the Center */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] sm:w-[800px] h-[600px] sm:h-[800px] bg-[#0C7A77]/15 blur-[120px] rounded-full pointer-events-none z-0" />
+
+      {/* Ambient Floating Stars in Deep Indigo Background */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden z-0 select-none">
         {LOGIN_STARS.map((star, idx) => (
           <div
             key={idx}
@@ -108,7 +104,7 @@ export default function LoginPage() {
                 height={star.size}
                 viewBox="0 0 24 24"
                 fill={star.color}
-                className="opacity-50 drop-shadow-[0_0_6px_rgba(20,125,122,0.35)]"
+                className="opacity-75 drop-shadow-[0_0_8px_rgba(12,154,150,0.6)]"
               >
                 <path d="M12 0L14.5 9.5L24 12L14.5 14.5L12 24L9.5 14.5L0 12L9.5 9.5L12 0Z" />
               </svg>
@@ -127,211 +123,84 @@ export default function LoginPage() {
         ))}
       </div>
 
-      {/* ========================================================================= */}
-      {/* 1. RIGHT COLUMN (Medical Clinic YouTube Video with Curved Arch Divider)   */}
-      {/* ========================================================================= */}
-      <div className="w-full lg:w-[48%] xl:w-[46%] relative h-[420px] sm:h-[480px] lg:h-auto min-h-[420px] lg:min-h-screen overflow-hidden order-1 lg:order-1 bg-[#061524] shadow-2xl flex flex-col justify-between">
-        {/* SVG Clip Path Definition for Smooth Inner Curve on Desktop */}
-        <svg width="0" height="0" className="absolute">
-          <defs>
-            <clipPath id="login-video-curve" clipPathUnits="objectBoundingBox">
-              {isRTL ? (
-                /* Arch curving inwards from left of the video */
-                <path d="M 0.16 0 C -0.02 0.32, -0.02 0.68, 0.16 1 L 1 1 L 1 0 Z" />
-              ) : (
-                /* Arch curving inwards from right of the video in LTR */
-                <path d="M 0 0 L 0.84 0 C 1.02 0.32, 1.02 0.68, 0.84 1 L 0 1 Z" />
-              )}
-            </clipPath>
-          </defs>
-        </svg>
-
-        {/* Video Frame with Curve Clipping on Large Screens */}
-        <div
-          className="w-full h-full relative overflow-hidden flex flex-col justify-between"
-          style={{
-            clipPath: "url(#login-video-curve)",
-            WebkitClipPath: "url(#login-video-curve)",
-          }}
+      {/* 1. Top Bar: Back to Home & Language Switcher */}
+      <header className="w-full max-w-4xl flex items-center justify-between z-20 mb-4 sm:mb-6">
+        {/* Back to Home Link */}
+        <Link
+          href="/"
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs sm:text-sm font-bold text-slate-200 hover:text-white transition-all shadow-sm backdrop-blur-md group"
         >
-          {/* Direct Embedded YouTube Video Player */}
-          <div className="absolute inset-0 w-full h-full bg-[#061524]">
-            <iframe
-              src={`https://www.youtube-nocookie.com/embed/${currentVideoId}?autoplay=1&mute=1&loop=1&playlist=${currentVideoId}&controls=1&modestbranding=1&rel=0&playsinline=1`}
-              title="Clinic Video Player"
-              className="w-full h-full border-0"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-              allowFullScreen
-            />
-          </div>
+          {isRTL ? (
+            <ChevronRight className="w-4 h-4 text-[#0C9A96] transition-transform group-hover:translate-x-0.5" />
+          ) : (
+            <ChevronLeft className="w-4 h-4 text-[#0C9A96] transition-transform group-hover:-translate-x-0.5" />
+          )}
+          <span>{language === "ar" ? "العودة للرئيسية" : "Back to Home"}</span>
+        </Link>
 
-          {/* Top Logo and Clinic Brand Overlay */}
-          <div className="relative top-0 inset-x-0 p-6 flex items-center justify-between z-20 bg-gradient-to-b from-[#061524]/90 via-[#061524]/50 to-transparent pointer-events-none">
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white shadow-sm">
-                <svg
-                  width="28"
-                  height="28"
-                  viewBox="0 0 48 48"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <path
-                    d="M24 3.5L42.5 13.8V34.2L24 44.5L5.5 34.2V13.8L24 3.5Z"
-                    stroke="#FFFFFF"
-                    strokeWidth="2.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M5.5 24H15.5L19.5 14.5L24.5 34.5L29.5 18L33.5 24H42.5"
-                    stroke="#0C9A96"
-                    strokeWidth="3.2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </div>
+        {/* Language Switcher Pill */}
+        <button
+          type="button"
+          onClick={toggleLanguage}
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs sm:text-sm font-bold text-slate-200 hover:text-white transition-all shadow-sm backdrop-blur-md cursor-pointer group"
+          title={language === "ar" ? "Switch to English" : "التحويل للغة العربية"}
+        >
+          <Globe className="w-4 h-4 text-[#0C9A96] group-hover:rotate-45 transition-transform duration-300" />
+          <span>{language === "ar" ? "English" : "عربي"}</span>
+        </button>
+      </header>
 
-              <div>
-                <h1 className="text-sm sm:text-base font-black text-white tracking-tight leading-tight">
-                  {language === "ar"
-                    ? "عيادة الدكتور عبد الكريم عليوي"
-                    : "Dr. Abdul Karim Aliwi Clinic"}
-                </h1>
-                <p className="text-[11px] sm:text-xs font-bold text-[#0C9A96]">
-                  {language === "ar"
-                    ? "بورد طب الأطفال وحديثي الولادة"
-                    : "Board Certified in Pediatrics & Neonatology"}
-                </p>
-              </div>
+      {/* 2. Main Centered Login Card Container */}
+      <main className="w-full max-w-md my-auto z-20 space-y-4">
+        {/* Clinic Brand Header above Card */}
+        <div className="text-center space-y-2 select-none">
+          <Link href="/" className="inline-flex flex-col items-center gap-2 group cursor-pointer">
+            {/* Hexagon Logo */}
+            <div className="w-14 h-14 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white shadow-lg group-hover:scale-105 transition-transform duration-200">
+              <svg
+                width="34"
+                height="34"
+                viewBox="0 0 48 48"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M24 3.5L42.5 13.8V34.2L24 44.5L5.5 34.2V13.8L24 3.5Z"
+                  stroke="#FFFFFF"
+                  strokeWidth="2.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d="M5.5 24H15.5L19.5 14.5L24.5 34.5L29.5 18L33.5 24H42.5"
+                  stroke="#0C9A96"
+                  strokeWidth="3.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
             </div>
 
-            {/* Live Video Indicator Badge */}
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/50 backdrop-blur-md border border-white/15 text-white text-[10px] font-bold">
-              <span className="w-2 h-2 rounded-full bg-[#0C9A96] animate-pulse" />
-              <span>{language === "ar" ? "فيديو مباشر" : "Live Video"}</span>
-            </div>
-          </div>
-
-          {/* Bottom text overlay on the video */}
-          <div className="relative inset-x-0 bottom-0 p-6 sm:p-8 pt-12 flex flex-col justify-end text-white z-20 bg-gradient-to-t from-[#061524] via-[#061524]/80 to-transparent pointer-events-none">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#0C7A77]/50 backdrop-blur-md border border-[#0C9A96]/40 text-[#0C9A96] text-[11px] font-bold w-fit mb-2">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>{language === "ar" ? "رعاية طبية متقدمة" : "Advanced Pediatric Care"}</span>
-            </div>
-
-            <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white">
+            <h1 className="text-lg sm:text-xl font-black text-white tracking-tight leading-tight">
               {language === "ar"
-                ? "رعاية موثوقة. إدارة آمنة."
-                : "Trusted Care. Secure Management."}
-            </h2>
-            <p className="text-xs sm:text-sm text-slate-300 mt-1 font-medium max-w-md">
+                ? "عيادة الدكتور عبد الكريم عليوي"
+                : "Dr. Abdul Karim Aliwi Clinic"}
+            </h1>
+            <p className="text-xs font-bold text-[#0C9A96]">
               {language === "ar"
-                ? "منظومة إلكترونية مخصصة للكادر الطبي والإداري لتنظيم العيادة بكفاءة."
-                : "A unified clinical workstation for pediatric medical and administrative staff."}
+                ? "بورد طب الأطفال وحديثي الولادة"
+                : "Board Certified in Pediatrics & Neonatology"}
             </p>
-          </div>
-        </div>
-
-        {/* Multi-layered Vector Curve Borders on Desktop */}
-        <div className="hidden lg:block absolute inset-0 w-full h-full pointer-events-none z-30">
-          <svg
-            className="w-full h-full"
-            viewBox="0 0 100 100"
-            preserveAspectRatio="none"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            {isRTL ? (
-              <>
-                {/* 1. Thin Teal Accent Outer Line */}
-                <path
-                  d="M 13.5 0 C -4.5 32, -4.5 68, 13.5 100"
-                  stroke="#0C9A96"
-                  strokeWidth="0.85"
-                  vectorEffect="non-scaling-stroke"
-                />
-                {/* 2. White Separation Gap */}
-                <path
-                  d="M 14.8 0 C -3.2 32, -3.2 68, 14.8 100"
-                  stroke="#FFFFFF"
-                  strokeWidth="1.3"
-                  vectorEffect="non-scaling-stroke"
-                />
-                {/* 3. Main Dark Navy Thick Arch */}
-                <path
-                  d="M 16 0 C -2 32, -2 68, 16 100"
-                  stroke="#061524"
-                  strokeWidth="2.8"
-                  vectorEffect="non-scaling-stroke"
-                />
-              </>
-            ) : (
-              <>
-                {/* LTR Curve Borders */}
-                <path
-                  d="M 86.5 0 C 104.5 32, 104.5 68, 86.5 100"
-                  stroke="#0C9A96"
-                  strokeWidth="0.85"
-                  vectorEffect="non-scaling-stroke"
-                />
-                <path
-                  d="M 85.2 0 C 103.2 32, 103.2 68, 85.2 100"
-                  stroke="#FFFFFF"
-                  strokeWidth="1.3"
-                  vectorEffect="non-scaling-stroke"
-                />
-                <path
-                  d="M 84 0 C 102 32, 102 68, 84 100"
-                  stroke="#061524"
-                  strokeWidth="2.8"
-                  vectorEffect="non-scaling-stroke"
-                />
-              </>
-            )}
-          </svg>
-        </div>
-      </div>
-
-      {/* ========================================================================= */}
-      {/* 2. LEFT COLUMN (Bilingual Floating Login Card with Language Switcher)     */}
-      {/* ========================================================================= */}
-      <div className="w-full lg:w-[52%] xl:w-[54%] flex flex-col justify-between p-6 sm:p-10 lg:p-12 relative z-20 order-2 lg:order-2">
-        {/* Top Header Actions: Language Switcher & Back to Home */}
-        <div className="flex items-center justify-between w-full max-w-md mx-auto mb-6 z-20">
-          {/* Back to Home Link */}
-          <Link
-            href="/"
-            className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold text-[#0A1E33] hover:text-[#147D7A] transition-colors group"
-          >
-            {isRTL ? (
-              <ChevronRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
-            ) : (
-              <ChevronLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
-            )}
-            <span>{language === "ar" ? "العودة للرئيسية" : "Back to Home"}</span>
           </Link>
-
-          {/* Language Switcher Pill */}
-          <button
-            type="button"
-            onClick={toggleLanguage}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl border border-[#D7E0E5] bg-white text-xs sm:text-sm font-bold text-[#0A1E33] hover:border-[#147D7A] hover:text-[#147D7A] transition-all shadow-2xs cursor-pointer group"
-            title={language === "ar" ? "Switch to English" : "التحويل للغة العربية"}
-          >
-            <Globe className="w-3.5 h-3.5 text-[#147D7A] group-hover:rotate-45 transition-transform duration-300" />
-            <span>{language === "ar" ? "English" : "عربي"}</span>
-          </button>
         </div>
 
-        {/* Main Floating Login Card */}
-        <div className="w-full max-w-md mx-auto my-auto bg-white rounded-[24px] p-6 sm:p-8 border border-[#E5EBF0] shadow-sm relative z-20 space-y-6">
-          {/* Card Header */}
+        {/* Floating White Login Card */}
+        <div className="bg-white text-[#0A1E33] rounded-[24px] p-6 sm:p-8 border border-white/20 shadow-2xl space-y-5">
+          {/* Card Title */}
           <div className="text-center space-y-1">
-            <h3 className="text-2xl font-black text-[#0A1E33] tracking-tight">
+            <h2 className="text-2xl font-black text-[#0A1E33] tracking-tight">
               {language === "ar" ? "تسجيل الدخول" : "Account Sign In"}
-            </h3>
+            </h2>
             <p className="text-xs text-[#697A8D] font-medium">
               {language === "ar"
                 ? "أدخل بيانات حسابك للوصول إلى نظام العيادة"
@@ -466,7 +335,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full h-12 bg-[#0A1E33] hover:bg-[#147D7A] text-white rounded-xl font-black text-sm flex items-center justify-center gap-2 transition-all duration-200 shadow-sm cursor-pointer disabled:opacity-60"
+              className="w-full h-12 bg-[#0A1E33] hover:bg-[#0C7A77] text-white rounded-xl font-black text-sm flex items-center justify-center gap-2 transition-all duration-200 shadow-sm cursor-pointer disabled:opacity-60"
             >
               <span>{isLoading ? (language === "ar" ? "جاري الدخول..." : "Signing In...") : (language === "ar" ? "الدخول إلى النظام" : "Sign In to System")}</span>
               {isRTL ? <ArrowLeft className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
@@ -485,25 +354,25 @@ export default function LoginPage() {
             </span>
           </div>
         </div>
+      </main>
 
-        {/* Security Badge & Footer */}
-        <div className="text-center mt-6 space-y-3 z-20">
-          {/* Encrypted Connection Badge */}
-          <div className="inline-flex items-center gap-2 text-xs text-[#697A8D] font-bold">
-            <div className="w-10 h-px bg-[#D7E0E5]" />
-            <ShieldCheck className="w-4 h-4 text-[#147D7A]" />
-            <span>{language === "ar" ? "اتصال آمن ومشفر" : "Secure & Encrypted Connection"}</span>
-            <div className="w-10 h-px bg-[#D7E0E5]" />
-          </div>
-
-          {/* Copyright */}
-          <p className="text-[11px] text-[#94A3B8] font-medium">
-            {language === "ar"
-              ? "جميع الحقوق محفوظة © 2026 عيادة الدكتور عبد الكريم عليوي"
-              : "All Rights Reserved © 2026 Dr. Abdul Karim Aliwi Clinic"}
-          </p>
+      {/* 3. Security Badge & Copyright Footer */}
+      <footer className="w-full max-w-md text-center mt-6 space-y-2 z-20 select-none">
+        {/* Encrypted Connection Badge */}
+        <div className="inline-flex items-center gap-2 text-xs text-slate-300 font-bold">
+          <div className="w-10 h-px bg-white/15" />
+          <ShieldCheck className="w-4 h-4 text-[#0C9A96]" />
+          <span>{language === "ar" ? "اتصال آمن ومشفر" : "Secure & Encrypted Connection"}</span>
+          <div className="w-10 h-px bg-white/15" />
         </div>
-      </div>
+
+        {/* Copyright */}
+        <p className="text-[11px] text-slate-400 font-medium">
+          {language === "ar"
+            ? "جميع الحقوق محفوظة © 2026 عيادة الدكتور عبد الكريم عليوي"
+            : "All Rights Reserved © 2026 Dr. Abdul Karim Aliwi Clinic"}
+        </p>
+      </footer>
     </div>
   );
 }
