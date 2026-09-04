@@ -43,8 +43,8 @@ const LOGIN_STARS = [
   { top: "75%", left: "92%", size: 8, color: "#147D7A", isFourPoint: true, animation: "animate-star-slow", delay: "0.9s", duration: "8.5s" },
 ];
 
-// Specialized Pediatric Medical Clinic YouTube Video ID
-const YOUTUBE_VIDEO_ID = "fD_bV2E_74Q";
+// Public Unrestricted Official WHO / UNICEF Pediatric Healthcare Video ID
+const YOUTUBE_VIDEO_ID = "L_7_WjEeVJ4";
 
 export default function LoginPage() {
   const router = useRouter();
