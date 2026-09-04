@@ -18,27 +18,32 @@ import {
   ArrowLeft,
   ArrowRight,
   ShieldAlert,
+  Sparkles,
+  Play,
 } from "lucide-react";
 
 // Peaceful ambient stars configuration
 const LOGIN_STARS = [
-  { top: "8%", left: "5%", size: 8, color: "#147D7A", isFourPoint: true, animation: "animate-star-slow", delay: "0s", duration: "7s" },
-  { top: "25%", left: "12%", size: 3.5, color: "#0C9A96", isFourPoint: false, animation: "animate-star-pulse", delay: "1.2s", duration: "5s" },
-  { top: "45%", left: "4%", size: 7.5, color: "#F59E0B", isFourPoint: true, animation: "animate-star-medium", delay: "2.4s", duration: "8s" },
-  { top: "65%", left: "15%", size: 3, color: "#147D7A", isFourPoint: false, animation: "animate-star-slow", delay: "0.8s", duration: "6s" },
-  { top: "82%", left: "8%", size: 8, color: "#0C9A96", isFourPoint: true, animation: "animate-star-pulse", delay: "3.1s", duration: "7.5s" },
+  { top: "10%", left: "6%", size: 9, color: "#147D7A", isFourPoint: true, animation: "animate-star-slow", delay: "0s", duration: "7s" },
+  { top: "28%", left: "14%", size: 3.5, color: "#0C9A96", isFourPoint: false, animation: "animate-star-pulse", delay: "1.2s", duration: "5s" },
+  { top: "42%", left: "5%", size: 8, color: "#F59E0B", isFourPoint: true, animation: "animate-star-medium", delay: "2.4s", duration: "8s" },
+  { top: "60%", left: "18%", size: 3, color: "#147D7A", isFourPoint: false, animation: "animate-star-slow", delay: "0.8s", duration: "6s" },
+  { top: "78%", left: "8%", size: 8.5, color: "#0C9A96", isFourPoint: true, animation: "animate-star-pulse", delay: "3.1s", duration: "7.5s" },
 
-  { top: "12%", left: "30%", size: 3.5, color: "#147D7A", isFourPoint: false, animation: "animate-star-slow", delay: "2s", duration: "8s" },
-  { top: "70%", left: "32%", size: 8, color: "#F59E0B", isFourPoint: true, animation: "animate-star-pulse", delay: "0.5s", duration: "6s" },
+  { top: "14%", left: "32%", size: 3.5, color: "#147D7A", isFourPoint: false, animation: "animate-star-slow", delay: "2s", duration: "8s" },
+  { top: "72%", left: "35%", size: 8, color: "#F59E0B", isFourPoint: true, animation: "animate-star-pulse", delay: "0.5s", duration: "6s" },
 
-  { top: "10%", left: "60%", size: 8, color: "#147D7A", isFourPoint: true, animation: "animate-star-slow", delay: "1s", duration: "9s" },
-  { top: "28%", left: "72%", size: 3.5, color: "#F59E0B", isFourPoint: false, animation: "animate-star-pulse", delay: "2.8s", duration: "5.5s" },
-  { top: "62%", left: "68%", size: 9, color: "#0C9A96", isFourPoint: true, animation: "animate-star-medium", delay: "0.3s", duration: "8s" },
-  { top: "86%", left: "78%", size: 4, color: "#147D7A", isFourPoint: false, animation: "animate-star-slow", delay: "2.2s", duration: "6.8s" },
+  { top: "12%", left: "62%", size: 8, color: "#147D7A", isFourPoint: true, animation: "animate-star-slow", delay: "1s", duration: "9s" },
+  { top: "30%", left: "75%", size: 3.5, color: "#F59E0B", isFourPoint: false, animation: "animate-star-pulse", delay: "2.8s", duration: "5.5s" },
+  { top: "65%", left: "70%", size: 9, color: "#0C9A96", isFourPoint: true, animation: "animate-star-medium", delay: "0.3s", duration: "8s" },
+  { top: "84%", left: "80%", size: 4, color: "#147D7A", isFourPoint: false, animation: "animate-star-slow", delay: "2.2s", duration: "6.8s" },
 
-  { top: "18%", left: "90%", size: 7, color: "#F59E0B", isFourPoint: true, animation: "animate-star-pulse", delay: "1.9s", duration: "7.2s" },
-  { top: "74%", left: "92%", size: 8, color: "#147D7A", isFourPoint: true, animation: "animate-star-slow", delay: "0.9s", duration: "8.5s" },
+  { top: "20%", left: "90%", size: 7, color: "#F59E0B", isFourPoint: true, animation: "animate-star-pulse", delay: "1.9s", duration: "7.2s" },
+  { top: "75%", left: "92%", size: 8, color: "#147D7A", isFourPoint: true, animation: "animate-star-slow", delay: "0.9s", duration: "8.5s" },
 ];
+
+// Curated high quality pediatric healthcare YouTube video
+const YOUTUBE_VIDEO_ID = "lxhy4eF0yv8";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -121,21 +126,116 @@ export default function LoginPage() {
       </div>
 
       {/* ========================================================================= */}
-      {/* 1. RIGHT COLUMN (Distinct Dark Navy Doctor Portrait Hero in RTL)          */}
+      {/* 1. RIGHT COLUMN (Medical Clinic YouTube Video with Curved Arch Divider)   */}
       {/* ========================================================================= */}
-      <div className="w-full lg:w-[48%] xl:w-[46%] relative bg-[#061524] text-white flex flex-col justify-between p-6 sm:p-10 lg:p-12 min-h-[420px] lg:min-h-screen overflow-hidden order-1 lg:order-1 shadow-2xl select-none">
-        {/* Background Subtle Hexagon Pattern */}
-        <div className="absolute inset-0 pointer-events-none opacity-20 bg-[radial-gradient(#147D7A_1px,transparent_1px)] [background-size:24px_24px] z-0" />
+      <div className="w-full lg:w-[48%] xl:w-[46%] relative h-80 sm:h-96 lg:h-auto min-h-[380px] lg:min-h-screen overflow-hidden order-1 lg:order-1 bg-[#061524] select-none shadow-2xl">
+        {/* SVG Clip Path Definition for Smooth Inner Curve */}
+        <svg width="0" height="0" className="absolute">
+          <defs>
+            <clipPath id="login-video-curve" clipPathUnits="objectBoundingBox">
+              {isRTL ? (
+                /* Arch curving inwards from left of the video */
+                <path d="M 0.16 0 C -0.02 0.32, -0.02 0.68, 0.16 1 L 1 1 L 1 0 Z" />
+              ) : (
+                /* Arch curving inwards from right of the video in LTR */
+                <path d="M 0 0 L 0.84 0 C 1.02 0.32, 1.02 0.68, 0.84 1 L 0 1 Z" />
+              )}
+            </clipPath>
+          </defs>
+        </svg>
 
-        {/* Decorative Hexagon Molecules */}
-        <div className="absolute top-28 right-8 pointer-events-none opacity-25 z-0">
-          <svg width="120" height="120" viewBox="0 0 100 100" fill="none" stroke="#0C9A96" strokeWidth="1.2">
-            <path d="M50 5 L85 25 L85 65 L50 85 L15 65 L15 25 Z" />
-            <path d="M85 25 L120 45 L120 85 L85 105 L50 85" />
-          </svg>
+        {/* Video Wrapper with Curve Clipping on Desktop */}
+        <div
+          className="w-full h-full relative overflow-hidden"
+          style={{
+            clipPath: "url(#login-video-curve)",
+            WebkitClipPath: "url(#login-video-curve)",
+          }}
+        >
+          {/* YouTube Iframe Video Background Player */}
+          <div className="absolute inset-0 w-full h-full pointer-events-none overflow-hidden">
+            <iframe
+              src={`https://www.youtube.com/embed/${YOUTUBE_VIDEO_ID}?autoplay=1&mute=1&loop=1&playlist=${YOUTUBE_VIDEO_ID}&controls=0&showinfo=0&rel=0&iv_load_policy=3&modestbranding=1&playsinline=1&enablejsapi=1`}
+              title="Pediatric Clinic Video"
+              className="absolute top-1/2 left-1/2 w-[300%] h-[300%] -translate-x-1/2 -translate-y-1/2 object-cover opacity-85 pointer-events-none"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
+
+          {/* Gentle Gradient Dark Overlay to guarantee luxury feel and text legibility */}
+          <div className="absolute inset-0 bg-gradient-to-t from-[#061524] via-[#061524]/40 to-[#061524]/30 pointer-events-none" />
+
+          {/* Top Logo and Clinic Brand Overlay */}
+          <div className="absolute top-6 inset-x-6 flex items-center justify-between z-20">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white shadow-sm">
+                <svg
+                  width="28"
+                  height="28"
+                  viewBox="0 0 48 48"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M24 3.5L42.5 13.8V34.2L24 44.5L5.5 34.2V13.8L24 3.5Z"
+                    stroke="#FFFFFF"
+                    strokeWidth="2.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M5.5 24H15.5L19.5 14.5L24.5 34.5L29.5 18L33.5 24H42.5"
+                    stroke="#0C9A96"
+                    strokeWidth="3.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </div>
+
+              <div>
+                <h1 className="text-sm sm:text-base font-black text-white tracking-tight leading-tight">
+                  {language === "ar"
+                    ? "عيادة الدكتور عبد الكريم عليوي"
+                    : "Dr. Abdul Karim Aliwi Clinic"}
+                </h1>
+                <p className="text-[11px] sm:text-xs font-bold text-[#0C9A96]">
+                  {language === "ar"
+                    ? "بورد طب الأطفال وحديثي الولادة"
+                    : "Board Certified in Pediatrics & Neonatology"}
+                </p>
+              </div>
+            </div>
+
+            {/* Live Video Indicator Badge */}
+            <div className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/40 backdrop-blur-md border border-white/15 text-white text-[10px] font-bold">
+              <span className="w-2 h-2 rounded-full bg-[#0C9A96] animate-pulse" />
+              <span>{language === "ar" ? "فيديو العيادة" : "Clinic View"}</span>
+            </div>
+          </div>
+
+          {/* Bottom subtle text overlay on the video */}
+          <div className="absolute inset-x-0 bottom-0 p-6 sm:p-8 pt-20 flex flex-col justify-end text-white z-20">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#0C7A77]/40 backdrop-blur-md border border-[#0C9A96]/40 text-[#0C9A96] text-[11px] font-bold w-fit mb-2">
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>{language === "ar" ? "رعاية طبية متقدمة" : "Advanced Pediatric Care"}</span>
+            </div>
+
+            <h2 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight text-white">
+              {language === "ar"
+                ? "رعاية موثوقة. إدارة آمنة."
+                : "Trusted Care. Secure Management."}
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-300 mt-1 font-medium max-w-md">
+              {language === "ar"
+                ? "منظومة إلكترونية مخصصة للكادر الطبي والإداري لتنظيم العيادة بكفاءة."
+                : "A unified clinical workstation for pediatric medical and administrative staff."}
+            </p>
+          </div>
         </div>
 
-        {/* Multi-layered Curve Vector Divider */}
+        {/* Multi-layered Vector Curve Borders */}
         <div className="hidden lg:block absolute inset-0 w-full h-full pointer-events-none z-30">
           <svg
             className="w-full h-full"
@@ -146,124 +246,52 @@ export default function LoginPage() {
           >
             {isRTL ? (
               <>
+                {/* 1. Thin Teal Accent Outer Line */}
                 <path
-                  d="M 12 0 C -5 32, -5 68, 12 100"
+                  d="M 13.5 0 C -4.5 32, -4.5 68, 13.5 100"
                   stroke="#0C9A96"
-                  strokeWidth="0.9"
+                  strokeWidth="0.85"
                   vectorEffect="non-scaling-stroke"
                 />
+                {/* 2. White Separation Gap */}
                 <path
-                  d="M 13.5 0 C -3.5 32, -3.5 68, 13.5 100"
+                  d="M 14.8 0 C -3.2 32, -3.2 68, 14.8 100"
                   stroke="#FFFFFF"
-                  strokeWidth="1.2"
+                  strokeWidth="1.3"
                   vectorEffect="non-scaling-stroke"
                 />
+                {/* 3. Main Dark Navy Thick Arch */}
                 <path
-                  d="M 14.8 0 C -2.2 32, -2.2 68, 14.8 100"
+                  d="M 16 0 C -2 32, -2 68, 16 100"
                   stroke="#061524"
-                  strokeWidth="2.6"
+                  strokeWidth="2.8"
                   vectorEffect="non-scaling-stroke"
                 />
               </>
             ) : (
               <>
+                {/* LTR Curve Borders */}
                 <path
-                  d="M 88 0 C 105 32, 105 68, 88 100"
+                  d="M 86.5 0 C 104.5 32, 104.5 68, 86.5 100"
                   stroke="#0C9A96"
-                  strokeWidth="0.9"
+                  strokeWidth="0.85"
                   vectorEffect="non-scaling-stroke"
                 />
                 <path
-                  d="M 86.5 0 C 103.5 32, 103.5 68, 86.5 100"
+                  d="M 85.2 0 C 103.2 32, 103.2 68, 85.2 100"
                   stroke="#FFFFFF"
-                  strokeWidth="1.2"
+                  strokeWidth="1.3"
                   vectorEffect="non-scaling-stroke"
                 />
                 <path
-                  d="M 85.2 0 C 102.2 32, 102.2 68, 85.2 100"
+                  d="M 84 0 C 102 32, 102 68, 84 100"
                   stroke="#061524"
-                  strokeWidth="2.6"
+                  strokeWidth="2.8"
                   vectorEffect="non-scaling-stroke"
                 />
               </>
             )}
           </svg>
-        </div>
-
-        {/* Top Header: Hexagon Logo & Clinic Title */}
-        <div className={`flex items-center ${isRTL ? "justify-start" : "justify-start"} gap-3.5 relative z-20`}>
-          <div className="shrink-0">
-            <svg
-              width="44"
-              height="44"
-              viewBox="0 0 48 48"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-              className="drop-shadow-sm"
-            >
-              <path
-                d="M24 3.5L42.5 13.8V34.2L24 44.5L5.5 34.2V13.8L24 3.5Z"
-                stroke="#FFFFFF"
-                strokeWidth="2.6"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M5.5 24H15.5L19.5 14.5L24.5 34.5L29.5 18L33.5 24H42.5"
-                stroke="#0C9A96"
-                strokeWidth="2.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </div>
-
-          <div className={isRTL ? "text-right" : "text-left"}>
-            <h1 className="text-lg sm:text-xl font-black text-white tracking-tight leading-tight">
-              {language === "ar"
-                ? "عيادة د. عبد الكريم عليوي"
-                : "Dr. Abdul Karim Aliwi Clinic"}
-            </h1>
-            <p className="text-xs sm:text-[13px] font-bold text-[#0C9A96] mt-0.5">
-              {language === "ar"
-                ? "بورد طب الأطفال وحديثي الولادة"
-                : "Board Certified in Pediatrics & Neonatology"}
-            </p>
-          </div>
-        </div>
-
-        {/* Center: Distinct Doctor Cutout Portrait on Dark Navy Backdrop */}
-        <div className="relative my-auto flex justify-center items-center py-4 z-10">
-          <div className="relative w-64 sm:w-72 lg:w-80 max-w-full aspect-[4/5] flex items-center justify-center">
-            <img
-              src="/doctor-portrait-cutout.png"
-              alt="الدكتور عبد الكريم عليوي"
-              className="w-full h-full object-contain filter drop-shadow-2xl contrast-105"
-            />
-            {/* Smooth gradient blend at the bottom */}
-            <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[#061524] to-transparent" />
-          </div>
-        </div>
-
-        {/* Bottom Headline & Subtitle of Dark Navy Hero */}
-        <div className="text-center relative z-20 space-y-2 pb-2">
-          <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-            {language === "ar" ? (
-              <>
-                رعاية موثوقة. إدارة آمنة<span className="text-[#0C9A96]">.</span>
-              </>
-            ) : (
-              <>
-                Trusted Care. Secure Management<span className="text-[#0C9A96]">.</span>
-              </>
-            )}
-          </h2>
-          <p className="text-xs sm:text-sm text-[#8DA4B8] font-medium max-w-md mx-auto">
-            {language === "ar"
-              ? "دخول مخصص للكادر الطبي والإداري في العيادة."
-              : "Authorized clinical and administrative access."}
-          </p>
-          <div className="w-12 h-1 bg-[#0C9A96] mx-auto rounded-full mt-3 opacity-90" />
         </div>
       </div>
 
