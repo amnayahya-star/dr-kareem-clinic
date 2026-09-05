@@ -24,7 +24,6 @@ export interface VisitRecord {
   recommendations?: string;
   doctorNotes?: string;
   isCompleted: boolean;
-  // Attached photos specifically for this visit
   labPhotos: MedicalPhoto[];
   prescriptionPhoto?: MedicalPhoto | null;
 }
@@ -36,13 +35,25 @@ export interface PatientFile {
   dateOfBirth: string;
   gender: "male" | "female";
   bloodType?: string;
-  allergies?: string;
+  // Birth Details
+  birthPlace?: string;
+  birthWeightKg?: number;
+  birthLengthCm?: number;
+  // Medical History & Allergies
+  medicalHistory?: string;
+  drugAllergies?: string;
+  foodAllergies?: string;
+  otherAllergies?: string;
+  allergies?: string; // Legacy field
   chronicDiseases?: string;
   pastSurgeries?: string;
+  medicalNotes?: string;
+  // Guardian Details
   guardianName: string;
   relationship: string;
   phone: string;
   secondaryPhone?: string;
+  email?: string;
   address?: string;
   createdAt: string;
   visits: VisitRecord[];
@@ -59,14 +70,22 @@ export const MOCK_PATIENT_FILES: PatientFile[] = [
     dateOfBirth: "2023-05-14",
     gender: "male",
     bloodType: "O+",
+    birthPlace: "مستشفى اليرموك التعليمي - بغداد",
+    birthWeightKg: 3.4,
+    birthLengthCm: 50.0,
+    medicalHistory: "ولادة طبيعية في الشهر التاسع، بدون اختناق ولادي أو يرقان حاد",
+    drugAllergies: "حساسية شديدة من البنسلين ومشتقاته (Penicillin)",
+    foodAllergies: "لا توجد حساسية طعام مسجلة",
+    otherAllergies: "تحسس من الغبار وحبوب اللقاح الربيعية",
     allergies: "حساسية شديدة من البنسلين ومشتقاته (Penicillin Allergy)",
     chronicDiseases: "ربو أطفال تحسسي خفيف",
-    pastSurgeries: "لا توجد",
+    pastSurgeries: "لا توجد عمليات سابقة",
     guardianName: "أحمد العلي",
     relationship: "الأب",
     phone: "07701234567",
     secondaryPhone: "07801234567",
-    address: "بغداد - المنصور",
+    email: "ahmed.aliwi.parent@example.com",
+    address: "بغداد - المنصور - محلة 602",
     createdAt: "2025-01-10",
     allLabPhotos: [
       {
@@ -187,12 +206,20 @@ export const MOCK_PATIENT_FILES: PatientFile[] = [
     dateOfBirth: "2025-12-20",
     gender: "female",
     bloodType: "A+",
+    birthPlace: "مستشفى الإسكان للأطفال - بغداد",
+    birthWeightKg: 2.9,
+    birthLengthCm: 48.5,
+    medicalHistory: "ولادة قيصرية طبيعية، الرضاعة طبيعية بالكامل",
+    drugAllergies: undefined,
+    foodAllergies: undefined,
+    otherAllergies: undefined,
     allergies: undefined,
     chronicDiseases: undefined,
     guardianName: "خالد المنصور",
     relationship: "الأب",
     phone: "07719876543",
-    address: "بغداد - حي الجامعة",
+    email: "khalid.mansoor@example.com",
+    address: "بغداد - الكرخ - حي الجامعة",
     createdAt: "2026-02-15",
     allLabPhotos: [
       {
@@ -246,6 +273,13 @@ export const MOCK_PATIENT_FILES: PatientFile[] = [
     dateOfBirth: "2021-02-10",
     gender: "male",
     bloodType: "B+",
+    birthPlace: "بغداد",
+    birthWeightKg: 3.6,
+    birthLengthCm: 51.0,
+    medicalHistory: "تطور حركي وذهني ممتاز",
+    drugAllergies: "لا توجد",
+    foodAllergies: "حساسية من الفول السوداني (Peanut Allergy)",
+    otherAllergies: "لا توجد",
     allergies: "حساسية من الفول السوداني (Peanut Allergy)",
     chronicDiseases: undefined,
     pastSurgeries: "استئصال اللوزتين واللحمية (2025)",
@@ -253,6 +287,7 @@ export const MOCK_PATIENT_FILES: PatientFile[] = [
     relationship: "الأب",
     phone: "07725556677",
     secondaryPhone: "07901112233",
+    email: undefined,
     address: "بغداد - الكاظمية",
     createdAt: "2025-11-05",
     allLabPhotos: [
@@ -309,9 +344,17 @@ export const MOCK_PATIENTS: Patient[] = MOCK_PATIENT_FILES.map((pf) => ({
   date_of_birth: pf.dateOfBirth,
   gender: pf.gender,
   blood_type: pf.bloodType,
+  birth_place: pf.birthPlace,
+  birth_weight_kg: pf.birthWeightKg,
+  birth_length_cm: pf.birthLengthCm,
+  medical_history: pf.medicalHistory,
+  drug_allergies: pf.drugAllergies,
+  food_allergies: pf.foodAllergies,
+  other_allergies: pf.otherAllergies,
   allergies: pf.allergies,
   chronic_diseases: pf.chronicDiseases,
   past_surgeries: pf.pastSurgeries,
+  medical_notes: pf.medicalNotes,
   is_archived: false,
   created_at: `${pf.createdAt}T10:00:00Z`,
   updated_at: `${pf.createdAt}T10:00:00Z`,
@@ -322,6 +365,7 @@ export const MOCK_PATIENTS: Patient[] = MOCK_PATIENT_FILES.map((pf) => ({
     relationship: pf.relationship,
     primary_phone: pf.phone,
     secondary_phone: pf.secondaryPhone,
+    email: pf.email,
     address: pf.address,
     created_at: `${pf.createdAt}T10:00:00Z`,
     updated_at: `${pf.createdAt}T10:00:00Z`,

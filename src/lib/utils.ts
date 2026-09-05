@@ -15,7 +15,7 @@ export function calculateArabicAge(birthDateString: string): string {
   const birthDate = new Date(birthDateString);
   const today = new Date();
   
-  if (isNaN(birthDate.getTime())) return "";
+  if (isNaN(birthDate.getTime()) || birthDate.getTime() > today.getTime()) return "";
 
   let years = today.getFullYear() - birthDate.getFullYear();
   let months = today.getMonth() - birthDate.getMonth();
@@ -98,6 +98,52 @@ export function formatArabicTime(dateString: string | Date): string {
     minute: "2-digit",
     hour12: true,
   }).format(date);
+}
+
+/**
+ * التحقق من صحة صيغة البريد الإلكتروني (عند كتابته اختيارياً)
+ */
+export function isValidEmail(email: string): boolean {
+  if (!email || !email.trim()) return true; // اختياري
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email.trim());
+}
+
+/**
+ * التحقق من أن القيمة رقم موجب منطقي
+ */
+export function isValidPositiveNumber(val: number | string | null | undefined): boolean {
+  if (val === null || val === undefined || val === "") return true; // اختياري
+  const num = typeof val === "number" ? val : parseFloat(val);
+  return !isNaN(num) && num > 0;
+}
+
+/**
+ * إرجاع نص بديل «غير مسجل» في حال كانت القيمة فارغة أو معدومة
+ */
+export function displayOrFallback(value: string | number | null | undefined, fallback: string = "غير مسجل"): string {
+  if (value === null || value === undefined || String(value).trim() === "") {
+    return fallback;
+  }
+  return String(value);
+}
+
+/**
+ * اشتقاق تاريخ أول زيارة للطفل من أقدم سجل في الزيارات
+ */
+export function getPatientFirstVisitDate(visits?: { date?: string; visit_date?: string }[]): string {
+  if (!visits || visits.length === 0) {
+    return "لا توجد زيارة مسجلة";
+  }
+
+  // فرز الزيارات تصاعدياً للحصول على أقدم زيارة
+  const dates = visits
+    .map((v) => v.date || v.visit_date)
+    .filter((d): d is string => Boolean(d))
+    .sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+
+  if (dates.length === 0) return "لا توجد زيارة مسجلة";
+  return formatArabicDate(dates[0]);
 }
 
 /**

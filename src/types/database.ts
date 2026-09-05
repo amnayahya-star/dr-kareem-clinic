@@ -53,6 +53,7 @@ export interface Guardian {
   relationship: string;
   primary_phone: string;
   secondary_phone?: string | null;
+  email?: string | null;
   address?: string | null;
   created_at: string;
   updated_at: string;
@@ -65,7 +66,16 @@ export interface Patient {
   date_of_birth: string;
   gender: Gender;
   blood_type?: string | null;
-  allergies?: string | null;
+  // Birth Details
+  birth_place?: string | null;
+  birth_weight_kg?: number | null;
+  birth_length_cm?: number | null;
+  // Medical History & Allergies
+  medical_history?: string | null;
+  drug_allergies?: string | null;
+  food_allergies?: string | null;
+  other_allergies?: string | null;
+  allergies?: string | null; // Legacy general allergies field preserved for compatibility
   chronic_diseases?: string | null;
   past_surgeries?: string | null;
   medical_notes?: string | null;
@@ -73,6 +83,8 @@ export interface Patient {
   created_by?: string | null;
   created_at: string;
   updated_at: string;
+  // Derived metadata
+  first_visit_date?: string | null;
   // Joins
   guardian?: Guardian;
   guardians?: Guardian[];

@@ -8,7 +8,6 @@ import { Modal } from "@/components/ui/Modal";
 import { MOCK_PATIENT_FILES, PatientFile, VisitRecord, MedicalPhoto } from "@/lib/mock-data/patients";
 import {
   fetchPatients,
-  createPatientRecord,
   fetchDeletedPatients,
   softDeletePatient,
   restorePatient,
@@ -82,22 +81,11 @@ export default function SecretaryPureWorkflowPage() {
   const [expandedVisitIds, setExpandedVisitIds] = useState<Record<string, boolean>>({});
 
   // Modals
-  const [isAddPatientModalOpen, setIsAddPatientModalOpen] = useState(false);
   const [isSnapRxModalOpen, setIsSnapRxModalOpen] = useState(false);
   const [isAddExtraLabModalOpen, setIsAddExtraLabModalOpen] = useState(false);
   const [isDeleteConfirmModalOpen, setIsDeleteConfirmModalOpen] = useState(false);
   const [childToDelete, setChildToDelete] = useState<PatientFile | null>(null);
   const [previewPhoto, setPreviewPhoto] = useState<MedicalPhoto | null>(null);
-
-  // New Patient Form State
-  const [newFullName, setNewFullName] = useState("");
-  const [newBirthDate, setNewBirthDate] = useState("");
-  const [newGender, setNewGender] = useState<"male" | "female">("male");
-  const [newAllergies, setNewAllergies] = useState("");
-  const [newChronic, setNewChronic] = useState("");
-  const [newGuardianName, setNewGuardianName] = useState("");
-  const [newPhone, setNewPhone] = useState("");
-  const [newAddress, setNewAddress] = useState("");
 
   // Prescription Photo Upload State
   const [targetVisitId, setTargetVisitId] = useState<string>("");
@@ -210,44 +198,6 @@ export default function SecretaryPureWorkflowPage() {
     setRxPhotoFile(null);
     setIsSnapRxModalOpen(true);
     setActiveAlert(null);
-  };
-
-  // Handler: Add New Patient
-  const handleSavePatient = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const createdChild = await createPatientRecord({
-        fullName: newFullName,
-        dateOfBirth: newBirthDate,
-        gender: newGender,
-        allergies: newAllergies || undefined,
-        chronicDiseases: newChronic || undefined,
-        guardianName: newGuardianName,
-        phone: newPhone,
-        address: newAddress,
-      });
-
-      setPatients([createdChild, ...patients]);
-      setActivePatientId(createdChild.id);
-      setIsAddPatientModalOpen(false);
-
-      // إرسال إشعار فوري للطبيب بقدوم مراجع جديد
-      notifySecretarySavedVisit({
-        patientId: createdChild.id,
-        childName: createdChild.fullName,
-      });
-
-      // Reset Form
-      setNewFullName("");
-      setNewBirthDate("");
-      setNewAllergies("");
-      setNewChronic("");
-      setNewGuardianName("");
-      setNewPhone("");
-      setNewAddress("");
-    } catch (err: any) {
-      alert(language === "ar" ? `حدث خطأ أثناء حفظ ملف الطفل: ${err.message}` : `Error saving child record: ${err.message}`);
-    }
   };
 
   // Handler: Soft Delete Child (Move to 3-month Recycle Bin)
@@ -499,14 +449,13 @@ export default function SecretaryPureWorkflowPage() {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setIsAddPatientModalOpen(true)}
+        <Link
+          href="/secretary/new-patient"
           className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[#0C7A77] hover:bg-[#0A6B68] text-white font-bold text-xs sm:text-sm shadow-xs transition-all duration-150 cursor-pointer shrink-0"
         >
           <UserPlus className="w-4 h-4" />
           <span>إضافة طفل جديد</span>
-        </button>
+        </Link>
       </div>
 
       {/* 2. Four Top Metric Summary Cards */}
@@ -1138,112 +1087,6 @@ export default function SecretaryPureWorkflowPage() {
             </Button>
           </div>
         </div>
-      </Modal>
-
-      {/* Modal 1: Add New Patient */}
-      <Modal
-        isOpen={isAddPatientModalOpen}
-        onClose={() => setIsAddPatientModalOpen(false)}
-        title={t("addPatientModalTitle")}
-        description={t("addPatientModalDesc")}
-        maxWidth="lg"
-      >
-        <form onSubmit={handleSavePatient} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Input
-              label={t("childFullName")}
-              required
-              placeholder="e.g. Youssef Ahmed"
-              value={newFullName}
-              onChange={(e) => setNewFullName(e.target.value)}
-            />
-            <Input
-              label={t("childBirthDate")}
-              type="date"
-              required
-              value={newBirthDate}
-              onChange={(e) => setNewBirthDate(e.target.value)}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-1.5 text-right">
-              <label className="block text-sm font-semibold text-slate-700">{t("gender")}</label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setNewGender("male")}
-                  className={`py-2 rounded-xl text-xs font-bold border ${
-                    newGender === "male"
-                      ? "bg-clinic-50 border-clinic-500 text-clinic-800"
-                      : "border-slate-200 text-slate-600"
-                  }`}
-                >
-                  {t("male")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setNewGender("female")}
-                  className={`py-2 rounded-xl text-xs font-bold border ${
-                    newGender === "female"
-                      ? "bg-rose-50 border-rose-400 text-rose-800"
-                      : "border-slate-200 text-slate-600"
-                  }`}
-                >
-                  {t("female")}
-                </button>
-              </div>
-            </div>
-
-            <Input
-              label={t("guardianName")}
-              required
-              placeholder="e.g. Ahmed Al-Ali"
-              value={newGuardianName}
-              onChange={(e) => setNewGuardianName(e.target.value)}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Input
-              label={t("phoneInput")}
-              required
-              placeholder="0770XXXXXXX"
-              value={newPhone}
-              onChange={(e) => setNewPhone(e.target.value)}
-            />
-            <Input
-              label={t("addressInput")}
-              placeholder="Baghdad"
-              value={newAddress}
-              onChange={(e) => setNewAddress(e.target.value)}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Input
-              label={t("allergiesInput")}
-              placeholder="Penicillin..."
-              value={newAllergies}
-              onChange={(e) => setNewAllergies(e.target.value)}
-            />
-            <Input
-              label={t("chronicInput")}
-              placeholder="Asthma..."
-              value={newChronic}
-              onChange={(e) => setNewChronic(e.target.value)}
-            />
-          </div>
-
-          <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-100">
-            <Button type="button" variant="ghost" onClick={() => setIsAddPatientModalOpen(false)}>
-              {t("cancel")}
-            </Button>
-            <Button type="submit" variant="primary" className="font-bold px-6">
-              {t("saveAndCreateFile")}
-            </Button>
-          </div>
-        </form>
       </Modal>
 
       {/* Modal 2: Snap & Attach Prescription Photo */}
