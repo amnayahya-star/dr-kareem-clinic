@@ -1,6 +1,8 @@
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { MOCK_PATIENT_FILES, PatientFile, VisitRecord, MedicalPhoto } from "@/lib/mock-data/patients";
 import { normalizeArabicText, isValidEmail, isValidPositiveNumber } from "@/lib/utils";
+import { VaccinationStatus } from "@/types/database";
+import { saveVaccinationProfile, validateVaccinationData } from "@/services/vaccinationService";
 
 export interface CreatePatientInput {
   fullName: string;
@@ -18,6 +20,13 @@ export interface CreatePatientInput {
   chronicDiseases?: string;
   pastSurgeries?: string;
   medicalNotes?: string;
+  // Vaccination Details
+  vaccinationStatus?: VaccinationStatus;
+  lastVaccineName?: string;
+  lastVaccineDate?: string;
+  postVaccinationReactions?: string;
+  vaccinationNotes?: string;
+  // Guardian Details
   guardianName: string;
   relationship?: string;
   phone: string;
@@ -42,6 +51,13 @@ export interface UpdatePatientInput {
   chronicDiseases?: string;
   pastSurgeries?: string;
   medicalNotes?: string;
+  // Vaccination Details
+  vaccinationStatus?: VaccinationStatus;
+  lastVaccineName?: string;
+  lastVaccineDate?: string;
+  postVaccinationReactions?: string;
+  vaccinationNotes?: string;
+  // Guardian Details
   guardianName?: string;
   relationship?: string;
   phone?: string;
@@ -133,6 +149,10 @@ export function validatePatientData(data: Partial<CreatePatientInput> & {
  */
 function mapSupabaseRowToPatientFile(row: any): PatientFile {
   const guardian = row.guardians?.[0] || {};
+  const vacProfile = Array.isArray(row.patient_vaccination_profiles)
+    ? row.patient_vaccination_profiles[0]
+    : row.patient_vaccination_profiles || {};
+
   const visits: VisitRecord[] = (row.visits || []).map((v: any): VisitRecord => {
     const m = v.measurements?.[0] || {};
     const d = v.diagnoses?.[0] || {};
@@ -212,6 +232,11 @@ function mapSupabaseRowToPatientFile(row: any): PatientFile {
     chronicDiseases: row.chronic_diseases || undefined,
     pastSurgeries: row.past_surgeries || undefined,
     medicalNotes: row.medical_notes || undefined,
+    vaccinationStatus: vacProfile.vaccination_status || undefined,
+    lastVaccineName: vacProfile.last_vaccine_name || undefined,
+    lastVaccineDate: vacProfile.last_vaccine_date || undefined,
+    postVaccinationReactions: vacProfile.post_vaccination_reactions || undefined,
+    vaccinationNotes: vacProfile.vaccination_notes || undefined,
     guardianName: guardian.full_name || "ولي الأمر",
     relationship: guardian.relationship || "الأب",
     phone: guardian.primary_phone || "",
@@ -251,6 +276,7 @@ export async function fetchPatients(searchQuery?: string): Promise<PatientFile[]
       .select(`
         *,
         guardians (*),
+        patient_vaccination_profiles (*),
         visits (
           *,
           measurements (*),
@@ -294,6 +320,7 @@ export async function fetchPatientById(patientId: string): Promise<PatientFile |
       .select(`
         *,
         guardians (*),
+        patient_vaccination_profiles (*),
         visits (
           *,
           measurements (*),
@@ -361,6 +388,11 @@ export async function createPatientRecord(input: CreatePatientInput): Promise<Pa
       chronicDiseases: input.chronicDiseases?.trim() || undefined,
       pastSurgeries: input.pastSurgeries?.trim() || undefined,
       medicalNotes: input.medicalNotes?.trim() || undefined,
+      vaccinationStatus: input.vaccinationStatus || undefined,
+      lastVaccineName: input.vaccinationStatus === "not_vaccinated" ? undefined : input.lastVaccineName?.trim() || undefined,
+      lastVaccineDate: input.vaccinationStatus === "not_vaccinated" ? undefined : input.lastVaccineDate?.trim() || undefined,
+      postVaccinationReactions: input.postVaccinationReactions?.trim() || undefined,
+      vaccinationNotes: input.vaccinationNotes?.trim() || undefined,
       guardianName: input.guardianName.trim(),
       relationship: input.relationship?.trim() || "الأب",
       phone: input.phone.trim(),
@@ -421,6 +453,30 @@ export async function createPatientRecord(input: CreatePatientInput): Promise<Pa
     console.warn("Guardian insert error:", guardianError.message);
   }
 
+  // 3. إدراج سجل التطعيمات إن وجد
+  let vaccinationSaveWarning: string | undefined = undefined;
+  if (
+    input.vaccinationStatus !== undefined ||
+    input.lastVaccineName !== undefined ||
+    input.lastVaccineDate !== undefined ||
+    input.postVaccinationReactions !== undefined ||
+    input.vaccinationNotes !== undefined
+  ) {
+    try {
+      await saveVaccinationProfile({
+        patientId: patientData.id,
+        vaccinationStatus: input.vaccinationStatus,
+        lastVaccineName: input.lastVaccineName,
+        lastVaccineDate: input.lastVaccineDate,
+        postVaccinationReactions: input.postVaccinationReactions,
+        vaccinationNotes: input.vaccinationNotes,
+      });
+    } catch (vacErr: any) {
+      console.warn("Vaccination profile create error:", vacErr);
+      vaccinationSaveWarning = vacErr.message || "فشل حفظ سجل التطعيمات في قاعدة البيانات";
+    }
+  }
+
   return {
     id: patientData.id,
     fileNumber: patientData.file_number,
@@ -439,6 +495,12 @@ export async function createPatientRecord(input: CreatePatientInput): Promise<Pa
     chronicDiseases: patientData.chronic_diseases || undefined,
     pastSurgeries: patientData.past_surgeries || undefined,
     medicalNotes: patientData.medical_notes || undefined,
+    vaccinationStatus: vaccinationSaveWarning ? undefined : (input.vaccinationStatus || undefined),
+    lastVaccineName: vaccinationSaveWarning ? undefined : (input.vaccinationStatus === "not_vaccinated" ? undefined : input.lastVaccineName?.trim() || undefined),
+    lastVaccineDate: vaccinationSaveWarning ? undefined : (input.vaccinationStatus === "not_vaccinated" ? undefined : input.lastVaccineDate?.trim() || undefined),
+    postVaccinationReactions: vaccinationSaveWarning ? undefined : (input.postVaccinationReactions?.trim() || undefined),
+    vaccinationNotes: vaccinationSaveWarning ? undefined : (input.vaccinationNotes?.trim() || undefined),
+    vaccinationSaveWarning,
     guardianName: input.guardianName.trim(),
     relationship: input.relationship?.trim() || "الأب",
     phone: input.phone.trim(),
@@ -484,6 +546,9 @@ export async function updatePatientRecord(patientId: string, input: UpdatePatien
       throw new Error("لم يتم العثور على ملف الطفل لتعديله");
     }
 
+    const newStatus = input.vaccinationStatus !== undefined ? input.vaccinationStatus : existing.vaccinationStatus;
+    const isNotVac = newStatus === "not_vaccinated";
+
     const updated: PatientFile = {
       ...existing,
       fullName: input.fullName !== undefined ? input.fullName.trim() : existing.fullName,
@@ -501,6 +566,11 @@ export async function updatePatientRecord(patientId: string, input: UpdatePatien
       chronicDiseases: input.chronicDiseases !== undefined ? input.chronicDiseases?.trim() || undefined : existing.chronicDiseases,
       pastSurgeries: input.pastSurgeries !== undefined ? input.pastSurgeries?.trim() || undefined : existing.pastSurgeries,
       medicalNotes: input.medicalNotes !== undefined ? input.medicalNotes?.trim() || undefined : existing.medicalNotes,
+      vaccinationStatus: newStatus,
+      lastVaccineName: isNotVac ? undefined : (input.lastVaccineName !== undefined ? input.lastVaccineName.trim() || undefined : existing.lastVaccineName),
+      lastVaccineDate: isNotVac ? undefined : (input.lastVaccineDate !== undefined ? input.lastVaccineDate.trim() || undefined : existing.lastVaccineDate),
+      postVaccinationReactions: input.postVaccinationReactions !== undefined ? input.postVaccinationReactions.trim() || undefined : existing.postVaccinationReactions,
+      vaccinationNotes: input.vaccinationNotes !== undefined ? input.vaccinationNotes.trim() || undefined : existing.vaccinationNotes,
       guardianName: input.guardianName !== undefined ? input.guardianName.trim() : existing.guardianName,
       relationship: input.relationship !== undefined ? input.relationship.trim() : existing.relationship,
       phone: input.phone !== undefined ? input.phone.trim() : existing.phone,
@@ -587,6 +657,24 @@ export async function updatePatientRecord(patientId: string, input: UpdatePatien
         address: input.address?.trim() || null,
       });
     }
+  }
+
+  // 3. تحديث أو حفظ سجل التطعيمات
+  if (
+    input.vaccinationStatus !== undefined ||
+    input.lastVaccineName !== undefined ||
+    input.lastVaccineDate !== undefined ||
+    input.postVaccinationReactions !== undefined ||
+    input.vaccinationNotes !== undefined
+  ) {
+    await saveVaccinationProfile({
+      patientId,
+      vaccinationStatus: input.vaccinationStatus,
+      lastVaccineName: input.lastVaccineName,
+      lastVaccineDate: input.lastVaccineDate,
+      postVaccinationReactions: input.postVaccinationReactions,
+      vaccinationNotes: input.vaccinationNotes,
+    });
   }
 
   const refreshed = await fetchPatientById(patientId);

@@ -59,6 +59,20 @@ export interface Guardian {
   updated_at: string;
 }
 
+export type VaccinationStatus = 'not_vaccinated' | 'incomplete' | 'complete';
+
+export interface PatientVaccinationProfile {
+  id: string;
+  patient_id: string;
+  vaccination_status?: VaccinationStatus | null;
+  last_vaccine_name?: string | null;
+  last_vaccine_date?: string | null;
+  post_vaccination_reactions?: string | null;
+  vaccination_notes?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Patient {
   id: string;
   file_number: string;
@@ -88,6 +102,7 @@ export interface Patient {
   // Joins
   guardian?: Guardian;
   guardians?: Guardian[];
+  vaccination_profile?: PatientVaccinationProfile | null;
 }
 
 export interface Measurement {

@@ -41,7 +41,10 @@ import {
   CheckCircle2,
   ShieldAlert,
   ShieldCheck,
+  Syringe,
 } from "lucide-react";
+import { VaccinationStatus } from "@/types/database";
+import { VACCINATION_STATUS_CONFIG, UNRECORDED_VACCINATION_CONFIG } from "@/services/vaccinationService";
 
 const RELATIONSHIP_PRESETS = [
   "الأب",
@@ -84,6 +87,13 @@ export default function PatientMedicalFilePage() {
   const [editChronicDiseases, setEditChronicDiseases] = useState("");
   const [editPastSurgeries, setEditPastSurgeries] = useState("");
   const [editMedicalNotes, setEditMedicalNotes] = useState("");
+  // Vaccination Edit Form Inputs
+  const [editVaccinationStatus, setEditVaccinationStatus] = useState<VaccinationStatus | "">("");
+  const [editLastVaccineName, setEditLastVaccineName] = useState("");
+  const [editLastVaccineDate, setEditLastVaccineDate] = useState("");
+  const [editPostVaccinationReactions, setEditPostVaccinationReactions] = useState("");
+  const [editVaccinationNotes, setEditVaccinationNotes] = useState("");
+  // Guardian Edit Form Inputs
   const [editGuardianName, setEditGuardianName] = useState("");
   const [editRelationship, setEditRelationship] = useState("الأب");
   const [editCustomRelationship, setEditCustomRelationship] = useState("");
@@ -132,6 +142,11 @@ export default function PatientMedicalFilePage() {
     setEditChronicDiseases(data.chronicDiseases || "");
     setEditPastSurgeries(data.pastSurgeries || "");
     setEditMedicalNotes(data.medicalNotes || "");
+    setEditVaccinationStatus(data.vaccinationStatus || "");
+    setEditLastVaccineName(data.lastVaccineName || "");
+    setEditLastVaccineDate(data.lastVaccineDate || "");
+    setEditPostVaccinationReactions(data.postVaccinationReactions || "");
+    setEditVaccinationNotes(data.vaccinationNotes || "");
     setEditGuardianName(data.guardianName || "");
 
     if (RELATIONSHIP_PRESETS.includes(data.relationship)) {
@@ -192,6 +207,15 @@ export default function PatientMedicalFilePage() {
       setUpdateError("الطول عند الولادة يجب أن يكون رقماً موجباً أكبر من الصفر");
       return;
     }
+    if (editLastVaccineDate && editVaccinationStatus !== "not_vaccinated") {
+      const vDate = new Date(editLastVaccineDate);
+      const today = new Date();
+      today.setHours(23, 59, 59, 999);
+      if (isNaN(vDate.getTime()) || vDate.getTime() > today.getTime()) {
+        setUpdateError("تاريخ آخر تطعيم لا يمكن أن يكون في المستقبل");
+        return;
+      }
+    }
     if (editEmail && editEmail.trim() && !isValidEmail(editEmail)) {
       setUpdateError("صيغة البريد الإلكتروني غير صحيحة");
       return;
@@ -201,6 +225,7 @@ export default function PatientMedicalFilePage() {
 
     try {
       const finalRelationship = editRelationship === "أخرى" ? editCustomRelationship.trim() : editRelationship;
+      const isNotVac = editVaccinationStatus === "not_vaccinated";
 
       const updatePayload: UpdatePatientInput = {
         fullName: editFullName.trim(),
@@ -218,6 +243,11 @@ export default function PatientMedicalFilePage() {
         chronicDiseases: editChronicDiseases.trim() || null as any,
         pastSurgeries: editPastSurgeries.trim() || null as any,
         medicalNotes: editMedicalNotes.trim() || null as any,
+        vaccinationStatus: editVaccinationStatus || null as any,
+        lastVaccineName: isNotVac ? null as any : (editLastVaccineName.trim() || null as any),
+        lastVaccineDate: isNotVac ? null as any : (editLastVaccineDate.trim() || null as any),
+        postVaccinationReactions: editPostVaccinationReactions.trim() || null as any,
+        vaccinationNotes: editVaccinationNotes.trim() || null as any,
         guardianName: editGuardianName.trim(),
         relationship: finalRelationship,
         phone: editPhone.trim(),
@@ -461,6 +491,87 @@ export default function PatientMedicalFilePage() {
                 <p className="text-slate-800 font-medium mt-0.5">{displayOrFallback(patient.medicalNotes)}</p>
               </div>
             </div>
+          </div>
+
+          {/* Card E: سجل وحالة التطعيمات */}
+          <div className="p-4 bg-slate-50/70 rounded-2xl border border-slate-200 space-y-2.5 text-xs md:col-span-2">
+            <div className="flex items-center justify-between pb-1 border-b border-slate-200">
+              <div className="flex items-center gap-2 font-black text-slate-800 text-sm">
+                <Syringe className="w-4 h-4 text-clinic-600" />
+                <span>سجل وحالة التطعيمات</span>
+              </div>
+              <div>
+                {patient.vaccinationStatus && VACCINATION_STATUS_CONFIG[patient.vaccinationStatus] ? (
+                  <Badge
+                    variant={VACCINATION_STATUS_CONFIG[patient.vaccinationStatus].badgeVariant}
+                    size="sm"
+                    className="font-bold"
+                  >
+                    {VACCINATION_STATUS_CONFIG[patient.vaccinationStatus].label}
+                  </Badge>
+                ) : (
+                  <Badge variant={UNRECORDED_VACCINATION_CONFIG.badgeVariant} size="sm" className="font-bold">
+                    {UNRECORDED_VACCINATION_CONFIG.label}
+                  </Badge>
+                )}
+              </div>
+            </div>
+
+            {patient.vaccinationStatus || patient.lastVaccineName || patient.vaccinationNotes ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-1">
+                <div className="p-2.5 bg-white rounded-xl border border-slate-200">
+                  <span className="text-slate-400 block text-[10px] font-bold">حالة التطعيم الحالية</span>
+                  <span className="font-bold text-slate-900 block mt-0.5">
+                    {patient.vaccinationStatus && VACCINATION_STATUS_CONFIG[patient.vaccinationStatus]
+                      ? VACCINATION_STATUS_CONFIG[patient.vaccinationStatus].label
+                      : UNRECORDED_VACCINATION_CONFIG.label}
+                  </span>
+                </div>
+
+                {patient.vaccinationStatus !== "not_vaccinated" ? (
+                  <>
+                    <div className="p-2.5 bg-white rounded-xl border border-slate-200">
+                      <span className="text-slate-400 block text-[10px] font-bold">آخر لقاح تم أخذه</span>
+                      <span className="font-bold text-slate-900 block mt-0.5">
+                        {displayOrFallback(patient.lastVaccineName)}
+                      </span>
+                    </div>
+
+                    <div className="p-2.5 bg-white rounded-xl border border-slate-200">
+                      <span className="text-slate-400 block text-[10px] font-bold">تاريخ آخر تطعيم</span>
+                      <span className="font-bold text-slate-900 block mt-0.5">
+                        {patient.lastVaccineDate ? formatArabicDate(patient.lastVaccineDate) : "غير مسجل"}
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="p-2.5 bg-white rounded-xl border border-slate-200 sm:col-span-2">
+                    <span className="text-slate-400 block text-[10px] font-bold">توضيح الحالة</span>
+                    <span className="font-bold text-red-700 block mt-0.5">
+                      الطفل لم يتلق أي جرعة لقاح حتى الآن
+                    </span>
+                  </div>
+                )}
+
+                <div className="p-2.5 bg-white rounded-xl border border-slate-200">
+                  <span className="text-slate-400 block text-[10px] font-bold">تفاعلات سابقة بعد اللقاح</span>
+                  <span className="font-bold text-slate-900 block mt-0.5">
+                    {displayOrFallback(patient.postVaccinationReactions)}
+                  </span>
+                </div>
+
+                {patient.vaccinationNotes && (
+                  <div className="p-2.5 bg-white rounded-xl border border-slate-200 sm:col-span-2 md:col-span-4">
+                    <span className="text-slate-400 block text-[10px] font-bold">ملاحظات وتوصيات التطعيم</span>
+                    <span className="font-bold text-slate-900 block mt-0.5">{patient.vaccinationNotes}</span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="p-3 bg-white rounded-xl border border-slate-200 text-center text-slate-500 font-medium">
+                لم تُسجل معلومات التطعيم لهذا الطفل
+              </div>
+            )}
           </div>
         </div>
       </Card>
@@ -733,11 +844,74 @@ export default function PatientMedicalFilePage() {
             </div>
           </div>
 
-          {/* 4. بيانات ولي الأمر */}
+          {/* 4. سجل وحالة التطعيمات */}
+          <div className="space-y-3 pb-3 border-b border-slate-100">
+            <h4 className="text-xs font-black text-clinic-800 flex items-center gap-1.5">
+              <Syringe className="w-4 h-4 text-clinic-600" />
+              <span>سجل وحالة التطعيمات (اختياري)</span>
+            </h4>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="space-y-1.5 text-right">
+                <label className="block text-xs font-semibold text-slate-700">حالة التطعيم</label>
+                <select
+                  className="block w-full rounded-xl border border-slate-200 bg-white text-slate-800 text-xs h-10 px-3 focus:outline-none focus:ring-2 focus:ring-clinic-500 font-bold"
+                  value={editVaccinationStatus}
+                  onChange={(e) => {
+                    const val = e.target.value as VaccinationStatus | "";
+                    setEditVaccinationStatus(val);
+                    if (val === "not_vaccinated") {
+                      setEditLastVaccineName("");
+                      setEditLastVaccineDate("");
+                    }
+                  }}
+                >
+                  <option value="">-- غير مسجلة حالياً --</option>
+                  <option value="complete">كامل التلقيح</option>
+                  <option value="incomplete">غير كامل التلقيح</option>
+                  <option value="not_vaccinated">لم يُلقّح</option>
+                </select>
+              </div>
+
+              {editVaccinationStatus !== "not_vaccinated" && (
+                <>
+                  <Input
+                    label="اسم آخر لقاح تم أخذه"
+                    placeholder="مثال: MMR، اللقاح السداسي..."
+                    value={editLastVaccineName}
+                    onChange={(e) => setEditLastVaccineName(e.target.value)}
+                  />
+                  <Input
+                    label="تاريخ آخر تطعيم"
+                    type="date"
+                    value={editLastVaccineDate}
+                    onChange={(e) => setEditLastVaccineDate(e.target.value)}
+                  />
+                </>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Input
+                label="تفاعلات أو أعراض جانبية بعد اللقاح"
+                placeholder="حمى، حساسية..."
+                value={editPostVaccinationReactions}
+                onChange={(e) => setEditPostVaccinationReactions(e.target.value)}
+              />
+              <Input
+                label="ملاحظات وتوصيات التطعيم"
+                placeholder="ملاحظات التطعيم..."
+                value={editVaccinationNotes}
+                onChange={(e) => setEditVaccinationNotes(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* 5. بيانات ولي الأمر */}
           <div className="space-y-3">
             <h4 className="text-xs font-black text-clinic-800 flex items-center gap-1.5">
               <Phone className="w-4 h-4 text-clinic-600" />
-              <span>بيانات ولي الأمر والاتصال</span>
+              <span>5. بيانات ولي الأمر والاتصال</span>
             </h4>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

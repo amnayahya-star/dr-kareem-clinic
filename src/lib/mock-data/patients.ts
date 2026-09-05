@@ -48,6 +48,13 @@ export interface PatientFile {
   chronicDiseases?: string;
   pastSurgeries?: string;
   medicalNotes?: string;
+  // Vaccination Details
+  vaccinationStatus?: "not_vaccinated" | "incomplete" | "complete" | null;
+  lastVaccineName?: string | null;
+  lastVaccineDate?: string | null;
+  postVaccinationReactions?: string | null;
+  vaccinationNotes?: string | null;
+  vaccinationSaveWarning?: string;
   // Guardian Details
   guardianName: string;
   relationship: string;
@@ -80,6 +87,11 @@ export const MOCK_PATIENT_FILES: PatientFile[] = [
     allergies: "حساسية شديدة من البنسلين ومشتقاته (Penicillin Allergy)",
     chronicDiseases: "ربو أطفال تحسسي خفيف",
     pastSurgeries: "لا توجد عمليات سابقة",
+    vaccinationStatus: "incomplete",
+    lastVaccineName: "لقاح الحصبة والنكاف والحصبة الألمانية (MMR)",
+    lastVaccineDate: "2024-05-20",
+    postVaccinationReactions: "حمى طفيفة استمرت يوماً واحداً بعد جرعة السنة",
+    vaccinationNotes: "يحتاج استكمال جرعة شلل الأطفال المنشطة",
     guardianName: "أحمد العلي",
     relationship: "الأب",
     phone: "07701234567",
@@ -215,6 +227,11 @@ export const MOCK_PATIENT_FILES: PatientFile[] = [
     otherAllergies: undefined,
     allergies: undefined,
     chronicDiseases: undefined,
+    vaccinationStatus: "complete",
+    lastVaccineName: "اللقاح السداسي (Hexavalent) الجرعة الثانية",
+    lastVaccineDate: "2026-04-20",
+    postVaccinationReactions: "لا توجد أي تفاعلات تحسسية",
+    vaccinationNotes: "ملتزمة بجدول اللقاحات في موعده",
     guardianName: "خالد المنصور",
     relationship: "الأب",
     phone: "07719876543",
@@ -283,6 +300,11 @@ export const MOCK_PATIENT_FILES: PatientFile[] = [
     allergies: "حساسية من الفول السوداني (Peanut Allergy)",
     chronicDiseases: undefined,
     pastSurgeries: "استئصال اللوزتين واللحمية (2025)",
+    vaccinationStatus: "not_vaccinated",
+    lastVaccineName: null,
+    lastVaccineDate: null,
+    postVaccinationReactions: null,
+    vaccinationNotes: "لم يتلق اللقاحات بسبب تردد الأهل، تم التوجيه بالبدء فوراً",
     guardianName: "عمر السعدي",
     relationship: "الأب",
     phone: "07725556677",
@@ -358,6 +380,17 @@ export const MOCK_PATIENTS: Patient[] = MOCK_PATIENT_FILES.map((pf) => ({
   is_archived: false,
   created_at: `${pf.createdAt}T10:00:00Z`,
   updated_at: `${pf.createdAt}T10:00:00Z`,
+  vaccination_profile: pf.vaccinationStatus !== undefined ? {
+    id: `vac-${pf.id}`,
+    patient_id: pf.id,
+    vaccination_status: pf.vaccinationStatus,
+    last_vaccine_name: pf.lastVaccineName,
+    last_vaccine_date: pf.lastVaccineDate,
+    post_vaccination_reactions: pf.postVaccinationReactions,
+    vaccination_notes: pf.vaccinationNotes,
+    created_at: `${pf.createdAt}T10:00:00Z`,
+    updated_at: `${pf.createdAt}T10:00:00Z`,
+  } : null,
   guardian: {
     id: `g-${pf.id}`,
     patient_id: pf.id,

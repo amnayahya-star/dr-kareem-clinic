@@ -25,7 +25,10 @@ import {
   Ruler,
   Building2,
   ShieldAlert,
+  Syringe,
+  ShieldCheck,
 } from "lucide-react";
+import { VaccinationStatus } from "@/types/database";
 
 const RELATIONSHIP_PRESETS = [
   "الأب",
@@ -59,7 +62,14 @@ export default function NewPatientRegistrationPage() {
   const [pastSurgeries, setPastSurgeries] = useState("");
   const [medicalNotes, setMedicalNotes] = useState("");
 
-  // 4. بيانات ولي الأمر
+  // 4. سجل التطعيمات (اختياري)
+  const [vaccinationStatus, setVaccinationStatus] = useState<VaccinationStatus | "">("");
+  const [lastVaccineName, setLastVaccineName] = useState("");
+  const [lastVaccineDate, setLastVaccineDate] = useState("");
+  const [postVaccinationReactions, setPostVaccinationReactions] = useState("");
+  const [vaccinationNotes, setVaccinationNotes] = useState("");
+
+  // 5. بيانات ولي الأمر
   const [guardianName, setGuardianName] = useState("");
   const [relationshipType, setRelationshipType] = useState("الأب");
   const [customRelationship, setCustomRelationship] = useState("");
@@ -75,6 +85,7 @@ export default function NewPatientRegistrationPage() {
   const [isSuccess, setIsSuccess] = useState(false);
   const [createdPatientFileNumber, setCreatedPatientFileNumber] = useState("");
   const [createdPatientId, setCreatedPatientId] = useState("");
+  const [vaccinationWarning, setVaccinationWarning] = useState<string | null>(null);
 
   const calculatedAge = birthDate ? calculateArabicAge(birthDate) : "";
 
@@ -110,6 +121,15 @@ export default function NewPatientRegistrationPage() {
       errors.birthLengthCm = "الطول عند الولادة يجب أن يكون رقماً موجباً أكبر من الصفر";
     }
 
+    if (lastVaccineDate && vaccinationStatus !== "not_vaccinated") {
+      const vDate = new Date(lastVaccineDate);
+      const today = new Date();
+      today.setHours(23, 59, 59, 999);
+      if (isNaN(vDate.getTime()) || vDate.getTime() > today.getTime()) {
+        errors.lastVaccineDate = "تاريخ آخر تطعيم لا يمكن أن يكون في المستقبل";
+      }
+    }
+
     if (email && email.trim() && !isValidEmail(email)) {
       errors.email = "صيغة البريد الإلكتروني غير صحيحة (مثال: name@example.com)";
     }
@@ -121,6 +141,7 @@ export default function NewPatientRegistrationPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
+    setVaccinationWarning(null);
 
     if (!validateForm()) {
       setFormError("يرجى تصحيح الأخطاء الموضحة في النموذج قبل الحفظ.");
@@ -148,6 +169,11 @@ export default function NewPatientRegistrationPage() {
         chronicDiseases: chronicDiseases.trim() || undefined,
         pastSurgeries: pastSurgeries.trim() || undefined,
         medicalNotes: medicalNotes.trim() || undefined,
+        vaccinationStatus: vaccinationStatus || undefined,
+        lastVaccineName: vaccinationStatus === "not_vaccinated" ? undefined : lastVaccineName.trim() || undefined,
+        lastVaccineDate: vaccinationStatus === "not_vaccinated" ? undefined : lastVaccineDate.trim() || undefined,
+        postVaccinationReactions: postVaccinationReactions.trim() || undefined,
+        vaccinationNotes: vaccinationNotes.trim() || undefined,
         guardianName: guardianName.trim(),
         relationship: actualRelationship,
         phone: primaryPhone.trim(),
@@ -164,6 +190,9 @@ export default function NewPatientRegistrationPage() {
 
       setCreatedPatientFileNumber(createdChild.fileNumber);
       setCreatedPatientId(createdChild.id);
+      if (createdChild.vaccinationSaveWarning) {
+        setVaccinationWarning(createdChild.vaccinationSaveWarning);
+      }
       setIsSuccess(true);
     } catch (err: any) {
       setFormError(err.message || "حدث خطأ غير متوقع أثناء حفظ ملف الطفل");
@@ -207,6 +236,15 @@ export default function NewPatientRegistrationPage() {
           <div className="inline-block bg-clinic-50 border border-clinic-200 text-clinic-800 font-mono text-lg font-black px-5 py-2.5 rounded-2xl shadow-xs">
             رقم الملف: {createdPatientFileNumber}
           </div>
+
+          {vaccinationWarning && (
+            <div className="max-w-xl mx-auto p-3.5 bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl text-xs font-bold flex items-center gap-2 text-right">
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+              <span>
+                تنبيه: تم إنشاء ملف الطفل وولي الأمر بنجاح، ولكن تعذر حفظ بيانات التطعيم ({vaccinationWarning}). يمكنك إضافتها لاحقاً من ملف الطفل.
+              </span>
+            </div>
+          )}
 
           <div className="flex flex-wrap justify-center gap-3 pt-6">
             <Link href={`/secretary/new-visit?patientId=${createdPatientId}`}>
@@ -464,12 +502,100 @@ export default function NewPatientRegistrationPage() {
             </div>
           </Card>
 
-          {/* 4. بيانات ولي الأمر */}
+          {/* 4. سجل وحالة التطعيمات (اختياري) */}
+          <Card className="space-y-4 bg-white border-slate-200 shadow-xs">
+            <CardHeader className="pb-3 border-b border-slate-100">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base text-clinic-800 flex items-center gap-2 font-black">
+                  <Syringe className="w-5 h-5 text-clinic-600" />
+                  <span>4. سجل وحالة التطعيمات (اختياري)</span>
+                </CardTitle>
+                <span className="text-xs text-slate-400 font-medium">غير إلزامي للتسجيل</span>
+              </div>
+            </CardHeader>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="space-y-1.5 text-right">
+                <label className="block text-sm font-semibold text-slate-700">
+                  حالة التطعيم
+                </label>
+                <select
+                  className="block w-full rounded-xl border border-slate-200 bg-white text-slate-800 text-sm h-11 px-3 focus:outline-none focus:ring-2 focus:ring-clinic-500 font-bold"
+                  value={vaccinationStatus}
+                  onChange={(e) => {
+                    const val = e.target.value as VaccinationStatus | "";
+                    setVaccinationStatus(val);
+                    if (val === "not_vaccinated") {
+                      setLastVaccineName("");
+                      setLastVaccineDate("");
+                      if (fieldErrors.lastVaccineDate) {
+                        const nextErrors = { ...fieldErrors };
+                        delete nextErrors.lastVaccineDate;
+                        setFieldErrors(nextErrors);
+                      }
+                    }
+                  }}
+                >
+                  <option value="">-- غير مسجلة حالياً --</option>
+                  <option value="complete">كامل التلقيح (مستكمل لكافة الجرعات)</option>
+                  <option value="incomplete">غير كامل التلقيح (متأخر أو ناقص الجرعات)</option>
+                  <option value="not_vaccinated">لم يُلقّح (لم يتلق أي لقاح)</option>
+                </select>
+              </div>
+
+              {vaccinationStatus !== "not_vaccinated" && (
+                <>
+                  <Input
+                    label="اسم آخر لقاح تم أخذه (اختياري)"
+                    placeholder="مثال: الحصبة MMR، اللقاح السداسي..."
+                    value={lastVaccineName}
+                    onChange={(e) => setLastVaccineName(e.target.value)}
+                  />
+
+                  <div className="space-y-1">
+                    <Input
+                      label="تاريخ آخر تطعيم (اختياري)"
+                      type="date"
+                      value={lastVaccineDate}
+                      onChange={(e) => {
+                        setLastVaccineDate(e.target.value);
+                        if (fieldErrors.lastVaccineDate) {
+                          setFieldErrors({ ...fieldErrors, lastVaccineDate: "" });
+                        }
+                      }}
+                      className={fieldErrors.lastVaccineDate ? "border-rose-500" : ""}
+                    />
+                    {fieldErrors.lastVaccineDate && (
+                      <p className="text-[11px] font-bold text-rose-600">{fieldErrors.lastVaccineDate}</p>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+              <Input
+                label="تفاعلات أو أعراض جانبية بعد اللقاحات (اختياري)"
+                placeholder="مثال: حمى طفيفة، حساسية، تورم موضعي..."
+                value={postVaccinationReactions}
+                onChange={(e) => setPostVaccinationReactions(e.target.value)}
+              />
+
+              <Input
+                label="ملاحظات وتوصيات التطعيم (اختياري)"
+                placeholder="مثال: يحتاج جرعة منشطة لشلل الأطفال الشهر القادم..."
+                value={vaccinationNotes}
+                onChange={(e) => setVaccinationNotes(e.target.value)}
+              />
+            </div>
+          </Card>
+
+          {/* 5. بيانات ولي الأمر */}
           <Card className="space-y-4 bg-white border-slate-200 shadow-xs">
             <CardHeader className="pb-3 border-b border-slate-100">
               <CardTitle className="text-base text-clinic-800 flex items-center gap-2 font-black">
                 <Phone className="w-5 h-5 text-clinic-600" />
-                <span>4. بيانات ولي الأمر والاتصال</span>
+                <span>5. بيانات ولي الأمر والاتصال</span>
               </CardTitle>
             </CardHeader>
 

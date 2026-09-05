@@ -1,19 +1,18 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useLanguage } from "@/context/LanguageContext";
 import { useAuth } from "@/context/AuthContext";
+import { getSafeRedirectPath } from "@/services/authService";
 import {
   User,
   Lock,
-  Phone,
+  Mail,
   Eye,
   EyeOff,
   ShieldCheck,
-  ChevronLeft,
-  ChevronRight,
   Globe,
   ArrowLeft,
   ArrowRight,
@@ -40,16 +39,17 @@ const LOGIN_STARS = [
   { top: "84%", left: "88%", size: 8, color: "#38BDF8", isFourPoint: true, animation: "animate-star-pulse", delay: "1.9s", duration: "7.2s" },
 ];
 
-export default function LoginPage() {
+function LoginFormContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectToParam = searchParams.get("redirectTo");
   const { language, toggleLanguage, isRTL } = useLanguage();
   const { login } = useAuth();
 
   const [selectedRole, setSelectedRole] = useState<"doctor" | "secretary">("doctor");
-  const [phoneOrUser, setPhoneOrUser] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -59,19 +59,15 @@ export default function LoginPage() {
     setError(null);
 
     try {
-      await login(selectedRole, phoneOrUser, password);
-
-      if (selectedRole === "doctor") {
-        router.replace("/doctor");
-      } else {
-        router.replace("/secretary");
-      }
+      await login(selectedRole, email, password);
+      const targetPath = getSafeRedirectPath(redirectToParam, selectedRole);
+      router.replace(targetPath);
     } catch (err: any) {
       setError(
         err.message ||
           (language === "ar"
-            ? "رقم الهاتف أو كلمة المرور غير صحيحة"
-            : "Invalid phone number or password")
+            ? "تعذر تسجيل الدخول. تحقق من بيانات الحساب."
+            : "Authentication failed. Please check your credentials.")
       );
       setIsLoading(false);
     }
@@ -124,10 +120,9 @@ export default function LoginPage() {
       </div>
 
       {/* ========================================================================= */}
-      {/* 1. TOP HEADER (In Natural Top Position: Logo & Brand + Actions)           */}
+      {/* 1. TOP HEADER                                                             */}
       {/* ========================================================================= */}
       <header className="w-full max-w-6xl flex items-center justify-between z-20 pt-2 pb-4 shrink-0">
-        {/* Right in RTL: Medical Logo + Clinic Title */}
         <Link href="/" className="flex items-center gap-3 group cursor-pointer select-none">
           <div className="w-11 h-11 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white shadow-sm group-hover:scale-105 transition-transform">
             <svg
@@ -168,9 +163,7 @@ export default function LoginPage() {
           </div>
         </Link>
 
-        {/* Left in RTL: Back to Home + Language Switcher */}
         <div className="flex items-center gap-2 sm:gap-3">
-          {/* Back to Home Link */}
           <Link
             href="/"
             className="inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs sm:text-sm font-bold text-slate-200 hover:text-white transition-all shadow-xs backdrop-blur-md group"
@@ -179,7 +172,6 @@ export default function LoginPage() {
             <span className="hidden sm:inline">{language === "ar" ? "الرئيسية" : "Home"}</span>
           </Link>
 
-          {/* Language Switcher Pill */}
           <button
             type="button"
             onClick={toggleLanguage}
@@ -193,23 +185,21 @@ export default function LoginPage() {
       </header>
 
       {/* ========================================================================= */}
-      {/* 2. CENTERED FLOATING LOGIN CARD (Exact match to the provided screenshot)   */}
+      {/* 2. CENTERED FLOATING LOGIN CARD                                           */}
       {/* ========================================================================= */}
       <main className="w-full max-w-[440px] z-20 my-auto py-2">
         <div className="bg-white text-[#0A1E33] rounded-[28px] p-6 sm:p-8 border border-white/20 shadow-2xl space-y-6">
-          {/* Title and Subtitle */}
           <div className="text-center space-y-1.5">
             <h2 className="text-2xl sm:text-[26px] font-black text-[#0A1E33] tracking-tight">
               {language === "ar" ? "تسجيل الدخول" : "Account Sign In"}
             </h2>
             <p className="text-xs sm:text-sm text-[#697A8D] font-medium">
               {language === "ar"
-                ? "أدخل بيانات حسابك للوصول إلى نظام العيادة"
-                : "Enter your credentials to access the clinic system"}
+                ? "أدخل بيانات حسابك المعتمدة للوصول إلى نظام العيادة"
+                : "Enter your verified credentials to access the clinic system"}
             </p>
           </div>
 
-          {/* Error Alert */}
           {error && (
             <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs font-bold flex items-center gap-2">
               <ShieldAlert className="w-4 h-4 shrink-0 text-rose-600" />
@@ -217,15 +207,14 @@ export default function LoginPage() {
             </div>
           )}
 
-          {/* Role Switcher Tabs (Capsule style matching screenshot) */}
+          {/* Role Switcher Tabs */}
           <div className="grid grid-cols-2 gap-1.5 p-1.5 bg-[#F1F5F7] rounded-2xl border border-[#E2E8EC]">
-            {/* Doctor Tab */}
             <button
               type="button"
               onClick={() => {
                 setSelectedRole("doctor");
                 setError(null);
-                setPhoneOrUser("");
+                setEmail("");
                 setPassword("");
               }}
               className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-black transition-all cursor-pointer ${
@@ -238,13 +227,12 @@ export default function LoginPage() {
               <span>{language === "ar" ? "حساب الطبيب" : "Doctor Account"}</span>
             </button>
 
-            {/* Receptionist Tab */}
             <button
               type="button"
               onClick={() => {
                 setSelectedRole("secretary");
                 setError(null);
-                setPhoneOrUser("");
+                setEmail("");
                 setPassword("");
               }}
               className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-black transition-all cursor-pointer ${
@@ -260,22 +248,26 @@ export default function LoginPage() {
 
           {/* Login Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Phone Number Field */}
+            {/* Email Field */}
             <div className="space-y-1.5">
               <label className={`block text-xs sm:text-sm font-black text-[#0A1E33] ${isRTL ? "text-right" : "text-left"}`}>
-                {language === "ar" ? "رقم الهاتف" : "Phone Number"}
+                {language === "ar" ? "البريد الإلكتروني" : "Email Address"}
               </label>
               <div className="relative">
                 <input
-                  type="text"
+                  type="email"
                   required
-                  placeholder={language === "ar" ? "أدخل رقم الهاتف" : "Enter phone number"}
-                  value={phoneOrUser}
-                  onChange={(e) => setPhoneOrUser(e.target.value)}
+                  placeholder={
+                    selectedRole === "doctor"
+                      ? "doctor@dr-kareem.com"
+                      : "secretary@dr-kareem.com"
+                  }
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className={`w-full h-13 ${isRTL ? "pr-4 pl-11" : "pl-4 pr-11"} rounded-2xl border border-[#D7E0E5] focus:border-[#147D7A] focus:ring-2 focus:ring-[#147D7A]/15 text-xs sm:text-sm font-bold text-[#0A1E33] placeholder:text-[#94A3B8] outline-none transition-all`}
                 />
                 <div className={`absolute inset-y-0 ${isRTL ? "left-0 pl-4" : "right-0 pr-4"} flex items-center pointer-events-none text-[#94A3B8]`}>
-                  <Phone className="w-4 h-4" />
+                  <Mail className="w-4 h-4" />
                 </div>
               </div>
             </div>
@@ -294,12 +286,10 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   className={`w-full h-13 ${isRTL ? "pr-11 pl-11" : "pl-11 pr-11"} rounded-2xl border border-[#D7E0E5] focus:border-[#147D7A] focus:ring-2 focus:ring-[#147D7A]/15 text-xs sm:text-sm font-bold text-[#0A1E33] placeholder:text-[#94A3B8] outline-none transition-all tracking-wider`}
                 />
-                {/* Lock Icon */}
                 <div className={`absolute inset-y-0 ${isRTL ? "right-0 pr-4" : "left-0 pl-4"} flex items-center pointer-events-none text-[#94A3B8]`}>
                   <Lock className="w-4 h-4" />
                 </div>
 
-                {/* Show/Hide Eye Toggle */}
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
@@ -310,20 +300,8 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* Options Row: Remember Me & Forgot Password */}
-            <div className="flex items-center justify-between text-xs sm:text-sm pt-1">
-              <label className="flex items-center gap-2 cursor-pointer select-none text-[#697A8D]">
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="w-4 h-4 rounded border-[#D7E0E5] text-[#147D7A] focus:ring-[#147D7A] accent-[#147D7A]"
-                />
-                <span className="font-bold text-xs">
-                  {language === "ar" ? "تذكرني على هذا الجهاز" : "Remember this device"}
-                </span>
-              </label>
-
+            {/* Forgot Password Link */}
+            <div className={`flex items-center ${isRTL ? "justify-start" : "justify-end"} text-xs sm:text-sm pt-0.5`}>
               <Link
                 href="/forgot-password"
                 className="text-xs font-bold text-[#147D7A] hover:underline"
@@ -343,25 +321,21 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* Quick Credential Hint Pill matching screenshot */}
+          {/* Security Notice */}
           <div className="p-3 rounded-2xl bg-[#F7F9FA] border border-[#E5EBF0] text-[11px] text-[#697A8D] text-center">
             <span>
-              {selectedRole === "doctor"
-                ? (language === "ar" ? "حساب الطبيب: " : "Doctor Account: ")
-                : (language === "ar" ? "حساب الاستقبال: " : "Reception Account: ")}
-              <strong className="text-[#0A1E33] font-mono font-black">
-                {selectedRole === "doctor" ? "07801021470 (dr.Kareem@97al)" : "07719215504 (Husain@97al)"}
-              </strong>
+              {language === "ar"
+                ? "يتم الدخول عبر الحسابات الرسمية المعتمدة والمشفرة"
+                : "Sign in using official encrypted clinic credentials"}
             </span>
           </div>
         </div>
       </main>
 
       {/* ========================================================================= */}
-      {/* 3. BOTTOM FOOTER (In Natural Bottom Position: Security Badge + Copyright)  */}
+      {/* 3. BOTTOM FOOTER                                                          */}
       {/* ========================================================================= */}
       <footer className="w-full max-w-4xl text-center pb-2 pt-4 space-y-2 z-20 select-none shrink-0">
-        {/* Encrypted Connection Badge */}
         <div className="inline-flex items-center gap-2 text-xs text-slate-300 font-bold">
           <div className="w-8 h-px bg-white/15" />
           <ShieldCheck className="w-4 h-4 text-[#0C9A96]" />
@@ -369,7 +343,6 @@ export default function LoginPage() {
           <div className="w-8 h-px bg-white/15" />
         </div>
 
-        {/* Copyright */}
         <p className="text-[11px] text-slate-400 font-medium">
           {language === "ar"
             ? "جميع الحقوق محفوظة © 2026 عيادة الدكتور عبد الكريم عليوي"
@@ -377,5 +350,19 @@ export default function LoginPage() {
         </p>
       </footer>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#061524] flex items-center justify-center text-white">
+          <div className="w-8 h-8 border-4 border-[#0C9A96] border-t-transparent rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <LoginFormContent />
+    </Suspense>
   );
 }
