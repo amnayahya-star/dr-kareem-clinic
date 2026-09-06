@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
@@ -42,6 +43,7 @@ import {
   CalendarDays,
   UserCheck,
   BellRing,
+  FileText,
 } from "lucide-react";
 
 export default function DoctorClinicalWorkstationPage() {
@@ -512,8 +514,7 @@ export default function DoctorClinicalWorkstationPage() {
                       return (
                         <tr
                           key={patient.id}
-                          onClick={() => handleSelectChild(patient.id)}
-                          className="hover:bg-slate-50/80 cursor-pointer transition-colors group"
+                          className="hover:bg-slate-50/80 transition-colors group"
                         >
                           <td className={`py-3.5 ${isRTL ? "pr-2" : "pl-2"}`}>
                             <div className="flex items-center gap-3">
@@ -573,10 +574,27 @@ export default function DoctorClinicalWorkstationPage() {
                           </td>
 
                           <td className={`py-3.5 ${isRTL ? "text-left pl-2" : "text-right pr-2"}`}>
-                            <span className="inline-flex items-center gap-1 text-xs font-bold text-clinic-700 group-hover:underline">
-                              <span>{t("startExam")}</span>
-                              <ChevronLeft className="w-4 h-4" />
-                            </span>
+                            <div className="flex items-center justify-end gap-2 flex-wrap">
+                              {/* زر الملف الطبي والتطعيمات المستقل */}
+                              <Link
+                                href={`/doctor/patients/${patient.id}`}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black text-clinic-700 bg-clinic-50 hover:bg-clinic-100 border border-clinic-200 transition-colors shadow-2xs"
+                              >
+                                <FileText className="w-3.5 h-3.5 text-clinic-600" />
+                                <span>{language === "ar" ? "الملف الطبي والتطعيمات" : "Medical File & Vaccines"}</span>
+                              </Link>
+
+                              {/* زر بدء الفحص السريري المستقل */}
+                              <button
+                                type="button"
+                                onClick={() => handleSelectChild(patient.id)}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-black text-slate-700 hover:text-white bg-slate-100 hover:bg-slate-900 transition-colors shadow-2xs cursor-pointer"
+                              >
+                                <Stethoscope className="w-3.5 h-3.5 text-clinic-600" />
+                                <span>{t("startExam")}</span>
+                                <ChevronLeft className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -607,13 +625,20 @@ export default function DoctorClinicalWorkstationPage() {
                   {activePatient.fullName.charAt(0)}
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <h2 className="text-xl sm:text-2xl font-black text-slate-900">
                       {activePatient.fullName}
                     </h2>
                     <span className="font-mono text-xs font-bold bg-slate-100 text-slate-800 px-2.5 py-1 rounded-lg">
                       {activePatient.fileNumber}
                     </span>
+                    <Link
+                      href={`/doctor/patients/${activePatient.id}`}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black text-clinic-700 bg-clinic-50 hover:bg-clinic-100 border border-clinic-200 transition-colors shadow-2xs"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-clinic-600" />
+                      <span>{language === "ar" ? "فتح وتعديل الملف الطبي الكامل" : "Open Full Medical File"}</span>
+                    </Link>
                   </div>
                   <p className="text-xs text-slate-500 font-medium mt-1">
                     {t("age")}: <strong className="text-slate-800">{calculateArabicAge(activePatient.dateOfBirth)}</strong> |{" "}
