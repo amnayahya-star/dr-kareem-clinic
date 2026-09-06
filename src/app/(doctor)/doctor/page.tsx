@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Input";
@@ -8,7 +8,8 @@ import { Modal } from "@/components/ui/Modal";
 import { Card } from "@/components/ui/Card";
 import { MOCK_PATIENT_FILES, PatientFile, VisitRecord, MedicalPhoto } from "@/lib/mock-data/patients";
 import { fetchPatients } from "@/services/patientService";
-import { saveDoctorDiagnosis } from "@/services/visitService";
+import { saveDoctorDiagnosis, getActiveVisit, validateFollowUpDate } from "@/services/visitService";
+import { getSignedPhotoUrl } from "@/services/storageService";
 import {
   notifyDoctorApprovedVisit,
   subscribeToClinicNotifications,
@@ -44,7 +45,82 @@ import {
   UserCheck,
   BellRing,
   FileText,
+  ShieldAlert,
 } from "lucide-react";
+
+/**
+ * مكون لعرض الصور الطبية الخاصة المحمية عبر Signed URLs
+ */
+function SecureMedicalImage({
+  src,
+  alt,
+  className = "w-full h-full object-cover",
+}: {
+  src?: string;
+  alt?: string;
+  className?: string;
+}) {
+  const [signedSrc, setSignedSrc] = useState<string | null>(null);
+  const [hasError, setHasError] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!src) {
+      setSignedSrc(null);
+      setLoading(false);
+      return;
+    }
+    let isCurrent = true;
+    setLoading(true);
+    setHasError(false);
+
+    getSignedPhotoUrl(src)
+      .then((url) => {
+        if (!isCurrent) return;
+        if (url) {
+          setSignedSrc(url);
+        } else {
+          setHasError(true);
+        }
+      })
+      .catch(() => {
+        if (isCurrent) setHasError(true);
+      })
+      .finally(() => {
+        if (isCurrent) setLoading(false);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [src]);
+
+  if (loading) {
+    return (
+      <div className="w-full h-full min-h-[80px] flex items-center justify-center bg-slate-100 text-slate-400">
+        <span className="text-[10px] animate-pulse">جاري التحميل...</span>
+      </div>
+    );
+  }
+
+  if (hasError || !signedSrc) {
+    return (
+      <div className="w-full h-full min-h-[80px] flex flex-col items-center justify-center bg-slate-100 text-slate-400 p-2 text-center">
+        <AlertTriangle className="w-5 h-5 text-amber-500 mb-1" />
+        <span className="text-[10px] text-slate-500 font-medium">تعذر تحميل الصورة</span>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={signedSrc}
+      alt={alt || "صورة طبية"}
+      className={className}
+      onError={() => setHasError(true)}
+    />
+  );
+}
 
 export default function DoctorClinicalWorkstationPage() {
   const { language, t, isRTL } = useLanguage();
@@ -65,12 +141,16 @@ export default function DoctorClinicalWorkstationPage() {
   // Selected Photo for Fullscreen Preview Modal
   const [previewPhoto, setPreviewPhoto] = useState<MedicalPhoto | null>(null);
 
-  // Current Consultation Form State
-  const [symptoms, setSymptoms] = useState(language === "ar" ? "ارتفاع حرارة وسعال مستمر منذ يومين" : "Fever and persistent cough for 2 days");
-  const [clinicalExam, setClinicalExam] = useState(language === "ar" ? "احتقان بالبلعوم، أصوات تنفسية خشنة خفيفة بالصدر" : "Pharyngeal congestion, mild coarse breath sounds in chest");
-  const [diagnosisText, setDiagnosisText] = useState("Acute Viral Bronchitis (التهاب القصبات الهوائية الفيروسي الحاد)");
-  const [recommendations, setRecommendations] = useState(language === "ar" ? "سوائل دافئة، راحة تامة، خافض حرارة عند اللزوم، تجنب مشتقات البنسلين" : "Warm fluids, rest, antipyretics PRN, avoid penicillin");
-  const [doctorNotes, setDoctorNotes] = useState(language === "ar" ? "متابعة الحرارة بعد 48 ساعة" : "Follow up temperature in 48 hours");
+  // Current Consultation Form State (empty defaults to prevent cross-patient data leakage)
+  const [symptoms, setSymptoms] = useState("");
+  const [presentIllnessHistory, setPresentIllnessHistory] = useState("");
+  const [clinicalExam, setClinicalExam] = useState("");
+  const [diagnosisText, setDiagnosisText] = useState("");
+  const [recommendations, setRecommendations] = useState("");
+  const [doctorNotes, setDoctorNotes] = useState("");
+  const [followUpDate, setFollowUpDate] = useState("");
+  const [formValidationErrors, setFormValidationErrors] = useState<{ [key: string]: string }>({});
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [isApprovedSuccess, setIsApprovedSuccess] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -154,6 +234,70 @@ export default function DoctorClinicalWorkstationPage() {
     };
   }, []);
 
+  // Active Selected Child and Active Visit derivations
+  const activePatient = useMemo(
+    () => (activePatientId ? patients.find((p) => p.id === activePatientId) || null : null),
+    [patients, activePatientId]
+  );
+  const activeVisit = useMemo(() => getActiveVisit(activePatient?.visits), [activePatient?.visits]);
+  const activeVisitId = activeVisit?.id || null;
+  const latestHistoricalVisit = activePatient?.visits?.[0] || null;
+
+  // Track the currently hydrated (patientId:visitId) key to guard against resets during normal typing or polling
+  const lastHydratedKeyRef = useRef<string | null>(null);
+
+  // Prevent cross-patient data leakage & hydrate active visit draft if and only if patient/visit identity genuinely changes
+  useEffect(() => {
+    const currentKey = activePatientId ? `${activePatientId}:${activeVisitId || "no-active-visit"}` : null;
+
+    if (lastHydratedKeyRef.current === currentKey) {
+      return;
+    }
+
+    const previousKey = lastHydratedKeyRef.current;
+    lastHydratedKeyRef.current = currentKey;
+
+    if (!activePatientId || !activePatient) {
+      setSymptoms("");
+      setPresentIllnessHistory("");
+      setClinicalExam("");
+      setDiagnosisText("");
+      setRecommendations("");
+      setDoctorNotes("");
+      setFollowUpDate("");
+      setFormValidationErrors({});
+      setSaveError(null);
+      setIsApprovedSuccess(false);
+      return;
+    }
+
+    if (activeVisit) {
+      setSymptoms(activeVisit.symptoms || "");
+      setPresentIllnessHistory(activeVisit.presentIllnessHistory || "");
+      setClinicalExam(activeVisit.clinicalExamination || "");
+      setDiagnosisText(activeVisit.diagnosisText || "");
+      setRecommendations(activeVisit.recommendations || "");
+      setDoctorNotes(activeVisit.doctorNotes || "");
+      setFollowUpDate(activeVisit.followUpDate || "");
+    } else {
+      setSymptoms("");
+      setPresentIllnessHistory("");
+      setClinicalExam("");
+      setDiagnosisText("");
+      setRecommendations("");
+      setDoctorNotes("");
+      setFollowUpDate("");
+    }
+    setFormValidationErrors({});
+    setSaveError(null);
+
+    // Reset approval success only when switching between different patients
+    const prevPatientId = previousKey ? previousKey.split(":")[0] : null;
+    if (prevPatientId !== activePatientId) {
+      setIsApprovedSuccess(false);
+    }
+  }, [activePatientId, activeVisitId, activePatient, activeVisit]);
+
   // Filtered Children based on search & day selection
   const filteredPatients = useMemo(() => {
     let result = patients;
@@ -183,51 +327,86 @@ export default function DoctorClinicalWorkstationPage() {
     return result;
   }, [searchQuery, patients, dateFilterMode, customFilterDate, todayStr, yesterdayStr]);
 
-  // Active Selected Child
-  const activePatient = patients.find((p) => p.id === activePatientId) || null;
-  const latestVisit = activePatient?.visits?.[0] || null;
-
   // Handle Select Child
   const handleSelectChild = (id: string) => {
     setActivePatientId(id);
     setSearchQuery("");
     setIsApprovedSuccess(false);
+    setSaveError(null);
+    setFormValidationErrors({});
     setActiveTab("clinical");
   };
 
   // Complete & Approve Visit
   const handleApproveVisit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activePatient || !latestVisit) return;
+    if (!activePatient) return;
 
+    const currentActiveVisit = getActiveVisit(activePatient.visits);
+    if (!currentActiveVisit) {
+      setSaveError(
+        language === "ar"
+          ? "لا توجد زيارة نشطة بانتظار الفحص السريري لهذا الطفل"
+          : "No active visit waiting for examination for this patient"
+      );
+      return;
+    }
+
+    const errors: { [key: string]: string } = {};
+    if (!diagnosisText.trim()) {
+      errors.diagnosisText =
+        language === "ar"
+          ? "التشخيص النهائي مطلوب لاعتماد الزيارة"
+          : "Final diagnosis is required";
+    }
+
+    const followUpCheck = validateFollowUpDate(followUpDate);
+    if (!followUpCheck.isValid) {
+      errors.followUpDate = followUpCheck.error || "تاريخ المراجعة غير صحيح";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFormValidationErrors(errors);
+      return;
+    }
+
+    setFormValidationErrors({});
+    setSaveError(null);
     setIsSubmitting(true);
+
     try {
       await saveDoctorDiagnosis({
-        visitId: latestVisit.id,
+        visitId: currentActiveVisit.id,
         patientId: activePatient.id,
         symptoms,
+        presentIllnessHistory,
         clinicalExamination: clinicalExam,
-        diagnosisText,
+        diagnosisText: diagnosisText.trim(),
         recommendations,
         doctorNotes,
+        followUpDate: followUpDate || undefined,
       });
 
       // إرسال تنبيه فوري للسكرتير لتصوير الوصفة
       notifyDoctorApprovedVisit({
-        visitId: latestVisit.id,
+        visitId: currentActiveVisit.id,
         patientId: activePatient.id,
         childName: activePatient.fullName,
-        diagnosisText,
+        diagnosisText: diagnosisText.trim(),
       });
 
-      const updatedVisits = activePatient.visits.map((v, idx) =>
-        idx === 0
+      const updatedVisits = activePatient.visits.map((v) =>
+        v.id === currentActiveVisit.id
           ? {
               ...v,
-              diagnosisText,
+              status: "completed" as const,
+              symptoms,
+              presentIllnessHistory,
               clinicalExamination: clinicalExam,
+              diagnosisText: diagnosisText.trim(),
               recommendations,
               doctorNotes,
+              followUpDate: followUpDate || undefined,
               isCompleted: true,
             }
           : v
@@ -238,10 +417,10 @@ export default function DoctorClinicalWorkstationPage() {
         visits: updatedVisits,
       };
 
-      setPatients(patients.map((p) => (p.id === activePatient.id ? updatedPatient : p)));
+      setPatients((prev) => prev.map((p) => (p.id === activePatient.id ? updatedPatient : p)));
       setIsApprovedSuccess(true);
     } catch (err: any) {
-      alert(language === "ar" ? `فشل اعتماد الزيارة: ${err.message}` : `Failed to approve visit: ${err.message}`);
+      setSaveError(err.message || (language === "ar" ? "فشل اعتماد الزيارة" : "Failed to approve visit"));
     } finally {
       setIsSubmitting(false);
     }
@@ -734,8 +913,56 @@ export default function DoctorClinicalWorkstationPage() {
                     {t("backToDoctorList")}
                   </Button>
                 </Card>
+              ) : !activeVisit ? (
+                <div className="space-y-4">
+                  <div className="p-5 bg-amber-50 border border-amber-200 rounded-3xl text-amber-900 flex items-start gap-3.5 shadow-sm">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <h4 className="text-sm font-black">
+                        {language === "ar"
+                          ? "لا توجد زيارة نشطة بانتظار الفحص السريري"
+                          : "No Active Visit Waiting for Examination"}
+                      </h4>
+                      <p className="text-xs text-amber-800 font-medium leading-relaxed">
+                        {language === "ar"
+                          ? "لم يتم تسجيل زيارة نشطة لهذا الطفل من قبل الاستقبال (السكرتارية) بعد. يرجى فتح زيارة جديدة وتوثيق القياسات الحيوية أولاً لتفعيل نموذج الفحص والتشخيص."
+                          : "No active visit has been registered for this patient by reception yet. Please register a new visit and document vitals first to enable clinical examination."}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* استعراض ملخص آخر زيارة تاريخية إن وجدت */}
+                  {latestHistoricalVisit && (
+                    <Card className="p-5 bg-white border-slate-200">
+                      <h4 className="text-xs font-black text-slate-500 uppercase mb-3">
+                        {language === "ar" ? "ملخص أحدث زيارة سابقة مسجلة" : "Latest Recorded Visit Summary"} ({latestHistoricalVisit.date})
+                      </h4>
+                      <div className="text-xs text-slate-700 space-y-2">
+                        {latestHistoricalVisit.diagnosisText && (
+                          <p>
+                            <strong className="text-slate-900">{language === "ar" ? "التشخيص: " : "Diagnosis: "}</strong>
+                            {latestHistoricalVisit.diagnosisText}
+                          </p>
+                        )}
+                        {latestHistoricalVisit.recommendations && (
+                          <p>
+                            <strong className="text-slate-900">{language === "ar" ? "التوصيات: " : "Recommendations: "}</strong>
+                            {latestHistoricalVisit.recommendations}
+                          </p>
+                        )}
+                      </div>
+                    </Card>
+                  )}
+                </div>
               ) : (
                 <form onSubmit={handleApproveVisit} className="space-y-6">
+                  {saveError && (
+                    <div className="p-4 bg-rose-50 border border-rose-200 text-rose-900 rounded-2xl text-xs font-bold flex items-center gap-2">
+                      <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0" />
+                      <span>{saveError}</span>
+                    </div>
+                  )}
+
                   {/* القياسات الحيوية */}
                   <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm space-y-3">
                     <h4 className="text-xs font-black text-slate-500 uppercase tracking-wider">
@@ -746,7 +973,7 @@ export default function DoctorClinicalWorkstationPage() {
                         <div className={isRTL ? "text-right" : "text-left"}>
                           <span className="text-slate-400 text-xs font-bold block">{t("weight")}</span>
                           <span className="text-lg font-black text-slate-900">
-                            {latestVisit?.weightKg ? `${latestVisit.weightKg} ${t("kg")}` : "--"}
+                            {activeVisit.weightKg ? `${activeVisit.weightKg} ${t("kg")}` : "--"}
                           </span>
                         </div>
                         <Scale className="w-6 h-6 text-clinic-600 opacity-80" />
@@ -756,7 +983,7 @@ export default function DoctorClinicalWorkstationPage() {
                         <div className={isRTL ? "text-right" : "text-left"}>
                           <span className="text-rose-500 text-xs font-bold block">{t("temperature")}</span>
                           <span className="text-lg font-black text-rose-700">
-                            {latestVisit?.temperatureC ? `${latestVisit.temperatureC} °C` : "--"}
+                            {activeVisit.temperatureC ? `${activeVisit.temperatureC} °C` : "--"}
                           </span>
                         </div>
                         <Thermometer className="w-6 h-6 text-rose-600 opacity-80" />
@@ -766,12 +993,29 @@ export default function DoctorClinicalWorkstationPage() {
                         <div className={isRTL ? "text-right" : "text-left"}>
                           <span className="text-slate-400 text-xs font-bold block">{t("height")}</span>
                           <span className="text-lg font-black text-slate-900">
-                            {latestVisit?.heightCm ? `${latestVisit.heightCm} ${t("cm")}` : "--"}
+                            {activeVisit.heightCm ? `${activeVisit.heightCm} ${t("cm")}` : "--"}
                           </span>
                         </div>
                         <Ruler className="w-6 h-6 text-clinic-600 opacity-80" />
                       </div>
                     </div>
+
+                    {(activeVisit.bloodPressure || activeVisit.oxygenSaturation !== undefined) && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 text-xs">
+                        {activeVisit.bloodPressure && (
+                          <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
+                            <span className="text-slate-500 font-bold">{language === "ar" ? "ضغط الدم:" : "Blood Pressure:"}</span>
+                            <span className="font-mono font-black text-slate-800">{activeVisit.bloodPressure}</span>
+                          </div>
+                        )}
+                        {activeVisit.oxygenSaturation !== undefined && (
+                          <div className="p-2.5 bg-teal-50/60 rounded-xl border border-teal-200 flex items-center justify-between">
+                            <span className="text-teal-700 font-bold">{language === "ar" ? "نسبة الأكسجين:" : "Oxygen Saturation:"}</span>
+                            <span className="font-mono font-black text-teal-900">{activeVisit.oxygenSaturation}%</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* حقول الفحص السريري والتشخيص */}
@@ -786,50 +1030,103 @@ export default function DoctorClinicalWorkstationPage() {
                       </span>
                     </div>
 
+                    {/* الأعراض والتاريخ المرضي الحالي */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <Textarea
                         label={t("symptomsLabel")}
+                        placeholder={language === "ar" ? "أدخل شكوى وأعراض الطفل..." : "Enter symptoms..."}
                         value={symptoms}
                         onChange={(e) => setSymptoms(e.target.value)}
-                        className="text-sm font-semibold min-h-[100px]"
+                        className="text-sm font-semibold min-h-[90px]"
                       />
                       <Textarea
-                        label={t("clinicalExamLabel")}
-                        value={clinicalExam}
-                        onChange={(e) => setClinicalExam(e.target.value)}
-                        className="text-sm font-semibold min-h-[100px]"
+                        label={language === "ar" ? "التاريخ المرضي الحالي (HPI)" : "History of Present Illness"}
+                        placeholder={language === "ar" ? "تاريخ بداية المرض، التطور، الأدوية المستخدمة..." : "Onset, duration, progression..."}
+                        value={presentIllnessHistory}
+                        onChange={(e) => setPresentIllnessHistory(e.target.value)}
+                        className="text-sm font-semibold min-h-[90px]"
                       />
                     </div>
 
+                    {/* الفحص السريري */}
+                    <div>
+                      <Textarea
+                        label={t("clinicalExamLabel")}
+                        placeholder={language === "ar" ? "نتائج فحص البلعوم، الصدر، الأذن، البطن..." : "Chest, pharynx, abdomen findings..."}
+                        value={clinicalExam}
+                        onChange={(e) => setClinicalExam(e.target.value)}
+                        className="text-sm font-semibold min-h-[90px]"
+                      />
+                    </div>
+
+                    {/* التشخيص النهائي */}
                     <div className="space-y-1.5">
                       <Input
                         label={t("finalDiagnosisLabel")}
                         required
+                        placeholder={language === "ar" ? "مثال: التهاب القصبات الحاد (Acute Bronchitis)" : "e.g. Acute Bronchitis"}
                         value={diagnosisText}
-                        onChange={(e) => setDiagnosisText(e.target.value)}
-                        className="font-black text-slate-900 text-base h-13 border-2 focus:border-clinic-500"
+                        onChange={(e) => {
+                          setDiagnosisText(e.target.value);
+                          if (formValidationErrors.diagnosisText) {
+                            setFormValidationErrors((prev) => ({ ...prev, diagnosisText: "" }));
+                          }
+                        }}
+                        className={`font-black text-slate-900 text-base h-13 border-2 ${
+                          formValidationErrors.diagnosisText ? "border-rose-400 bg-rose-50/20" : "focus:border-clinic-500"
+                        }`}
                       />
+                      {formValidationErrors.diagnosisText && (
+                        <p className="text-xs text-rose-600 font-bold">{formValidationErrors.diagnosisText}</p>
+                      )}
                     </div>
 
+                    {/* التوصيات وملاحظات الطبيب */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <Textarea
                         label={t("recommendationsLabel")}
+                        placeholder={language === "ar" ? "الراحة، السوائل، حمية خاصة..." : "Recommendations..."}
                         value={recommendations}
                         onChange={(e) => setRecommendations(e.target.value)}
                         className="text-sm font-semibold min-h-[90px]"
                       />
                       <Textarea
                         label={t("doctorNotesLabel")}
+                        placeholder={language === "ar" ? "ملاحظات طبية خاصة للمتابعة..." : "Doctor notes..."}
                         value={doctorNotes}
                         onChange={(e) => setDoctorNotes(e.target.value)}
                         className="text-sm font-semibold min-h-[90px]"
                       />
                     </div>
 
+                    {/* موعد المراجعة القادمة */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                      <div className="space-y-1.5">
+                        <Input
+                          type="date"
+                          label={language === "ar" ? "موعد المراجعة القادمة (اختياري)" : "Follow-up Date (Optional)"}
+                          min={todayStr}
+                          value={followUpDate}
+                          onChange={(e) => {
+                            setFollowUpDate(e.target.value);
+                            if (formValidationErrors.followUpDate) {
+                              setFormValidationErrors((prev) => ({ ...prev, followUpDate: "" }));
+                            }
+                          }}
+                          className={`text-sm font-bold ${
+                            formValidationErrors.followUpDate ? "border-rose-400 bg-rose-50/20" : ""
+                          }`}
+                        />
+                        {formValidationErrors.followUpDate && (
+                          <p className="text-xs text-rose-600 font-bold">{formValidationErrors.followUpDate}</p>
+                        )}
+                      </div>
+                    </div>
+
                     <div className="flex items-center justify-end pt-3 border-t border-slate-100">
                       <Button
                         type="submit"
-                        disabled={isSubmitting}
+                        disabled={isSubmitting || !activeVisit}
                         variant="primary"
                         size="lg"
                         className="font-black px-10 h-14 text-base shadow-sm"
@@ -937,7 +1234,7 @@ export default function DoctorClinicalWorkstationPage() {
                                       className="group relative bg-slate-50 border border-slate-200 rounded-2xl p-2 cursor-pointer hover:border-amber-500 hover:shadow-md transition-all text-right"
                                     >
                                       <div className="w-full h-32 rounded-xl bg-slate-200 overflow-hidden relative mb-1.5">
-                                        <img
+                                        <SecureMedicalImage
                                           src={photo.imageUrl}
                                           alt={photo.title}
                                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
@@ -971,7 +1268,7 @@ export default function DoctorClinicalWorkstationPage() {
                                   className="group relative bg-slate-50 border border-slate-200 rounded-2xl p-2 cursor-pointer hover:border-clinic-500 hover:shadow-md transition-all text-right"
                                 >
                                   <div className="w-full h-32 rounded-xl bg-slate-200 overflow-hidden relative mb-1.5">
-                                    <img
+                                    <SecureMedicalImage
                                       src={visit.prescriptionPhoto.imageUrl}
                                       alt={visit.prescriptionPhoto.title}
                                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
@@ -1075,12 +1372,14 @@ export default function DoctorClinicalWorkstationPage() {
         maxWidth="xl"
       >
         <div className="space-y-4 text-center">
-          <div className="w-full max-h-[70vh] rounded-2xl overflow-hidden bg-slate-950 flex items-center justify-center p-2">
-            <img
-              src={previewPhoto?.imageUrl}
-              alt={previewPhoto?.title}
-              className="max-h-[60vh] max-w-full object-contain rounded-xl"
-            />
+          <div className="w-full min-h-[220px] max-h-[70vh] rounded-2xl overflow-hidden bg-slate-950 flex items-center justify-center p-2">
+            {previewPhoto && (
+              <SecureMedicalImage
+                src={previewPhoto.imageUrl}
+                alt={previewPhoto.title}
+                className="max-h-[60vh] max-w-full object-contain rounded-xl"
+              />
+            )}
           </div>
           {previewPhoto?.notes && (
             <p className="text-xs font-semibold text-slate-700 bg-slate-50 p-3 rounded-xl border border-slate-200">

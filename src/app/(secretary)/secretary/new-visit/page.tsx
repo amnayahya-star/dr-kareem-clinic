@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 import { MOCK_PATIENT_FILES, PatientFile, VisitRecord, MedicalPhoto } from "@/lib/mock-data/patients";
 import { fetchPatients } from "@/services/patientService";
-import { createVisitRecord } from "@/services/visitService";
+import { createVisitRecord, validateMeasurements } from "@/services/visitService";
 import { notifySecretarySavedVisit } from "@/services/notificationService";
 import { useLanguage } from "@/context/LanguageContext";
 import { calculateArabicAge, formatArabicDate } from "@/lib/utils";
@@ -26,6 +26,10 @@ import {
   Ruler,
   Plus,
   Eye,
+  ShieldAlert,
+  Wind,
+  HeartPulse,
+  Stethoscope,
 } from "lucide-react";
 
 function NewVisitContent() {
@@ -55,10 +59,15 @@ function NewVisitContent() {
 
   const selectedPatient = patients.find((p) => p.id === selectedPatientId) || patients[0];
 
-  // Secretary Only Enters Vitals
+  // Secretary Enters Chief Complaint and Vitals
+  const [chiefComplaint, setChiefComplaint] = useState("");
   const [weightKg, setWeightKg] = useState("");
   const [temperatureC, setTemperatureC] = useState("");
   const [heightCm, setHeightCm] = useState("");
+  const [oxygenSaturation, setOxygenSaturation] = useState("");
+  const [bloodPressure, setBloodPressure] = useState("");
+  const [validationErrors, setValidationErrors] = useState<{ [key: string]: string }>({});
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Multiple Lab Photos State
   const [uploadedPhotos, setUploadedPhotos] = useState<MedicalPhoto[]>([]);
@@ -135,14 +144,32 @@ function NewVisitContent() {
   // Submit & Save Visit
   const handleSaveVisit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSaveError(null);
+
+    const mValidation = validateMeasurements({
+      weightKg: weightKg ? parseFloat(weightKg) : undefined,
+      heightCm: heightCm ? parseFloat(heightCm) : undefined,
+      temperatureC: temperatureC ? parseFloat(temperatureC) : undefined,
+      bloodPressure: bloodPressure.trim() ? bloodPressure.trim() : undefined,
+      oxygenSaturation: oxygenSaturation ? parseFloat(oxygenSaturation) : undefined,
+    });
+
+    if (!mValidation.isValid) {
+      setSaveError(mValidation.error || "يرجى التأكد من صحة القياسات المدخلة");
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
       const createdVisit = await createVisitRecord({
         patientId: selectedPatient.id,
+        chiefComplaint: chiefComplaint.trim() ? chiefComplaint.trim() : undefined,
         weightKg: weightKg ? parseFloat(weightKg) : undefined,
         heightCm: heightCm ? parseFloat(heightCm) : undefined,
         temperatureC: temperatureC ? parseFloat(temperatureC) : undefined,
+        bloodPressure: bloodPressure.trim() ? bloodPressure.trim() : undefined,
+        oxygenSaturation: oxygenSaturation ? parseFloat(oxygenSaturation) : undefined,
         labPhotoFiles: uploadedFiles,
       });
 
@@ -165,7 +192,7 @@ function NewVisitContent() {
       setPatients(patients.map((p) => (p.id === selectedPatient.id ? updatedPatient : p)));
       setIsSuccess(true);
     } catch (err: any) {
-      alert(language === "ar" ? `فشل حفظ الزيارة: ${err.message}` : `Failed to save visit: ${err.message}`);
+      setSaveError(err.message || (language === "ar" ? "فشل حفظ الزيارة" : "Failed to save visit"));
     } finally {
       setIsSubmitting(false);
     }
@@ -202,11 +229,15 @@ function NewVisitContent() {
               size="lg"
               onClick={() => {
                 setIsSuccess(false);
+                setChiefComplaint("");
                 setWeightKg("");
                 setHeightCm("");
                 setTemperatureC("");
+                setOxygenSaturation("");
+                setBloodPressure("");
                 setUploadedPhotos([]);
                 setUploadedFiles([]);
+                setSaveError(null);
               }}
               className="font-bold gap-2"
             >
@@ -223,6 +254,13 @@ function NewVisitContent() {
         </Card>
       ) : (
         <form onSubmit={handleSaveVisit} className="space-y-6">
+          {saveError && (
+            <div className="p-4 bg-rose-50 border border-rose-200 text-rose-900 rounded-2xl text-xs font-bold flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{saveError}</span>
+            </div>
+          )}
+
           {/* Header Card: Patient Information */}
           <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
@@ -275,7 +313,25 @@ function NewVisitContent() {
             )}
           </div>
 
-          {/* Section 1: Vital Signs */}
+          {/* Section 1: Chief Complaint */}
+          <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-3">
+            <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+              <Stethoscope className="w-5 h-5 text-clinic-600" />
+              <span>{language === "ar" ? "سبب الزيارة والشكوى الرئيسية" : "Chief Complaint & Reason for Visit"}</span>
+            </h3>
+            <p className="text-xs text-slate-500">
+              {language === "ar" ? "تسجيل الأعراض أو سبب قدوم الطفل للاستشارة (اختياري)" : "Record symptoms or reason for visit (optional)"}
+            </p>
+            <input
+              type="text"
+              placeholder={language === "ar" ? "مثال: حمى وسعال منذ يومين، فحص دوري، مغص متكرر..." : "e.g. Fever, cough, routine checkup..."}
+              value={chiefComplaint}
+              onChange={(e) => setChiefComplaint(e.target.value)}
+              className="w-full h-12 px-4 rounded-xl border border-slate-300 text-sm font-bold text-slate-900 outline-none focus:border-clinic-500 focus:ring-2 focus:ring-clinic-100 bg-slate-50 focus:bg-white transition-all"
+            />
+          </div>
+
+          {/* Section 2: Vital Signs */}
           <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4">
             <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
               <Activity className="w-5 h-5 text-clinic-600" />
@@ -293,7 +349,6 @@ function NewVisitContent() {
                   <input
                     type="number"
                     step="0.05"
-                    required
                     placeholder="14.5"
                     value={weightKg}
                     onChange={(e) => setWeightKg(e.target.value)}
@@ -313,7 +368,6 @@ function NewVisitContent() {
                   <input
                     type="number"
                     step="0.1"
-                    required
                     placeholder="38.5"
                     value={temperatureC}
                     onChange={(e) => setTemperatureC(e.target.value)}
@@ -339,6 +393,52 @@ function NewVisitContent() {
                     className="w-full h-14 px-3 rounded-xl border border-slate-300 text-xl font-black text-slate-900 text-center outline-none focus:border-clinic-500 focus:ring-2 focus:ring-clinic-100 bg-white"
                   />
                   <span className={`absolute ${isRTL ? "left-3" : "right-3"} top-4 text-xs text-slate-400 font-bold`}>{t("cm")}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Additional Vitals: Oxygen Saturation & Blood Pressure */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+              {/* Oxygen Saturation */}
+              <div className="p-5 rounded-2xl bg-sky-50/50 border border-sky-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-sky-900">
+                    {language === "ar" ? "تشبع الأكسجين (SpO₂)" : "Oxygen Saturation (SpO₂)"}
+                  </label>
+                  <Wind className="w-4 h-4 text-sky-600" />
+                </div>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="1"
+                    min="0"
+                    max="100"
+                    placeholder="98"
+                    value={oxygenSaturation}
+                    onChange={(e) => setOxygenSaturation(e.target.value)}
+                    className="w-full h-14 px-3 rounded-xl border border-sky-300 text-xl font-black text-sky-900 text-center outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 bg-white"
+                  />
+                  <span className={`absolute ${isRTL ? "left-3" : "right-3"} top-4 text-xs text-sky-500 font-bold`}>%</span>
+                </div>
+              </div>
+
+              {/* Blood Pressure */}
+              <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-700">
+                    {language === "ar" ? "ضغط الدم (اختياري)" : "Blood Pressure (Optional)"}
+                  </label>
+                  <HeartPulse className="w-4 h-4 text-clinic-600" />
+                </div>
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="110/70"
+                    value={bloodPressure}
+                    onChange={(e) => setBloodPressure(e.target.value)}
+                    className="w-full h-14 px-3 rounded-xl border border-slate-300 text-xl font-black text-slate-900 text-center outline-none focus:border-clinic-500 focus:ring-2 focus:ring-clinic-100 bg-white"
+                  />
+                  <span className={`absolute ${isRTL ? "left-3" : "right-3"} top-4 text-xs text-slate-400 font-bold`}>mmHg</span>
                 </div>
               </div>
             </div>
