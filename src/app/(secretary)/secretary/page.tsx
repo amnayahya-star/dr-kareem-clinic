@@ -60,11 +60,12 @@ import {
 
 export default function SecretaryPureWorkflowPage() {
   const { language, t, isRTL } = useLanguage();
-  const [patients, setPatients] = useState<PatientFile[]>(MOCK_PATIENT_FILES);
+  const [patients, setPatients] = useState<PatientFile[]>([]);
   const [deletedPatients, setDeletedPatients] = useState<PatientFile[]>([]);
   const [activeTabMode, setActiveTabMode] = useState<"active" | "recycle_bin">("active");
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Real-time notifications for Doctor Approvals
   const [activeAlert, setActiveAlert] = useState<ClinicNotification | null>(null);
@@ -104,17 +105,18 @@ export default function SecretaryPureWorkflowPage() {
   useEffect(() => {
     async function loadData() {
       setIsLoading(true);
+      setLoadError(null);
       try {
         const [activeData, deletedData] = await Promise.all([
           fetchPatients(),
           fetchDeletedPatients(),
         ]);
-        if (activeData && activeData.length > 0) {
-          setPatients(activeData);
-        }
-        setDeletedPatients(deletedData);
-      } catch (err) {
+        setPatients(activeData || []);
+        setDeletedPatients(deletedData || []);
+      } catch (err: any) {
         console.error("Error loading patients:", err);
+        setLoadError(err.message || "حدث خطأ أثناء تحميل بيانات المرضى");
+        setPatients([]);
       } finally {
         setIsLoading(false);
       }
@@ -438,6 +440,14 @@ export default function SecretaryPureWorkflowPage() {
         </div>
       )}
 
+      {/* Error alert banner if loading failed */}
+      {loadError && (
+        <div className="p-4 bg-rose-50 border border-rose-200 text-rose-900 rounded-2xl text-xs font-bold flex items-center gap-2">
+          <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0" />
+          <span>{loadError}</span>
+        </div>
+      )}
+
       {/* 1. Header Title & Add Patient Action */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -479,7 +489,7 @@ export default function SecretaryPureWorkflowPage() {
           <div>
             <span className="text-xs font-bold text-[#697A8D] block">مواعيد اليوم</span>
             <span className="text-2xl sm:text-3xl font-black text-[#0A1E33] block mt-1">
-              {patients.filter((p) => p.visits.some((v) => v.date === new Date().toISOString().split("T")[0])).length || 12}
+              {patients.filter((p) => p.visits.some((v) => v.date === todayStr)).length}
             </span>
             <span className="text-[10px] text-[#8DA4B8] font-medium block mt-0.5">اليوم</span>
           </div>
@@ -493,7 +503,7 @@ export default function SecretaryPureWorkflowPage() {
           <div>
             <span className="text-xs font-bold text-[#697A8D] block">في الانتظار</span>
             <span className="text-2xl sm:text-3xl font-black text-[#F59E0B] block mt-1">
-              {pendingNotifications.length > 0 ? pendingNotifications.length : 4}
+              {patients.filter((p) => p.visits.some((v) => (v.status === "waiting" || v.status === "in_progress") && v.date === todayStr)).length}
             </span>
             <span className="text-[10px] text-[#8DA4B8] font-medium block mt-0.5">الآن</span>
           </div>
@@ -507,7 +517,7 @@ export default function SecretaryPureWorkflowPage() {
           <div>
             <span className="text-xs font-bold text-[#697A8D] block">زيارات مكتملة</span>
             <span className="text-2xl sm:text-3xl font-black text-[#0A1E33] block mt-1">
-              8
+              {patients.flatMap((p) => p.visits).filter((v) => v.status === "completed" && v.date === todayStr).length}
             </span>
             <span className="text-[10px] text-[#8DA4B8] font-medium block mt-0.5">اليوم</span>
           </div>
@@ -636,14 +646,16 @@ export default function SecretaryPureWorkflowPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#F1F5F7] font-bold">
-                    {filteredPatientsWithVisits.slice(0, 8).map((patient, index) => {
+                    {filteredPatientsWithVisits.map((patient) => {
                       const latestV = patient.visits[0];
                       const statusBadge =
-                        index === 0
+                        latestV?.status === "waiting"
                           ? { label: "بانتظار الطبيب", bg: "bg-amber-50 text-amber-700 border-amber-200" }
-                          : index === 1
-                          ? { label: "تم تسجيل الوصول", bg: "bg-teal-50 text-teal-700 border-teal-200" }
-                          : { label: "موعد مؤكد", bg: "bg-emerald-50 text-emerald-700 border-emerald-200" };
+                          : latestV?.status === "in_progress"
+                          ? { label: "قيد الفحص", bg: "bg-sky-50 text-sky-700 border-sky-200" }
+                          : latestV?.status === "completed"
+                          ? { label: "مكتمل", bg: "bg-emerald-50 text-emerald-700 border-emerald-200" }
+                          : { label: "مسجل", bg: "bg-slate-50 text-slate-700 border-slate-200" };
 
                       return (
                         <tr
@@ -663,7 +675,7 @@ export default function SecretaryPureWorkflowPage() {
                             {patient.guardianName}
                           </td>
                           <td className="py-3.5 font-mono text-[#697A8D]">
-                            {latestV ? "10:30 ص" : "11:15 ص"}
+                            {latestV ? (language === "ar" ? formatArabicDate(latestV.date) : latestV.date) : "--"}
                           </td>
                           <td className="py-3.5">
                             <span
@@ -699,53 +711,39 @@ export default function SecretaryPureWorkflowPage() {
                 <h3 className="text-base font-black text-[#0A1E33]">قائمة الانتظار</h3>
               </div>
               <span className="text-[10px] font-bold bg-[#E8F2F2] text-[#147D7A] px-2 py-0.5 rounded-full">
-                3 بالانتظار
+                {patients.filter((p) => p.visits.some((v) => (v.status === "waiting" || v.status === "in_progress") && v.date === todayStr)).length} بالانتظار
               </span>
             </div>
 
             {/* Queue Cards */}
             <div className="space-y-2.5">
-              {/* Ticket 1 */}
-              <div className="p-3.5 rounded-xl border border-[#E5EBF0] hover:border-[#147D7A] bg-[#FAFCFD] transition-all flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                    <span className="text-xs font-black text-[#0A1E33]">طفل في الانتظار</span>
-                  </div>
-                  <span className="text-[10px] text-[#8DA4B8] block mt-1">منتظر منذ 12 دقيقة</span>
+              {patients.filter((p) => p.visits.some((v) => (v.status === "waiting" || v.status === "in_progress") && v.date === todayStr)).length === 0 ? (
+                <div className="text-center py-8 text-xs text-slate-400 space-y-1">
+                  <Clock className="w-8 h-8 text-slate-300 mx-auto" />
+                  <p className="font-bold text-slate-500">لا يوجد أطفال بالانتظار حالياً</p>
                 </div>
-                <span className="font-mono text-xs font-black text-[#147D7A] bg-[#E8F2F2] px-2 py-1 rounded-lg">
-                  Q-001
-                </span>
-              </div>
-
-              {/* Ticket 2 */}
-              <div className="p-3.5 rounded-xl border border-[#E5EBF0] hover:border-[#147D7A] bg-[#FAFCFD] transition-all flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-amber-500" />
-                    <span className="text-xs font-black text-[#0A1E33]">طفل في الانتظار</span>
-                  </div>
-                  <span className="text-[10px] text-[#8DA4B8] block mt-1">منتظر منذ 7 دقائق</span>
-                </div>
-                <span className="font-mono text-xs font-black text-[#147D7A] bg-[#E8F2F2] px-2 py-1 rounded-lg">
-                  Q-002
-                </span>
-              </div>
-
-              {/* Ticket 3 */}
-              <div className="p-3.5 rounded-xl border border-[#E5EBF0] hover:border-[#147D7A] bg-[#FAFCFD] transition-all flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                    <span className="text-xs font-black text-[#0A1E33]">طفل في الانتظار</span>
-                  </div>
-                  <span className="text-[10px] text-[#8DA4B8] block mt-1">منتظر منذ 2 دقيقة</span>
-                </div>
-                <span className="font-mono text-xs font-black text-[#147D7A] bg-[#E8F2F2] px-2 py-1 rounded-lg">
-                  Q-003
-                </span>
-              </div>
+              ) : (
+                patients
+                  .filter((p) => p.visits.some((v) => (v.status === "waiting" || v.status === "in_progress") && v.date === todayStr))
+                  .map((patient, qIdx) => (
+                    <div
+                      key={patient.id}
+                      onClick={() => setActivePatientId(patient.id)}
+                      className="p-3.5 rounded-xl border border-[#E5EBF0] hover:border-[#147D7A] bg-[#FAFCFD] hover:bg-white transition-all flex items-center justify-between cursor-pointer"
+                    >
+                      <div className="min-w-0 pr-1">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+                          <span className="text-xs font-black text-[#0A1E33] truncate">{patient.fullName}</span>
+                        </div>
+                        <span className="text-[10px] text-[#8DA4B8] block mt-1 font-mono">{patient.fileNumber} | {patient.guardianName}</span>
+                      </div>
+                      <span className="font-mono text-xs font-black text-[#147D7A] bg-[#E8F2F2] px-2 py-1 rounded-lg shrink-0">
+                        #{qIdx + 1}
+                      </span>
+                    </div>
+                  ))
+              )}
             </div>
 
             {/* Footer Link */}
@@ -754,7 +752,7 @@ export default function SecretaryPureWorkflowPage() {
                 href="/secretary/new-visit"
                 className="inline-flex items-center gap-1.5 text-xs font-bold text-[#147D7A] hover:underline"
               >
-                <span>عرض الكل</span>
+                <span>+ فتح زيارة جديدة</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             </div>

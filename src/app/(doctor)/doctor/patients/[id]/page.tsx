@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Input, Textarea } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
-import { MOCK_PATIENT_FILES, PatientFile } from "@/lib/mock-data/patients";
+import { PatientFile } from "@/lib/mock-data/patients";
 import { fetchPatientById, updatePatientRecord, UpdatePatientInput } from "@/services/patientService";
 import {
   calculateArabicAge,
@@ -112,10 +112,7 @@ export default function PatientMedicalFilePage() {
           setPatient(data);
           populateEditForm(data);
         } else {
-          // Fallback to first mock patient
-          const fallback = MOCK_PATIENT_FILES[0];
-          setPatient(fallback);
-          populateEditForm(fallback);
+          setPatient(null);
         }
       } catch (err: any) {
         setLoadError(err.message || "حدث خطأ أثناء تحميل ملف الطفل");

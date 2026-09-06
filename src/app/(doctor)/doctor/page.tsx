@@ -124,9 +124,12 @@ function SecureMedicalImage({
 
 export default function DoctorClinicalWorkstationPage() {
   const { language, t, isRTL } = useLanguage();
-  const [patients, setPatients] = useState<PatientFile[]>(MOCK_PATIENT_FILES);
+  const [patients, setPatients] = useState<PatientFile[]>(
+    isSupabaseConfigured() ? [] : MOCK_PATIENT_FILES
+  );
   const [searchQuery, setSearchQuery] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(isSupabaseConfigured());
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Date Filter State ('all' | 'today' | 'yesterday' | 'custom')
   const [dateFilterMode, setDateFilterMode] = useState<"all" | "today" | "yesterday" | "custom">("all");
@@ -165,14 +168,15 @@ export default function DoctorClinicalWorkstationPage() {
     let previousPatientCount = 0;
 
     async function loadData() {
+      setIsLoading(true);
+      setLoadError(null);
       try {
         const data = await fetchPatients();
-        if (data && data.length > 0) {
-          setPatients(data);
-          previousPatientCount = data.length;
-        }
-      } catch (err) {
+        setPatients(data);
+        previousPatientCount = data.length;
+      } catch (err: any) {
         console.error("Error loading doctor data:", err);
+        setLoadError(err?.message || (language === "ar" ? "تعذر تحميل بيانات الأطفال من الخادم" : "Failed to load patients from server"));
       } finally {
         setIsLoading(false);
       }
@@ -192,9 +196,12 @@ export default function DoctorClinicalWorkstationPage() {
       if (notif.type === "new_patient_arrived") {
         playNotificationChime("high");
         setActiveArrivalAlert(notif);
-        fetchPatients().then((data) => {
-          if (data && data.length > 0) setPatients(data);
-        });
+        fetchPatients()
+          .then((data) => {
+            setPatients(data);
+            previousPatientCount = data.length;
+          })
+          .catch((err) => console.error("Error refreshing doctor data on alert:", err));
       }
     });
 
@@ -202,27 +209,25 @@ export default function DoctorClinicalWorkstationPage() {
     const interval = setInterval(async () => {
       try {
         const latestData = await fetchPatients();
-        if (latestData && latestData.length > 0) {
-          // إذا تمت إضافة طفل جديد أو زيارة جديدة لم تكن موجودة
-          if (previousPatientCount > 0 && latestData.length > previousPatientCount) {
-            const newestChild = latestData[0];
-            const newestVisit = newestChild.visits[0];
-            playNotificationChime("high");
-            setActiveArrivalAlert({
-              id: `arrival-${Date.now()}`,
-              type: "new_patient_arrived",
-              patientId: newestChild.id,
-              childName: newestChild.fullName,
-              weightKg: newestVisit?.weightKg,
-              temperatureC: newestVisit?.temperatureC,
-              labPhotosCount: newestVisit?.labPhotos?.length || 0,
-              timestamp: new Date().toISOString(),
-              isRead: false,
-            });
-          }
-          previousPatientCount = latestData.length;
-          setPatients(latestData);
+        // إذا تمت إضافة طفل جديد أو زيارة جديدة لم تكن موجودة
+        if (previousPatientCount > 0 && latestData.length > previousPatientCount) {
+          const newestChild = latestData[0];
+          const newestVisit = newestChild?.visits?.[0];
+          playNotificationChime("high");
+          setActiveArrivalAlert({
+            id: `arrival-${Date.now()}`,
+            type: "new_patient_arrived",
+            patientId: newestChild.id,
+            childName: newestChild.fullName,
+            weightKg: newestVisit?.weightKg,
+            temperatureC: newestVisit?.temperatureC,
+            labPhotosCount: newestVisit?.labPhotos?.length || 0,
+            timestamp: new Date().toISOString(),
+            isRead: false,
+          });
         }
+        previousPatientCount = latestData.length;
+        setPatients(latestData);
       } catch (e) {
         // silent sync
       }
@@ -232,7 +237,7 @@ export default function DoctorClinicalWorkstationPage() {
       unsubscribe();
       clearInterval(interval);
     };
-  }, []);
+  }, [language]);
 
   // Active Selected Child and Active Visit derivations
   const activePatient = useMemo(
@@ -478,6 +483,22 @@ export default function DoctorClinicalWorkstationPage() {
               <X className="w-5 h-5" />
             </button>
           </div>
+        </div>
+      )}
+
+      {/* تنبيه خطأ تحميل البيانات من الخادم */}
+      {loadError && (
+        <div className="bg-rose-50 border-2 border-rose-200 text-rose-800 p-4 rounded-2xl flex items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-3">
+            <ShieldAlert className="w-5 h-5 text-rose-600 shrink-0" />
+            <p className="text-xs sm:text-sm font-bold">{loadError}</p>
+          </div>
+          <button
+            onClick={() => setLoadError(null)}
+            className="text-rose-500 hover:text-rose-700 text-xs font-bold"
+          >
+            {t("close")}
+          </button>
         </div>
       )}
 

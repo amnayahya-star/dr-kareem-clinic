@@ -10,6 +10,7 @@ import { MOCK_PATIENT_FILES, PatientFile, VisitRecord, MedicalPhoto } from "@/li
 import { fetchPatients } from "@/services/patientService";
 import { createVisitRecord, validateMeasurements } from "@/services/visitService";
 import { notifySecretarySavedVisit } from "@/services/notificationService";
+import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { useLanguage } from "@/context/LanguageContext";
 import { calculateArabicAge, formatArabicDate } from "@/lib/utils";
 import {
@@ -30,34 +31,50 @@ import {
   Wind,
   HeartPulse,
   Stethoscope,
+  UserPlus,
 } from "lucide-react";
 
 function NewVisitContent() {
   const { language, t, isRTL } = useLanguage();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const patientIdParam = searchParams.get("patientId") || "p-001";
+  const patientIdParam = searchParams.get("patientId") || "";
 
-  const [patients, setPatients] = useState<PatientFile[]>(MOCK_PATIENT_FILES);
+  const [patients, setPatients] = useState<PatientFile[]>(
+    isSupabaseConfigured() ? [] : MOCK_PATIENT_FILES
+  );
   const [selectedPatientId, setSelectedPatientId] = useState<string>(patientIdParam);
+  const [isLoading, setIsLoading] = useState(isSupabaseConfigured());
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Load patients from Database
   useEffect(() => {
     async function load() {
-      const data = await fetchPatients();
-      if (data && data.length > 0) {
+      setIsLoading(true);
+      setLoadError(null);
+      try {
+        const data = await fetchPatients();
         setPatients(data);
-        if (patientIdParam && data.some((p) => p.id === patientIdParam)) {
-          setSelectedPatientId(patientIdParam);
+        if (data.length > 0) {
+          if (patientIdParam && data.some((p) => p.id === patientIdParam)) {
+            setSelectedPatientId(patientIdParam);
+          } else {
+            setSelectedPatientId(data[0].id);
+          }
         } else {
-          setSelectedPatientId(data[0].id);
+          setSelectedPatientId("");
         }
+      } catch (err: any) {
+        console.error("Error loading patients in new-visit:", err);
+        setLoadError(err?.message || (language === "ar" ? "تعذر تحميل بيانات الأطفال" : "Failed to load patients"));
+      } finally {
+        setIsLoading(false);
       }
     }
     load();
-  }, [patientIdParam]);
+  }, [patientIdParam, language]);
 
-  const selectedPatient = patients.find((p) => p.id === selectedPatientId) || patients[0];
+  const selectedPatient = patients.find((p) => p.id === selectedPatientId) || null;
 
   // Secretary Enters Chief Complaint and Vitals
   const [chiefComplaint, setChiefComplaint] = useState("");
@@ -146,6 +163,13 @@ function NewVisitContent() {
     e.preventDefault();
     setSaveError(null);
 
+    if (!selectedPatient) {
+      setSaveError(language === "ar" ? "يرجى اختيار طفل لتسجيل الزيارة" : "Please select a patient");
+      return;
+    }
+
+    const activeChild = selectedPatient;
+
     const mValidation = validateMeasurements({
       weightKg: weightKg ? parseFloat(weightKg) : undefined,
       heightCm: heightCm ? parseFloat(heightCm) : undefined,
@@ -163,7 +187,7 @@ function NewVisitContent() {
 
     try {
       const createdVisit = await createVisitRecord({
-        patientId: selectedPatient.id,
+        patientId: activeChild.id,
         chiefComplaint: chiefComplaint.trim() ? chiefComplaint.trim() : undefined,
         weightKg: weightKg ? parseFloat(weightKg) : undefined,
         heightCm: heightCm ? parseFloat(heightCm) : undefined,
@@ -174,22 +198,22 @@ function NewVisitContent() {
       });
 
       const updatedPatient: PatientFile = {
-        ...selectedPatient,
-        visits: [createdVisit, ...selectedPatient.visits],
-        allLabPhotos: [...createdVisit.labPhotos, ...selectedPatient.allLabPhotos],
+        ...activeChild,
+        visits: [createdVisit, ...activeChild.visits],
+        allLabPhotos: [...createdVisit.labPhotos, ...activeChild.allLabPhotos],
       };
 
       // إرسال إشعار فوري في نفس اللحظة لشاشة الطبيب
       notifySecretarySavedVisit({
         visitId: createdVisit.id,
-        patientId: selectedPatient.id,
-        childName: selectedPatient.fullName,
+        patientId: activeChild.id,
+        childName: activeChild.fullName,
         weightKg: createdVisit.weightKg,
         temperatureC: createdVisit.temperatureC,
         labPhotosCount: createdVisit.labPhotos?.length || 0,
       });
 
-      setPatients(patients.map((p) => (p.id === selectedPatient.id ? updatedPatient : p)));
+      setPatients(patients.map((p) => (p.id === activeChild.id ? updatedPatient : p)));
       setIsSuccess(true);
     } catch (err: any) {
       setSaveError(err.message || (language === "ar" ? "فشل حفظ الزيارة" : "Failed to save visit"));
@@ -211,7 +235,44 @@ function NewVisitContent() {
         </Link>
       </div>
 
-      {isSuccess ? (
+      {isLoading ? (
+        <Card className="text-center py-16 space-y-3 bg-white border-slate-200 shadow-sm">
+          <div className="w-10 h-10 border-4 border-clinic-600 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-xs font-bold text-slate-600">
+            {language === "ar" ? "جاري تحميل بيانات الأطفال..." : "Loading patients..."}
+          </p>
+        </Card>
+      ) : loadError ? (
+        <Card className="text-center py-12 space-y-4 bg-white border-rose-200 shadow-sm">
+          <ShieldAlert className="w-12 h-12 text-rose-500 mx-auto" />
+          <h3 className="text-lg font-black text-rose-900">{loadError}</h3>
+          <Link href="/secretary">
+            <Button variant="outline">{t("backToReception")}</Button>
+          </Link>
+        </Card>
+      ) : !selectedPatient ? (
+        <Card className="text-center py-16 space-y-4 bg-white border-slate-200 shadow-sm">
+          <div className="w-16 h-16 rounded-full bg-amber-50 text-amber-600 mx-auto flex items-center justify-center">
+            <AlertTriangle className="w-8 h-8" />
+          </div>
+          <h3 className="text-xl font-black text-slate-900">
+            {language === "ar" ? "لا يوجد أطفال مسجلون في المنظومة" : "No registered children found"}
+          </h3>
+          <p className="text-xs text-slate-500 max-w-md mx-auto">
+            {language === "ar"
+              ? "لتسجيل زيارة وفحص جديد، يرجى فتح ملف طبي جديد للطفل أولاً."
+              : "To record a new visit, please create a patient file first."}
+          </p>
+          <div className="pt-2">
+            <Link href="/secretary/new-patient">
+              <Button variant="primary" size="lg" className="font-bold gap-2">
+                <UserPlus className="w-5 h-5" />
+                <span>{language === "ar" ? "تسجيل طفل جديد" : "Register New Child"}</span>
+              </Button>
+            </Link>
+          </div>
+        </Card>
+      ) : isSuccess ? (
         <Card className="text-center py-12 space-y-4 bg-white border-emerald-200 shadow-sm">
           <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 mx-auto flex items-center justify-center">
             <CheckCircle2 className="w-10 h-10" />

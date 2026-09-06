@@ -90,7 +90,19 @@ export function validateFollowUpDate(dateStr?: string | null): { isValid: boolea
     return { isValid: true };
   }
 
-  const selectedDate = new Date(dateStr);
+  // Parse YYYY-MM-DD safely in local time
+  const parts = dateStr.trim().split("-");
+  let selectedDate: Date;
+  if (parts.length === 3) {
+    const [y, m, d] = parts.map(Number);
+    if (isNaN(y) || isNaN(m) || isNaN(d)) {
+      return { isValid: false, error: "تاريخ المراجعة غير صحيح" };
+    }
+    selectedDate = new Date(y, m - 1, d);
+  } else {
+    selectedDate = new Date(dateStr);
+  }
+
   if (isNaN(selectedDate.getTime())) {
     return { isValid: false, error: "تاريخ المراجعة غير صحيح" };
   }

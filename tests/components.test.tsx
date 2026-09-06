@@ -5,15 +5,18 @@ import { Button } from '../src/components/ui/Button';
 import { Badge } from '../src/components/ui/Badge';
 import { Alert } from '../src/components/ui/Alert';
 import DoctorClinicalWorkstationPage from '../src/app/(doctor)/doctor/page';
+import SecretaryPureWorkflowPage from '../src/app/(secretary)/secretary/page';
 import { LanguageProvider } from '../src/context/LanguageContext';
 import { PatientFile } from '../src/lib/mock-data/patients';
 
 // Mock dependencies
 const mockFetchPatients = vi.fn();
+const mockFetchDeletedPatients = vi.fn().mockResolvedValue([]);
 const mockSaveDoctorDiagnosis = vi.fn();
 
 vi.mock('../src/services/patientService', () => ({
   fetchPatients: () => mockFetchPatients(),
+  fetchDeletedPatients: () => mockFetchDeletedPatients(),
 }));
 
 vi.mock('../src/services/visitService', async (importOriginal) => {
@@ -289,5 +292,56 @@ describe('Doctor Workstation Clinical Form State & Hydration', () => {
 
     // Form inputs should not be rendered
     expect(screen.queryByLabelText(/التشخيص الطبي النهائي/i)).not.toBeInTheDocument();
+  });
+
+  it('renders clean empty state on Doctor Workstation when patients array is empty (no mock data)', async () => {
+    mockFetchPatients.mockResolvedValueOnce([]);
+
+    renderDoctorPage();
+
+    await waitFor(() => {
+      expect(screen.getByText(/لا يوجد أطفال يطابقون البحث/i)).toBeInTheDocument();
+    });
+
+    // Verify mock patients are NOT rendered
+    expect(screen.queryByText('أحمد علي')).not.toBeInTheDocument();
+    expect(screen.queryByText('يوسف أحمد العلي')).not.toBeInTheDocument();
+    expect(screen.queryByText('P-1001')).not.toBeInTheDocument();
+    expect(screen.queryByText('P-1002')).not.toBeInTheDocument();
+  });
+});
+
+describe('Secretary Page Empty State & Dynamic Metrics', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFetchPatients.mockResolvedValue([]);
+    mockFetchDeletedPatients.mockResolvedValue([]);
+  });
+
+  it('renders genuine empty state and zero metrics when no patients exist (never displays mock data)', async () => {
+    render(
+      <LanguageProvider>
+        <SecretaryPureWorkflowPage />
+      </LanguageProvider>
+    );
+
+    await waitFor(() => {
+      // Empty waiting queue state
+      expect(screen.getByText(/لا يوجد أطفال بالانتظار حالياً/i)).toBeInTheDocument();
+      // Empty registered children state
+      expect(screen.getByText(/لا يوجد أطفال يطابقون البحث/i)).toBeInTheDocument();
+    });
+
+    // Verify no mock data files or mock tickets are present
+    expect(screen.queryByText('P-1001')).not.toBeInTheDocument();
+    expect(screen.queryByText('P-1002')).not.toBeInTheDocument();
+    expect(screen.queryByText('Q-001')).not.toBeInTheDocument();
+    expect(screen.queryByText('Q-002')).not.toBeInTheDocument();
+    expect(screen.queryByText('يوسف أحمد العلي')).not.toBeInTheDocument();
+    expect(screen.queryByText('مريم حسن')).not.toBeInTheDocument();
+
+    // Verify metric cards show 0
+    const zeroElements = screen.getAllByText('0');
+    expect(zeroElements.length).toBeGreaterThanOrEqual(3);
   });
 });

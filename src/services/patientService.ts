@@ -298,14 +298,19 @@ export async function fetchPatients(searchQuery?: string): Promise<PatientFile[]
 
     const { data, error } = await query;
 
-    if (error || !data || data.length === 0) {
-      return MOCK_PATIENT_FILES;
+    if (error) {
+      console.error("Error fetching patients from Supabase:", error);
+      throw new Error(`فشل جلب بيانات المرضى: ${error.message}`);
+    }
+
+    if (!data || data.length === 0) {
+      return [];
     }
 
     return data.map(mapSupabaseRowToPatientFile);
   } catch (err) {
     console.error("Error fetching patients from Supabase:", err);
-    return MOCK_PATIENT_FILES;
+    throw err;
   }
 }
 
@@ -335,18 +340,21 @@ export async function fetchPatientById(patientId: string): Promise<PatientFile |
         )
       `)
       .eq("id", patientId)
-      .single();
+      .maybeSingle();
 
-    if (error || !data) {
-      const found = MOCK_PATIENT_FILES.find((p) => p.id === patientId);
-      return found || null;
+    if (error) {
+      console.error("Error fetching patient by id from Supabase:", error);
+      throw new Error(`فشل جلب ملف الطفل: ${error.message}`);
+    }
+
+    if (!data) {
+      return null;
     }
 
     return mapSupabaseRowToPatientFile(data);
   } catch (err) {
     console.error("Error fetching patient by id:", err);
-    const found = MOCK_PATIENT_FILES.find((p) => p.id === patientId);
-    return found || null;
+    throw err;
   }
 }
 

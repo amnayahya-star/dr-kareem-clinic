@@ -146,13 +146,20 @@ describe('Visit & Clinical Examination Service', () => {
   });
 
   describe('Follow-up Date Validation (validateFollowUpDate)', () => {
+    const toLocalDateStr = (d: Date) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
+
     it('accepts valid future date or today', () => {
       const future = new Date();
       future.setDate(future.getDate() + 7);
-      const futureStr = future.toISOString().split('T')[0];
+      const futureStr = toLocalDateStr(future);
       expect(validateFollowUpDate(futureStr).isValid).toBe(true);
 
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = toLocalDateStr(new Date());
       expect(validateFollowUpDate(todayStr).isValid).toBe(true);
     });
 
@@ -165,7 +172,7 @@ describe('Visit & Clinical Examination Service', () => {
     it('rejects dates in the past with clear Arabic error message', () => {
       const past = new Date();
       past.setDate(past.getDate() - 5);
-      const pastStr = past.toISOString().split('T')[0];
+      const pastStr = toLocalDateStr(past);
       const result = validateFollowUpDate(pastStr);
       expect(result.isValid).toBe(false);
       expect(result.error).toContain('الماضي');
