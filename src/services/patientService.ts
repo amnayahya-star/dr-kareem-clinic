@@ -189,6 +189,46 @@ function mapSupabaseRowToPatientFile(row: any): PatientFile {
         }
       : null;
 
+    const rawRx = Array.isArray(v.prescriptions) ? v.prescriptions[0] : (v.prescriptions || v.prescription);
+    let prescriptionObj = null;
+    if (rawRx) {
+      const rxItems = (rawRx.prescription_items || rawRx.items || [])
+        .map((it: any) => ({
+          id: it.id,
+          prescription_id: it.prescription_id || rawRx.id,
+          medication_name: it.medication_name,
+          active_ingredient: it.active_ingredient || null,
+          strength: it.strength || null,
+          dosage_form: it.dosage_form || "syrup",
+          dose: it.dose || null,
+          route: it.route || null,
+          frequency: it.frequency || "3 مرات يومياً",
+          duration: it.duration || "5 أيام",
+          quantity: it.quantity || null,
+          instructions: it.instructions || null,
+          display_order: it.display_order ?? it.sort_order ?? 0,
+          created_at: it.created_at,
+          updated_at: it.updated_at,
+        }))
+        .sort((a: any, b: any) => a.display_order - b.display_order);
+
+      prescriptionObj = {
+        id: rawRx.id,
+        visit_id: v.id,
+        patient_id: row.id,
+        diagnosis_id: rawRx.diagnosis_id || null,
+        doctor_id: rawRx.doctor_id || null,
+        prescribed_by: rawRx.prescribed_by || null,
+        status: rawRx.status || (rawRx.is_approved ? "issued" : "draft"),
+        general_instructions: rawRx.general_instructions || null,
+        issued_at: rawRx.issued_at || rawRx.approved_at || null,
+        cancellation_reason: rawRx.cancellation_reason || null,
+        created_at: rawRx.created_at || v.created_at,
+        updated_at: rawRx.updated_at || v.updated_at,
+        items: rxItems,
+      };
+    }
+
     return {
       id: v.id,
       patientId: row.id,
@@ -212,6 +252,7 @@ function mapSupabaseRowToPatientFile(row: any): PatientFile {
       isCompleted: v.status === "completed",
       labPhotos,
       prescriptionPhoto,
+      prescription: prescriptionObj,
     };
   });
 
@@ -287,7 +328,11 @@ export async function fetchPatients(searchQuery?: string): Promise<PatientFile[]
           *,
           measurements (*),
           diagnoses (*),
-          medical_attachments (*)
+          medical_attachments (*),
+          prescriptions (
+            *,
+            prescription_items (*)
+          )
         )
       `)
       .order("created_at", { ascending: false });
@@ -336,7 +381,11 @@ export async function fetchPatientById(patientId: string): Promise<PatientFile |
           *,
           measurements (*),
           diagnoses (*),
-          medical_attachments (*)
+          medical_attachments (*),
+          prescriptions (
+            *,
+            prescription_items (*)
+          )
         )
       `)
       .eq("id", patientId)

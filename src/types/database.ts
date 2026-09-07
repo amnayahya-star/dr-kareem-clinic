@@ -134,34 +134,48 @@ export interface Diagnosis {
   updated_at: string;
 }
 
+export type PrescriptionStatus = 'draft' | 'issued' | 'cancelled';
+
 export interface PrescriptionItem {
   id: string;
   prescription_id: string;
-  sort_order: number;
   medication_name: string;
+  active_ingredient?: string | null;
   strength?: string | null;
   dosage_form: DosageForm;
-  dose: string;
+  dose?: string | null;
+  route?: string | null;
   frequency: string;
   duration: string;
-  route_or_instructions?: string | null;
-  notes?: string | null;
-  created_at: string;
+  quantity?: string | null;
+  instructions?: string | null;
+  display_order: number;
+  sort_order?: number; // Legacy compatibility
+  route_or_instructions?: string | null; // Legacy compatibility
+  notes?: string | null; // Legacy compatibility
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Prescription {
   id: string;
   visit_id: string;
   patient_id: string;
+  diagnosis_id?: string | null;
   doctor_id?: string | null;
-  prescription_type: 'digital' | 'scanned' | 'both';
+  prescribed_by?: string | null;
+  status: PrescriptionStatus;
+  prescription_type?: 'digital' | 'scanned' | 'both'; // Legacy compatibility
   scanned_image_url?: string | null;
-  is_approved: boolean;
-  approved_at?: string | null;
+  is_approved?: boolean; // Legacy compatibility
+  approved_at?: string | null; // Legacy compatibility
+  issued_at?: string | null;
+  cancellation_reason?: string | null;
   general_instructions?: string | null;
   created_at: string;
   updated_at: string;
   items?: PrescriptionItem[];
+  doctor_name?: string;
 }
 
 export interface MedicalAttachment {

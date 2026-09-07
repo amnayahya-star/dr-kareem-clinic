@@ -1,4 +1,4 @@
-import { Patient, Visit, AuditLog } from "@/types/database";
+import { Patient, Visit, AuditLog, Prescription } from "@/types/database";
 
 export interface MedicalPhoto {
   id: string;
@@ -32,6 +32,7 @@ export interface VisitRecord {
   isCompleted: boolean;
   labPhotos: MedicalPhoto[];
   prescriptionPhoto?: MedicalPhoto | null;
+  prescription?: Prescription | null;
 }
 
 export interface PatientFile {
@@ -450,14 +451,18 @@ export const MOCK_VISITS: Visit[] = [
       id: "rx-001",
       visit_id: "v-001",
       patient_id: "p-001",
+      status: "issued",
       prescription_type: "digital",
       is_approved: true,
+      issued_at: "2026-09-01T10:45:00Z",
+      general_instructions: "الإكثار من السوائل الدافئة والراحة التامة",
       created_at: "2026-09-01T10:35:00Z",
       updated_at: "2026-09-01T10:45:00Z",
       items: [
         {
           id: "rxi-001",
           prescription_id: "rx-001",
+          display_order: 1,
           sort_order: 1,
           medication_name: "Paracetamol Syrup",
           strength: "120mg / 5ml",
@@ -465,6 +470,7 @@ export const MOCK_VISITS: Visit[] = [
           dose: "5 مل",
           frequency: "كل 6 ساعات عند اللزوم",
           duration: "3 أيام",
+          instructions: "بعد الأكل",
           created_at: "2026-09-01T10:35:00Z",
         },
       ],

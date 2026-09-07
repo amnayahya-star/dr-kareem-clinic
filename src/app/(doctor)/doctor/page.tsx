@@ -10,6 +10,7 @@ import { MOCK_PATIENT_FILES, PatientFile, VisitRecord, MedicalPhoto } from "@/li
 import { fetchPatients } from "@/services/patientService";
 import { saveDoctorDiagnosis, getActiveVisit, validateFollowUpDate } from "@/services/visitService";
 import { getSignedPhotoUrl } from "@/services/storageService";
+import { ElectronicPrescriptionSection } from "@/components/prescriptions/ElectronicPrescriptionSection";
 import {
   notifyDoctorApprovedVisit,
   subscribeToClinicNotifications,
@@ -1169,6 +1170,29 @@ export default function DoctorClinicalWorkstationPage() {
                   </div>
                 </form>
               )}
+
+              {/* قسم الوصفة الطبية الإلكترونية للزيارة النشطة */}
+              {activeVisit && (
+                <ElectronicPrescriptionSection
+                  visitId={activeVisit.id}
+                  patientId={activePatient.id}
+                  initialPrescription={activeVisit.prescription}
+                  onPrescriptionChanged={(newRx) => {
+                    setPatients((prev) =>
+                      prev.map((p) =>
+                        p.id === activePatient.id
+                          ? {
+                              ...p,
+                              visits: p.visits.map((v) =>
+                                v.id === activeVisit.id ? { ...v, prescription: newRx || undefined } : v
+                              ),
+                            }
+                          : p
+                      )
+                    );
+                  }}
+                />
+              )}
             </div>
           )}
 
@@ -1343,15 +1367,31 @@ export default function DoctorClinicalWorkstationPage() {
                       <span>{t("visitDay")}: {language === "ar" ? formatArabicDate(v.date) : v.date}</span>
                     </div>
 
-                    {v.prescriptionPhoto && (
-                      <button
-                        onClick={() => v.prescriptionPhoto && setPreviewPhoto(v.prescriptionPhoto)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-clinic-50 text-clinic-800 text-xs font-bold border border-clinic-200 hover:bg-clinic-100"
-                      >
-                        <Pill className="w-3.5 h-3.5 text-clinic-600" />
-                        <span>{t("viewRxPhotoBtn")}</span>
-                      </button>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {v.prescription && (
+                        <Link
+                          href={`/secretary/prescriptions/${v.id}/print`}
+                          target="_blank"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-50 text-teal-800 text-xs font-bold border border-teal-200 hover:bg-teal-100 transition-colors"
+                        >
+                          <Pill className="w-3.5 h-3.5 text-teal-600" />
+                          <span>
+                            {v.prescription.status === "issued"
+                              ? (language === "ar" ? `وصفة إلكترونية صادرة (${v.prescription.items?.length || 0})` : `Issued Rx (${v.prescription.items?.length || 0})`)
+                              : (language === "ar" ? "مسودة وصفة إلكترونية" : "Draft Rx")}
+                          </span>
+                        </Link>
+                      )}
+                      {v.prescriptionPhoto && (
+                        <button
+                          onClick={() => v.prescriptionPhoto && setPreviewPhoto(v.prescriptionPhoto)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-clinic-50 text-clinic-800 text-xs font-bold border border-clinic-200 hover:bg-clinic-100"
+                        >
+                          <Pill className="w-3.5 h-3.5 text-clinic-600" />
+                          <span>{t("viewRxPhotoBtn")}</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-3 gap-2 bg-slate-50 p-3 rounded-2xl text-center text-xs">

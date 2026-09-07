@@ -174,7 +174,8 @@ export default function SecretaryPureWorkflowPage() {
       // 1. Derive from live Supabase patients & visits
       for (const p of patients) {
         for (const v of p.visits) {
-          if (v.status === "completed" && !v.prescriptionPhoto) {
+          const hasIssuedRx = v.prescription && v.prescription.status === "issued";
+          if (v.status === "completed" && !v.prescriptionPhoto && !hasIssuedRx) {
             seenVisitIds.add(v.id);
             list.push({
               id: `rx-pending-${v.id}`,
@@ -932,7 +933,15 @@ export default function SecretaryPureWorkflowPage() {
                               {visit.weightKg && <span>{t("weight")}: {visit.weightKg} {t("kg")}</span>}
                               {visit.temperatureC && <span>{t("temperature")}: {visit.temperatureC} °C</span>}
                               <span>{visit.labPhotos?.length || 0} {t("labPhotosTitle")}</span>
-                              <span>{visit.prescriptionPhoto ? `Rx ✓` : ""}</span>
+                              {visit.prescription?.status === "issued" ? (
+                                <span className="text-teal-700 font-bold bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
+                                  {language === "ar" ? "وصفة إلكترونية ✓" : "E-Prescription ✓"}
+                                </span>
+                              ) : visit.prescriptionPhoto ? (
+                                <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                  Rx ✓
+                                </span>
+                              ) : null}
                             </div>
                           </div>
                         </div>
@@ -952,7 +961,22 @@ export default function SecretaryPureWorkflowPage() {
                       {isExpanded && (
                         <div className="p-5 pt-0 space-y-4 border-t border-slate-200/60 bg-white">
                           <div className="flex flex-wrap items-center justify-between gap-2 pt-4 pb-2 border-b border-slate-100">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {visit.prescription && visit.prescription.status === "issued" && (
+                                <Link
+                                  href={`/secretary/prescriptions/${visit.id}/print`}
+                                  target="_blank"
+                                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-black shadow-xs transition-colors"
+                                >
+                                  <Pill className="w-4 h-4" />
+                                  <span>
+                                    {language === "ar"
+                                      ? `طباعة الوصفة الإلكترونية (${visit.prescription.items?.length || 0} أدوية)`
+                                      : `Print Electronic Rx (${visit.prescription.items?.length || 0} items)`}
+                                  </span>
+                                </Link>
+                              )}
+
                               {visit.prescriptionPhoto ? (
                                 <button
                                   onClick={() => visit.prescriptionPhoto && setPreviewPhoto(visit.prescriptionPhoto)}
@@ -974,7 +998,11 @@ export default function SecretaryPureWorkflowPage() {
                                   className="font-bold text-xs gap-1.5 shadow-sm"
                                 >
                                   <Camera className="w-4 h-4" />
-                                  <span>{t("snapDoctorRx")}</span>
+                                  <span>
+                                    {visit.prescription?.status === "issued"
+                                      ? (language === "ar" ? "تصوير نسخة ورقية (اختياري)" : "Snap Paper Copy (Optional)")
+                                      : t("snapDoctorRx")}
+                                  </span>
                                 </Button>
                               )}
                             </div>

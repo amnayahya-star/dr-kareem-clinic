@@ -638,6 +638,54 @@ export default function PatientMedicalFilePage() {
                   )}
                 </div>
               )}
+
+              {/* Electronic Prescription Section */}
+              {visit.prescription && (
+                <div className="p-3.5 bg-teal-50/70 rounded-2xl border border-teal-200 text-xs space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 font-black text-teal-950">
+                      <Pill className="w-4 h-4 text-teal-600" />
+                      <span>
+                        {visit.prescription.status === "issued"
+                          ? `الوصفة الطبية الإلكترونية الصادرة (${visit.prescription.items?.length || 0} أدوية)`
+                          : "مسودة الوصفة الطبية الإلكترونية"}
+                      </span>
+                    </div>
+                    <Link
+                      href={`/secretary/prescriptions/${visit.id}/print`}
+                      target="_blank"
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-800 bg-white px-2.5 py-1 rounded-lg border border-teal-300 hover:bg-teal-50 transition-colors"
+                    >
+                      <span>طباعة الوصفة</span>
+                    </Link>
+                  </div>
+
+                  {visit.prescription.items && visit.prescription.items.length > 0 && (
+                    <div className="space-y-1.5">
+                      {visit.prescription.items.map((item: any, i: number) => (
+                        <div
+                          key={item.id || i}
+                          className="bg-white p-2 rounded-xl border border-teal-100 flex items-center justify-between text-[11px]"
+                        >
+                          <span className="font-bold text-slate-900">
+                            {i + 1}. {item.medication_name} {item.strength ? `(${item.strength})` : ""}
+                          </span>
+                          <span className="text-slate-600 font-medium">
+                            {item.dose} - {item.frequency} - {item.duration}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {visit.prescription.general_instructions && (
+                    <p className="text-[11px] text-teal-800 pt-0.5">
+                      <strong>تعليمات عامة: </strong>
+                      {visit.prescription.general_instructions}
+                    </p>
+                  )}
+                </div>
+              )}
             </Card>
           ))
         )}
