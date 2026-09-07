@@ -6,6 +6,8 @@ import { Badge } from '../src/components/ui/Badge';
 import { Alert } from '../src/components/ui/Alert';
 import DoctorClinicalWorkstationPage from '../src/app/(doctor)/doctor/page';
 import SecretaryPureWorkflowPage from '../src/app/(secretary)/secretary/page';
+import { ElectronicPrescriptionSection } from '../src/components/prescriptions/ElectronicPrescriptionSection';
+import * as prescriptionService from '../src/services/prescriptionService';
 import { LanguageProvider } from '../src/context/LanguageContext';
 import { PatientFile } from '../src/lib/mock-data/patients';
 
@@ -427,4 +429,129 @@ describe('Secretary Page Empty State & Dynamic Metrics', () => {
     expect(screen.queryByText(/يوسف أحمد العلي/i)).not.toBeInTheDocument();
   });
 });
+
+describe('ElectronicPrescriptionSection (التحقق من رسائل الخطأ والنجاح ومنع الإصدار الناقص)', () => {
+  const mockInitialDraft = {
+    id: 'rx-draft-1',
+    visit_id: 'v-100',
+    patient_id: 'p-100',
+    status: 'draft' as const,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    items: [
+      {
+        id: 'item-1',
+        prescription_id: 'rx-draft-1',
+        medication_name: 'TEST MEDICATION',
+        dosage_form: null,
+        dose: null,
+        frequency: null,
+        duration: null,
+        display_order: 1,
+      },
+    ],
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('displays clear red error mentioning missing fields when trying to issue incomplete draft, does NOT call RPC, and clears old success messages', async () => {
+    const spySave = vi.spyOn(prescriptionService, 'savePrescriptionWithItems');
+
+    render(
+      <LanguageProvider>
+        <ElectronicPrescriptionSection
+          visitId="v-100"
+          patientId="p-100"
+          initialPrescription={mockInitialDraft as any}
+        />
+      </LanguageProvider>
+    );
+
+    // Initial state: badge shows incomplete draft
+    expect(screen.getByText('مسودة غير مكتملة')).toBeInTheDocument();
+
+    // Find "اعتماد وإصدار الوصفة" button and click it
+    const issueBtn = screen.getByRole('button', { name: /اعتماد وإصدار الوصفة/i });
+    fireEvent.click(issueBtn);
+
+    // 1. Error message appears mentioning missing fields and item name
+    await waitFor(() => {
+      const errorAlert = screen.getByTestId('rx-error-alert');
+      expect(errorAlert).toBeInTheDocument();
+      expect(errorAlert.textContent).toContain('لا يمكن إصدار الوصفة: أكمل');
+      expect(errorAlert.textContent).toContain('الشكل الدوائي');
+      expect(errorAlert.textContent).toContain('عدد مرات الاستخدام (التكرار)');
+      expect(errorAlert.textContent).toContain('المدة');
+      expect(errorAlert.textContent).toContain('للدواء رقم 1');
+      expect(errorAlert.textContent).toContain('TEST MEDICATION');
+    });
+
+    // 2. RPC was NOT called on local validation failure
+    expect(spySave).not.toHaveBeenCalled();
+
+    // 3. Status remains draft and badge is still incomplete
+    expect(screen.getByText('مسودة غير مكتملة')).toBeInTheDocument();
+    expect(screen.queryByTestId('rx-success-alert')).not.toBeInTheDocument();
+  });
+
+  it('clears previous green success message immediately when a new issue attempt fails validation', async () => {
+    const spySave = vi.spyOn(prescriptionService, 'savePrescriptionWithItems');
+    spySave.mockResolvedValueOnce({
+      ...mockInitialDraft,
+      items: [
+        {
+          id: 'item-1',
+          prescription_id: 'rx-draft-1',
+          medication_name: 'TEST MEDICATION',
+          dosage_form: null,
+          dose: null,
+          frequency: null,
+          duration: null,
+          display_order: 1,
+        },
+      ],
+    } as any);
+
+    render(
+      <LanguageProvider>
+        <ElectronicPrescriptionSection
+          visitId="v-100"
+          patientId="p-100"
+          initialPrescription={mockInitialDraft as any}
+        />
+      </LanguageProvider>
+    );
+
+    // Click "حفظ كمسودة"
+    const draftBtn = screen.getByRole('button', { name: /حفظ كمسودة/i });
+    fireEvent.click(draftBtn);
+
+    // Success message should appear
+    await waitFor(() => {
+      expect(screen.getByTestId('rx-success-alert')).toBeInTheDocument();
+      expect(screen.getByText('تم حفظ مسودة الوصفة الطبية بنجاح')).toBeInTheDocument();
+    });
+
+    // Now click "اعتماد وإصدار الوصفة" with incomplete fields
+    const issueBtn = screen.getByRole('button', { name: /اعتماد وإصدار الوصفة/i });
+    fireEvent.click(issueBtn);
+
+    // 1. Success alert MUST disappear immediately
+    await waitFor(() => {
+      expect(screen.queryByTestId('rx-success-alert')).not.toBeInTheDocument();
+      expect(screen.queryByText('تم حفظ مسودة الوصفة الطبية بنجاح')).not.toBeInTheDocument();
+    });
+
+    // 2. Dedicated red error alert MUST be visible
+    const errorAlert = screen.getByTestId('rx-error-alert');
+    expect(errorAlert).toBeInTheDocument();
+    expect(errorAlert.textContent).toContain('لا يمكن إصدار الوصفة: أكمل');
+
+    // 3. RPC for issue was NOT called
+    expect(spySave).toHaveBeenCalledTimes(1); // Only the previous draft save
+  });
+});
+
 

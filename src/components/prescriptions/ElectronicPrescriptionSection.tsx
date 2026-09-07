@@ -260,37 +260,78 @@ export function ElectronicPrescriptionSection({
 
   // Issue & Finalize Prescription
   const handleIssuePrescription = async () => {
-    setErrorMessage(null);
+    // Always clear old status messages before new validation
     setSuccessMessage(null);
+    setErrorMessage(null);
 
     // Strict Validation for Issuance
     const filledItems = items.filter((it) => it.medication_name && it.medication_name.trim() !== "");
     if (filledItems.length === 0) {
       setErrorMessage(
         language === "ar"
-          ? "لا يمكن إصدار وصفة طبية فارغة. يرجى إضافة دواء واحد على الأقل مع اسم الدواء"
-          : "Cannot issue an empty prescription. Please add at least one medication."
+          ? "لا يمكن إصدار وصفة طبية فارغة: يرجى إضافة دواء واحد على الأقل مع اسم الدواء وتفاصيله العلاجية."
+          : "Cannot issue an empty prescription: Please add at least one medication with required details."
       );
       return;
     }
 
     for (let i = 0; i < filledItems.length; i++) {
       const it = filledItems[i];
-      if (!it.dosage_form) {
-        setErrorMessage(
-          language === "ar"
-            ? `يرجى اختيار الشكل الدوائي للدواء #${i + 1} (${it.medication_name})`
-            : `Please select dosage form for medication #${i + 1}`
-        );
-        return;
+      const missingFields: string[] = [];
+
+      if (!it.dosage_form || it.dosage_form === ("" as any)) {
+        missingFields.push(language === "ar" ? "الشكل الدوائي" : "dosage form");
       }
-      if (!it.frequency?.trim() || !it.duration?.trim()) {
+      if (!it.frequency || it.frequency.trim() === "") {
+        missingFields.push(language === "ar" ? "عدد مرات الاستخدام (التكرار)" : "frequency");
+      }
+      if (!it.duration || it.duration.trim() === "") {
+        missingFields.push(language === "ar" ? "المدة" : "duration");
+      }
+
+      if (missingFields.length > 0) {
+        let missingFieldsText = "";
+        if (missingFields.length === 1) {
+          missingFieldsText = missingFields[0];
+        } else if (missingFields.length === 2) {
+          missingFieldsText =
+            language === "ar"
+              ? `${missingFields[0]} و${missingFields[1]}`
+              : `${missingFields[0]} and ${missingFields[1]}`;
+        } else {
+          const allExceptLast = missingFields.slice(0, -1).join(language === "ar" ? "، " : ", ");
+          const last = missingFields[missingFields.length - 1];
+          missingFieldsText =
+            language === "ar"
+              ? `${allExceptLast}، و${last}`
+              : `${allExceptLast}, and ${last}`;
+        }
+
+        const medNameSuffix = it.medication_name?.trim() ? ` (${it.medication_name.trim()})` : "";
+
         setErrorMessage(
           language === "ar"
-            ? `يرجى تحديد التكرار ومدة العلاج للدواء #${i + 1} (${it.medication_name})`
-            : `Please specify frequency and duration for medication #${i + 1}`
+            ? `لا يمكن إصدار الوصفة: أكمل ${missingFieldsText} للدواء رقم ${i + 1}${medNameSuffix}.`
+            : `Cannot issue prescription: Please complete ${missingFieldsText} for medication #${i + 1}${medNameSuffix}.`
         );
-        return;
+
+        // Focus or scroll to the first missing element
+        const firstField = !it.dosage_form || it.dosage_form === ("" as any)
+          ? "dosage_form"
+          : !it.frequency?.trim()
+          ? "frequency"
+          : "duration";
+
+        const targetEl =
+          document.getElementById(`medication-item-${i}-${firstField}`) ||
+          document.getElementById(`medication-item-${i}`);
+        if (targetEl) {
+          targetEl.scrollIntoView({ behavior: "smooth", block: "center" });
+          if ("focus" in targetEl && typeof (targetEl as HTMLElement).focus === "function") {
+            (targetEl as HTMLElement).focus();
+          }
+        }
+        return; // Halt immediately, DO NOT call RPC
       }
     }
 
@@ -420,14 +461,22 @@ export function ElectronicPrescriptionSection({
 
       {/* Alerts */}
       {errorMessage && (
-        <div className="p-4 bg-rose-50 border border-rose-200 text-rose-900 rounded-2xl text-xs font-bold flex items-center gap-2.5">
-          <ShieldAlert className="w-5 h-5 text-rose-600 shrink-0" />
-          <span>{errorMessage}</span>
+        <div
+          data-testid="rx-error-alert"
+          className="p-4 bg-rose-50 border-2 border-rose-300 text-rose-900 rounded-2xl text-xs font-bold flex items-start gap-2.5 shadow-sm animate-in fade-in"
+        >
+          <ShieldAlert className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="leading-relaxed font-bold">{errorMessage}</p>
+          </div>
         </div>
       )}
 
-      {successMessage && (
-        <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-2xl text-xs font-bold flex items-center gap-2.5">
+      {!errorMessage && successMessage && (
+        <div
+          data-testid="rx-success-alert"
+          className="p-4 bg-emerald-50 border-2 border-emerald-300 text-emerald-900 rounded-2xl text-xs font-bold flex items-center gap-2.5 shadow-sm"
+        >
           <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
           <span>{successMessage}</span>
         </div>
@@ -444,6 +493,7 @@ export function ElectronicPrescriptionSection({
       <div className="space-y-4">
         {items.map((item, index) => (
           <div
+            id={`medication-item-${index}`}
             key={item.id || `item-${index}`}
             className={`p-4 rounded-2xl border transition-all ${
               isLocked
@@ -510,6 +560,7 @@ export function ElectronicPrescriptionSection({
                   {language === "ar" ? "الشكل الدوائي" : "Dosage Form"}
                 </label>
                 <select
+                  id={`medication-item-${index}-dosage_form`}
                   disabled={isLocked}
                   className="block w-full rounded-xl border border-slate-200 bg-white text-slate-800 text-xs h-11 px-3 focus:outline-none focus:ring-2 focus:ring-clinic-500 disabled:bg-slate-100 disabled:text-slate-500 font-bold"
                   value={item.dosage_form || ""}
@@ -555,25 +606,31 @@ export function ElectronicPrescriptionSection({
                 </select>
               </div>
 
-              <Input
-                label={language === "ar" ? "عدد مرات الاستخدام (التكرار)" : "Frequency"}
-                required
-                disabled={isLocked}
-                placeholder="مثال: 3 مرات يومياً / كل 8 ساعات"
-                value={item.frequency || ""}
-                onChange={(e) => handleUpdateItem(index, "frequency", e.target.value)}
-                className="text-xs font-semibold"
-              />
+              <div className="space-y-1.5 text-right">
+                <Input
+                  id={`medication-item-${index}-frequency`}
+                  label={language === "ar" ? "عدد مرات الاستخدام (التكرار)" : "Frequency"}
+                  required
+                  disabled={isLocked}
+                  placeholder="مثال: 3 مرات يومياً / كل 8 ساعات"
+                  value={item.frequency || ""}
+                  onChange={(e) => handleUpdateItem(index, "frequency", e.target.value)}
+                  className="text-xs font-semibold"
+                />
+              </div>
 
-              <Input
-                label={language === "ar" ? "المدة" : "Duration"}
-                required
-                disabled={isLocked}
-                placeholder="مثال: 5 أيام / أسبوع"
-                value={item.duration || ""}
-                onChange={(e) => handleUpdateItem(index, "duration", e.target.value)}
-                className="text-xs font-semibold"
-              />
+              <div className="space-y-1.5 text-right">
+                <Input
+                  id={`medication-item-${index}-duration`}
+                  label={language === "ar" ? "المدة" : "Duration"}
+                  required
+                  disabled={isLocked}
+                  placeholder="مثال: 5 أيام / أسبوع"
+                  value={item.duration || ""}
+                  onChange={(e) => handleUpdateItem(index, "duration", e.target.value)}
+                  className="text-xs font-semibold"
+                />
+              </div>
 
               <Input
                 label={language === "ar" ? "الكمية (اختياري)" : "Quantity"}
