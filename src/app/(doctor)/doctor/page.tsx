@@ -158,6 +158,8 @@ export default function DoctorClinicalWorkstationPage() {
   const [formValidationErrors, setFormValidationErrors] = useState<{ [key: string]: string }>({});
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isApprovedSuccess, setIsApprovedSuccess] = useState(false);
+  const [approvedVisitId, setApprovedVisitId] = useState<string | null>(null);
+  const [paperRxNotifiedVisits, setPaperRxNotifiedVisits] = useState<Record<string, boolean>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Today & Yesterday Strings
@@ -348,6 +350,7 @@ export default function DoctorClinicalWorkstationPage() {
     setActivePatientId(id);
     setSearchQuery("");
     setIsApprovedSuccess(false);
+    setApprovedVisitId(null);
     setSaveError(null);
     setFormValidationErrors({});
     setActiveTab("clinical");
@@ -403,14 +406,6 @@ export default function DoctorClinicalWorkstationPage() {
         followUpDate: followUpDate || undefined,
       });
 
-      // إرسال تنبيه فوري للسكرتير لتصوير الوصفة
-      notifyDoctorApprovedVisit({
-        visitId: currentActiveVisit.id,
-        patientId: activePatient.id,
-        childName: activePatient.fullName,
-        diagnosisText: diagnosisText.trim(),
-      });
-
       const updatedVisits = activePatient.visits.map((v) =>
         v.id === currentActiveVisit.id
           ? {
@@ -434,6 +429,7 @@ export default function DoctorClinicalWorkstationPage() {
       };
 
       setPatients((prev) => prev.map((p) => (p.id === activePatient.id ? updatedPatient : p)));
+      setApprovedVisitId(currentActiveVisit.id);
       setIsApprovedSuccess(true);
     } catch (err: any) {
       setSaveError(err.message || (language === "ar" ? "فشل اعتماد الزيارة" : "Failed to approve visit"));
@@ -927,63 +923,278 @@ export default function DoctorClinicalWorkstationPage() {
           {activeTab === "clinical" && (
             <div className="space-y-6">
               {isApprovedSuccess ? (
-                <Card className="text-center py-12 space-y-3 bg-white border-emerald-200 shadow-sm">
-                  <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 mx-auto flex items-center justify-center">
-                    <CheckCircle2 className="w-10 h-10" />
-                  </div>
-                  <h3 className="text-xl font-black text-slate-900">
-                    {t("visitApprovedSuccessTitle")} {activePatient.fullName}
-                  </h3>
-                  <p className="text-xs text-slate-500 max-w-md mx-auto">
-                    {t("visitApprovedSuccessDesc")}
-                  </p>
-                  <Button
-                    variant="primary"
-                    className="font-bold mt-2"
-                    onClick={() => setActivePatientId(null)}
-                  >
-                    {t("backToDoctorList")}
-                  </Button>
-                </Card>
+                <div className="space-y-6">
+                  {/* بطاقة نجاح اعتماد الفحص والتشخيص */}
+                  <Card className="p-6 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-2 border-emerald-300 shadow-sm rounded-3xl space-y-4">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-emerald-200/70">
+                      <div className="flex items-center gap-3.5">
+                        <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-md shrink-0">
+                          <CheckCircle2 className="w-7 h-7" />
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-black text-slate-900">
+                            {t("visitApprovedSuccessTitle")}: {activePatient.fullName}
+                          </h3>
+                          <p className="text-xs text-slate-600 mt-0.5 font-medium">
+                            {t("visitApprovedSuccessDesc")}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end flex-wrap">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="font-bold text-xs bg-white text-slate-700 hover:bg-slate-50 border-slate-300"
+                          onClick={() => {
+                            setActivePatientId(null);
+                            setIsApprovedSuccess(false);
+                            setApprovedVisitId(null);
+                          }}
+                        >
+                          {t("backToDoctorList")}
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* خيار إشعار السكرتارية بالوصفة الورقية كإجراء اختياري صريح */}
+                    {(() => {
+                      const currentApprovedVisitId = approvedVisitId || latestHistoricalVisit?.id;
+                      const isNotified = currentApprovedVisitId ? paperRxNotifiedVisits[currentApprovedVisitId] : false;
+
+                      return (
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-white/90 rounded-2xl border border-emerald-200 shadow-2xs">
+                          <div className="flex items-center gap-2.5">
+                            <Pill className="w-5 h-5 text-slate-600 shrink-0" />
+                            <div>
+                              <span className="text-xs font-black text-slate-900 block">
+                                {language === "ar" ? "الوصفة الورقية التقليدية (اختياري)" : "Traditional Paper Prescription (Optional)"}
+                              </span>
+                              <span className="text-[11px] text-slate-500">
+                                {language === "ar"
+                                  ? "إذا كتبت وصفة ورقية يدوية وترغب بأن تقوم السكرتيرة بتصويرها وأرشفتها فوراً"
+                                  : "If you handwrote a paper prescription and want reception to photograph and archive it"}
+                              </span>
+                            </div>
+                          </div>
+
+                          {isNotified ? (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-100 text-emerald-800 text-xs font-bold border border-emerald-300 shrink-0">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                              <span>{t("notifyPaperRxSuccess")}</span>
+                            </span>
+                          ) : (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                if (currentApprovedVisitId) {
+                                  notifyDoctorApprovedVisit({
+                                    visitId: currentApprovedVisitId,
+                                    patientId: activePatient.id,
+                                    childName: activePatient.fullName,
+                                    diagnosisText: diagnosisText || latestHistoricalVisit?.diagnosisText || "",
+                                  });
+                                  setPaperRxNotifiedVisits((prev) => ({ ...prev, [currentApprovedVisitId]: true }));
+                                }
+                              }}
+                              className="font-bold text-xs bg-white text-slate-700 hover:bg-slate-50 border-slate-300 gap-1.5 shrink-0"
+                            >
+                              <span>{t("notifyPaperRxBtn")}</span>
+                            </Button>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </Card>
+
+                  {/* قسم الوصفة الطبية الإلكترونية للزيارة المعتمدة */}
+                  {(() => {
+                    const currentApprovedVisitId = approvedVisitId || latestHistoricalVisit?.id;
+                    const approvedVisitObj = activePatient.visits.find((v) => v.id === currentApprovedVisitId) || latestHistoricalVisit;
+                    if (!currentApprovedVisitId) return null;
+
+                    return (
+                      <ElectronicPrescriptionSection
+                        visitId={currentApprovedVisitId}
+                        patientId={activePatient.id}
+                        initialPrescription={approvedVisitObj?.prescription}
+                        onPrescriptionChanged={(newRx) => {
+                          setPatients((prev) =>
+                            prev.map((p) =>
+                              p.id === activePatient.id
+                                ? {
+                                    ...p,
+                                    visits: p.visits.map((v) =>
+                                      v.id === currentApprovedVisitId ? { ...v, prescription: newRx || undefined } : v
+                                    ),
+                                  }
+                                : p
+                            )
+                          );
+                        }}
+                      />
+                    );
+                  })()}
+                </div>
               ) : !activeVisit ? (
-                <div className="space-y-4">
-                  <div className="p-5 bg-amber-50 border border-amber-200 rounded-3xl text-amber-900 flex items-start gap-3.5 shadow-sm">
-                    <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                    <div className="space-y-1">
-                      <h4 className="text-sm font-black">
-                        {language === "ar"
-                          ? "لا توجد زيارة نشطة بانتظار الفحص السريري"
-                          : "No Active Visit Waiting for Examination"}
+                <div className="space-y-6">
+                  {latestHistoricalVisit ? (
+                    <div className="space-y-6">
+                      <Card className="p-5 sm:p-6 bg-white border border-slate-200 shadow-sm rounded-3xl space-y-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-2xl bg-clinic-50 border border-clinic-200 text-clinic-700 flex items-center justify-center font-bold">
+                              <Calendar className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h4 className="font-extrabold text-slate-900 text-base">
+                                  {language === "ar" ? "أحدث زيارة مسجلة ومعتمدة" : "Latest Approved Visit"} ({language === "ar" ? formatArabicDate(latestHistoricalVisit.date) : latestHistoricalVisit.date})
+                                </h4>
+                                <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full">
+                                  {language === "ar" ? "مكتملة الفحص" : "Completed"}
+                                </span>
+                              </div>
+                              <p className="text-xs text-slate-500 mt-0.5">
+                                {language === "ar"
+                                  ? "يمكنك استعراض تفاصيل الفحص وتعديل أو إصدار الوصفة الطبية الإلكترونية لهذه الزيارة"
+                                  : "You can review examination details and manage the electronic prescription for this visit"}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* خيار إشعار السكرتارية بالوصفة الورقية */}
+                          {paperRxNotifiedVisits[latestHistoricalVisit.id] ? (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-100 text-emerald-800 text-xs font-bold border border-emerald-300 shrink-0">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                              <span>{t("notifyPaperRxSuccess")}</span>
+                            </span>
+                          ) : (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                notifyDoctorApprovedVisit({
+                                  visitId: latestHistoricalVisit.id,
+                                  patientId: activePatient.id,
+                                  childName: activePatient.fullName,
+                                  diagnosisText: latestHistoricalVisit.diagnosisText || "",
+                                });
+                                setPaperRxNotifiedVisits((prev) => ({ ...prev, [latestHistoricalVisit.id]: true }));
+                              }}
+                              className="font-bold text-xs bg-slate-50 text-slate-700 hover:bg-slate-100 border-slate-200 gap-1.5 shrink-0"
+                            >
+                              <span>{t("notifyPaperRxBtn")}</span>
+                            </Button>
+                          )}
+                        </div>
+
+                        {/* قياسات الزيارة */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center text-xs">
+                          <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
+                            <div className={isRTL ? "text-right" : "text-left"}>
+                              <span className="text-slate-400 text-[10px] font-bold block">{t("weight")}</span>
+                              <span className="text-base font-black text-slate-900">
+                                {latestHistoricalVisit.weightKg ? `${latestHistoricalVisit.weightKg} ${t("kg")}` : "--"}
+                              </span>
+                            </div>
+                            <Scale className="w-5 h-5 text-clinic-600 opacity-70" />
+                          </div>
+
+                          <div className="p-3 bg-rose-50/60 rounded-xl border border-rose-200 flex items-center justify-between">
+                            <div className={isRTL ? "text-right" : "text-left"}>
+                              <span className="text-rose-500 text-[10px] font-bold block">{t("temperature")}</span>
+                              <span className="text-base font-black text-rose-700">
+                                {latestHistoricalVisit.temperatureC ? `${latestHistoricalVisit.temperatureC} °C` : "--"}
+                              </span>
+                            </div>
+                            <Thermometer className="w-5 h-5 text-rose-600 opacity-70" />
+                          </div>
+
+                          <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
+                            <div className={isRTL ? "text-right" : "text-left"}>
+                              <span className="text-slate-400 text-[10px] font-bold block">{t("height")}</span>
+                              <span className="text-base font-black text-slate-900">
+                                {latestHistoricalVisit.heightCm ? `${latestHistoricalVisit.heightCm} ${t("cm")}` : "--"}
+                              </span>
+                            </div>
+                            <Ruler className="w-5 h-5 text-clinic-600 opacity-70" />
+                          </div>
+
+                          <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
+                            <div className={isRTL ? "text-right" : "text-left"}>
+                              <span className="text-slate-400 text-[10px] font-bold block">ضغط الدم</span>
+                              <span className="text-base font-black text-slate-900">
+                                {latestHistoricalVisit.bloodPressure || "--"}
+                              </span>
+                            </div>
+                            <span className="text-xs font-mono font-bold text-slate-400">BP</span>
+                          </div>
+                        </div>
+
+                        {/* التشخيص والتوصيات */}
+                        {latestHistoricalVisit.diagnosisText && (
+                          <div className="p-4 bg-clinic-50 rounded-2xl border border-clinic-100 text-xs space-y-1.5">
+                            <span className="font-bold text-clinic-900 block">{t("doctorDiagnosisTitle")}</span>
+                            <p className="font-black text-slate-900 text-sm">{latestHistoricalVisit.diagnosisText}</p>
+                            {latestHistoricalVisit.recommendations && (
+                              <p className="text-slate-600 pt-1">
+                                <strong className="text-slate-800">{t("recommendationsLabel")}: </strong>
+                                {latestHistoricalVisit.recommendations}
+                              </p>
+                            )}
+                            {latestHistoricalVisit.doctorNotes && (
+                              <p className="text-slate-600">
+                                <strong className="text-slate-800">{t("doctorNotesLabel")}: </strong>
+                                {latestHistoricalVisit.doctorNotes}
+                              </p>
+                            )}
+                            {latestHistoricalVisit.followUpDate && (
+                              <p className="text-slate-600">
+                                <strong className="text-slate-800">{language === "ar" ? "موعد المراجعة: " : "Follow-up: "}</strong>
+                                {latestHistoricalVisit.followUpDate}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </Card>
+
+                      {/* قسم الوصفة الطبية الإلكترونية للزيارة الأخيرة */}
+                      <ElectronicPrescriptionSection
+                        visitId={latestHistoricalVisit.id}
+                        patientId={activePatient.id}
+                        initialPrescription={latestHistoricalVisit.prescription}
+                        onPrescriptionChanged={(newRx) => {
+                          setPatients((prev) =>
+                            prev.map((p) =>
+                              p.id === activePatient.id
+                                ? {
+                                    ...p,
+                                    visits: p.visits.map((v) =>
+                                      v.id === latestHistoricalVisit.id ? { ...v, prescription: newRx || undefined } : v
+                                    ),
+                                  }
+                                : p
+                            )
+                          );
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <div className="p-6 bg-slate-50 border border-slate-200 rounded-3xl text-center space-y-2">
+                      <AlertTriangle className="w-8 h-8 text-slate-400 mx-auto" />
+                      <h4 className="text-sm font-black text-slate-700">
+                        {language === "ar" ? "لا توجد زيارات مسجلة لهذا الطفل حتى الآن" : "No visits recorded for this patient yet"}
                       </h4>
-                      <p className="text-xs text-amber-800 font-medium leading-relaxed">
+                      <p className="text-xs text-slate-500">
                         {language === "ar"
-                          ? "لم يتم تسجيل زيارة نشطة لهذا الطفل من قبل الاستقبال (السكرتارية) بعد. يرجى فتح زيارة جديدة وتوثيق القياسات الحيوية أولاً لتفعيل نموذج الفحص والتشخيص."
-                          : "No active visit has been registered for this patient by reception yet. Please register a new visit and document vitals first to enable clinical examination."}
+                          ? "يرجى تسجيل زيارة جديدة وتوثيق القياسات الحيوية من شاشة الاستقبال لتفعيل الفحص والوصفة الطبية."
+                          : "Please register a new visit from reception first to enable clinical examination."}
                       </p>
                     </div>
-                  </div>
-
-                  {/* استعراض ملخص آخر زيارة تاريخية إن وجدت */}
-                  {latestHistoricalVisit && (
-                    <Card className="p-5 bg-white border-slate-200">
-                      <h4 className="text-xs font-black text-slate-500 uppercase mb-3">
-                        {language === "ar" ? "ملخص أحدث زيارة سابقة مسجلة" : "Latest Recorded Visit Summary"} ({latestHistoricalVisit.date})
-                      </h4>
-                      <div className="text-xs text-slate-700 space-y-2">
-                        {latestHistoricalVisit.diagnosisText && (
-                          <p>
-                            <strong className="text-slate-900">{language === "ar" ? "التشخيص: " : "Diagnosis: "}</strong>
-                            {latestHistoricalVisit.diagnosisText}
-                          </p>
-                        )}
-                        {latestHistoricalVisit.recommendations && (
-                          <p>
-                            <strong className="text-slate-900">{language === "ar" ? "التوصيات: " : "Recommendations: "}</strong>
-                            {latestHistoricalVisit.recommendations}
-                          </p>
-                        )}
-                      </div>
-                    </Card>
                   )}
                 </div>
               ) : (
@@ -1171,7 +1382,7 @@ export default function DoctorClinicalWorkstationPage() {
                 </form>
               )}
 
-              {/* قسم الوصفة الطبية الإلكترونية للزيارة النشطة */}
+              {/* قسم الوصفة الطبية الإلكترونية للزيارة النشطة أثناء الفحص */}
               {activeVisit && (
                 <ElectronicPrescriptionSection
                   visitId={activeVisit.id}

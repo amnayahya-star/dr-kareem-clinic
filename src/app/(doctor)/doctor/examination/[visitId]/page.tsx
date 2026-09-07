@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/Badge";
 import { fetchPatients } from "@/services/patientService";
 import { saveDoctorDiagnosis, validateFollowUpDate } from "@/services/visitService";
 import { fetchPrescriptionByVisitId } from "@/services/prescriptionService";
+import { notifyDoctorApprovedVisit } from "@/services/notificationService";
 import { ElectronicPrescriptionSection } from "@/components/prescriptions/ElectronicPrescriptionSection";
 import { calculateArabicAge, formatArabicDate } from "@/lib/utils";
 import { PatientFile, VisitRecord } from "@/lib/mock-data/patients";
@@ -40,6 +41,7 @@ export default function MedicalExaminationPage() {
   const [prescription, setPrescription] = useState<Prescription | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [isPaperRxNotified, setIsPaperRxNotified] = useState(false);
 
   // Diagnosis State
   const [symptoms, setSymptoms] = useState("");
@@ -378,7 +380,33 @@ export default function MedicalExaminationPage() {
             </div>
           </div>
 
-          <div className="flex items-center justify-end pt-3 border-t border-slate-100">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-100">
+            {isPaperRxNotified ? (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-100 text-emerald-800 text-xs font-bold border border-emerald-300">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                <span>{t("notifyPaperRxSuccess")}</span>
+              </span>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  notifyDoctorApprovedVisit({
+                    visitId: visit.id,
+                    patientId: patient.id,
+                    childName: patient.fullName,
+                    diagnosisText: diagnosisText || visit.diagnosisText || "",
+                  });
+                  setIsPaperRxNotified(true);
+                }}
+                className="font-bold text-xs bg-slate-50 text-slate-700 hover:bg-slate-100 border-slate-200 gap-1.5"
+              >
+                <Pill className="w-4 h-4 text-slate-500" />
+                <span>{t("notifyPaperRxBtn")}</span>
+              </Button>
+            )}
+
             <Button
               type="submit"
               variant="primary"

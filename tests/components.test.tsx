@@ -262,10 +262,12 @@ describe('Doctor Workstation Clinical Form State & Hydration', () => {
     expect(diagnosisInput2.value).toBe('التهاب الأذن');
   });
 
-  it('disables the examination form when no active visit is available', async () => {
+  it('renders completed visit summary and electronic prescription section when no active visit is available', async () => {
     const patientWithoutActiveVisit: PatientFile = {
       ...mockPatient1,
       id: 'p-no-active',
+      fullName: 'خالد عمر',
+      fileNumber: 'FILE-NO-ACT',
       visits: [
         {
           id: 'v-completed',
@@ -274,11 +276,38 @@ describe('Doctor Workstation Clinical Form State & Hydration', () => {
           status: 'completed',
           isCompleted: true,
           labPhotos: [],
+          diagnosisText: 'التهاب الأذن الوسطى الحاد',
         },
       ],
     };
 
-    mockFetchPatients.mockResolvedValueOnce([patientWithoutActiveVisit]);
+    mockFetchPatients.mockResolvedValue([patientWithoutActiveVisit]);
+
+    renderDoctorPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('خالد عمر')).toBeInTheDocument();
+    });
+
+    const startExamBtn = screen.getByText('بدء الفحص');
+    fireEvent.click(startExamBtn);
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 4, name: /أحدث زيارة مسجلة ومعتمدة/i })).toBeInTheDocument();
+      expect(screen.getByText('التهاب الأذن الوسطى الحاد')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 3, name: /الوصفة الطبية الإلكترونية/i })).toBeInTheDocument();
+    });
+
+    // Clinical examination form inputs should not be rendered for completed visit
+    expect(screen.queryByLabelText(/الأعراض السريرية/i)).not.toBeInTheDocument();
+  });
+
+  it('does NOT automatically trigger paper prescription notification upon approving visit, but keeps e-Rx accessible and allows explicit paper rx opt-in', async () => {
+    const { notifyDoctorApprovedVisit } = await import('../src/services/notificationService');
+    mockSaveDoctorDiagnosis.mockResolvedValue(undefined);
+
+    let currentPatients = [{ ...mockPatient1 }, { ...mockPatient2 }];
+    mockFetchPatients.mockImplementation(() => Promise.resolve(currentPatients));
 
     renderDoctorPage();
 
@@ -286,15 +315,60 @@ describe('Doctor Workstation Clinical Form State & Hydration', () => {
       expect(screen.getByText('أحمد علي')).toBeInTheDocument();
     });
 
-    const startExamBtn = screen.getByText('بدء الفحص');
-    fireEvent.click(startExamBtn);
+    const startExamBtns = screen.getAllByText('بدء الفحص');
+    fireEvent.click(startExamBtns[0]);
 
     await waitFor(() => {
-      expect(screen.getByText(/لا توجد زيارة نشطة بانتظار الفحص السريري/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/التشخيص الطبي النهائي/i)).toBeInTheDocument();
     });
 
-    // Form inputs should not be rendered
-    expect(screen.queryByLabelText(/التشخيص الطبي النهائي/i)).not.toBeInTheDocument();
+    const diagnosisInput = screen.getByLabelText(/التشخيص الطبي النهائي/i) as HTMLInputElement;
+    fireEvent.change(diagnosisInput, { target: { value: 'نزلة معوية حادة' } });
+
+    // Update currentPatients to reflect completion so polling doesn't overwrite
+    currentPatients = [
+      {
+        ...mockPatient1,
+        visits: [
+          {
+            ...mockPatient1.visits[0],
+            status: 'completed',
+            isCompleted: true,
+            diagnosisText: 'نزلة معوية حادة',
+          },
+        ],
+      },
+      { ...mockPatient2 },
+    ];
+
+    const approveBtn = screen.getByRole('button', { name: /اعتماد وتوثيق الزيارة/i });
+    fireEvent.click(approveBtn);
+
+    await waitFor(() => {
+      expect(mockSaveDoctorDiagnosis).toHaveBeenCalled();
+    });
+
+    // 1. Verify notification was NOT automatically dispatched
+    expect(notifyDoctorApprovedVisit).not.toHaveBeenCalled();
+
+    // 2. Verify success state renders e-prescription section
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 3, name: /تم توثيق واعتماد الكشف والتشخيص الطبي/i })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 3, name: /الوصفة الطبية الإلكترونية/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /استخدام وصفة ورقية/i })).toBeInTheDocument();
+    });
+
+    // 3. Explicitly click paper prescription button
+    const paperRxBtn = screen.getByRole('button', { name: /استخدام وصفة ورقية/i });
+    fireEvent.click(paperRxBtn);
+
+    expect(notifyDoctorApprovedVisit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        visitId: 'v-act-1',
+        patientId: 'p-test-1',
+        childName: 'أحمد علي',
+      })
+    );
   });
 
   it('renders clean empty state on Doctor Workstation when patients array is empty (no mock data)', async () => {
