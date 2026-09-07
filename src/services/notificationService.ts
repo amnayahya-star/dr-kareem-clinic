@@ -1,4 +1,4 @@
-"use client";
+import { isSupabaseConfigured } from "@/lib/supabase/client";
 
 export type NotificationType = "visit_approved_needs_rx" | "new_patient_arrived";
 
@@ -19,6 +19,87 @@ export interface ClinicNotification {
 
 const STORAGE_KEY = "dr_kareem_clinic_notifications";
 const BROADCAST_CHANNEL_NAME = "dr_kareem_clinic_realtime";
+
+export const MOCK_PATIENT_NAMES = [
+  "يوسف أحمد العلي",
+  "مريم حسن الجابري",
+  "علي حسين الصدر",
+  "زينب كاظم الموسوي",
+  "عمر عبد الله السعدي",
+];
+
+/**
+ * Checks if a notification record contains mock or demo patient data
+ */
+export function isMockNotification(notif?: Partial<ClinicNotification> | null): boolean {
+  if (!notif) return true;
+  if (
+    notif.patientId &&
+    (notif.patientId.startsWith("p-00") ||
+      notif.patientId === "p-001" ||
+      notif.patientId === "p-002" ||
+      notif.patientId === "p-003" ||
+      notif.patientId === "p-004" ||
+      notif.patientId === "p-005" ||
+      notif.patientId === "p-test-1" ||
+      notif.patientId === "p-test-2")
+  ) {
+    return true;
+  }
+  if (notif.childName && MOCK_PATIENT_NAMES.includes(notif.childName.trim())) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Safely cleans legacy mock notifications and recycle bin data from localStorage in production
+ * NEVER touches user session tokens (sb-*) or general preferences (dr_kareem_lang)
+ */
+export function cleanLegacyMockStorage() {
+  if (typeof window === "undefined") return;
+  try {
+    // 1. Clean notifications storage
+    const notifRaw = localStorage.getItem(STORAGE_KEY);
+    if (notifRaw) {
+      const parsed = JSON.parse(notifRaw);
+      if (Array.isArray(parsed)) {
+        const filtered = parsed.filter((n) => !isMockNotification(n));
+        if (filtered.length !== parsed.length) {
+          if (filtered.length === 0) {
+            localStorage.removeItem(STORAGE_KEY);
+          } else {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
+          }
+        }
+      }
+    }
+
+    // 2. Clean deleted patients storage
+    const deletedRaw = localStorage.getItem("dr_kareem_deleted_patients");
+    if (deletedRaw) {
+      const parsedDeleted = JSON.parse(deletedRaw);
+      if (Array.isArray(parsedDeleted)) {
+        const filteredDeleted = parsedDeleted.filter(
+          (p) =>
+            p &&
+            p.id &&
+            !p.id.startsWith("p-00") &&
+            !MOCK_PATIENT_NAMES.includes(p.fullName?.trim())
+        );
+        if (filteredDeleted.length !== parsedDeleted.length) {
+          if (filteredDeleted.length === 0) {
+            localStorage.removeItem("dr_kareem_deleted_patients");
+          } else {
+            localStorage.setItem("dr_kareem_deleted_patients", JSON.stringify(filteredDeleted));
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("Error cleaning legacy mock storage:", e);
+  }
+}
 
 // Play a pleasant synthesizer chime via Web Audio API
 export function playNotificationChime(pitch: "high" | "normal" = "normal") {
@@ -60,12 +141,20 @@ export function playNotificationChime(pitch: "high" | "normal" = "normal") {
   }
 }
 
-// Get all pending notifications
+// Get all pending notifications (filters out mock records in production)
 export function getClinicNotifications(): ClinicNotification[] {
   if (typeof window === "undefined") return [];
   try {
     const data = localStorage.getItem(STORAGE_KEY);
-    return data ? JSON.parse(data) : [];
+    if (!data) return [];
+    const list: ClinicNotification[] = JSON.parse(data);
+    if (!Array.isArray(list)) return [];
+
+    if (isSupabaseConfigured()) {
+      return list.filter((n) => !isMockNotification(n));
+    }
+
+    return list;
   } catch {
     return [];
   }
@@ -74,7 +163,18 @@ export function getClinicNotifications(): ClinicNotification[] {
 // Save notifications
 export function saveClinicNotifications(notifications: ClinicNotification[]) {
   if (typeof window === "undefined") return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(notifications));
+  try {
+    const listToSave = isSupabaseConfigured()
+      ? notifications.filter((n) => !isMockNotification(n))
+      : notifications;
+    if (listToSave.length === 0) {
+      localStorage.removeItem(STORAGE_KEY);
+    } else {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(listToSave));
+    }
+  } catch (e) {
+    console.warn("Error saving notifications:", e);
+  }
 }
 
 // 1. Dispatch alert to Secretary when Doctor approves a visit

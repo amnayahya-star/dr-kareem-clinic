@@ -716,19 +716,39 @@ export async function fetchDeletedPatients(): Promise<PatientFile[]> {
     const list: PatientFile[] = raw ? JSON.parse(raw) : [];
 
     const validList: PatientFile[] = [];
-    let hasExpired = false;
+    let hasExpiredOrMock = false;
+
+    const mockNames = [
+      "يوسف أحمد العلي",
+      "مريم حسن الجابري",
+      "علي حسين الصدر",
+      "زينب كاظم الموسوي",
+      "عمر عبد الله السعدي",
+    ];
 
     for (const patient of list) {
+      if (
+        isSupabaseConfigured() &&
+        (patient.id?.startsWith("p-00") || mockNames.includes(patient.fullName?.trim()))
+      ) {
+        hasExpiredOrMock = true;
+        continue;
+      }
+
       const remaining = calculateRemainingDays(patient.deletedAt);
       if (remaining > 0) {
         validList.push(patient);
       } else {
-        hasExpired = true;
+        hasExpiredOrMock = true;
       }
     }
 
-    if (hasExpired) {
-      localStorage.setItem(DELETED_STORAGE_KEY, JSON.stringify(validList));
+    if (hasExpiredOrMock) {
+      if (validList.length === 0) {
+        localStorage.removeItem(DELETED_STORAGE_KEY);
+      } else {
+        localStorage.setItem(DELETED_STORAGE_KEY, JSON.stringify(validList));
+      }
     }
 
     return validList;

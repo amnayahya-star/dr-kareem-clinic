@@ -36,6 +36,9 @@ vi.mock('../src/services/notificationService', () => ({
   subscribeToClinicNotifications: vi.fn().mockReturnValue(() => {}),
   getClinicNotifications: vi.fn().mockReturnValue([]),
   playNotificationChime: vi.fn(),
+  cleanLegacyMockStorage: vi.fn(),
+  isMockNotification: vi.fn().mockReturnValue(false),
+  markNotificationSnapped: vi.fn(),
 }));
 
 vi.mock('next/link', () => ({
@@ -343,5 +346,11 @@ describe('Secretary Page Empty State & Dynamic Metrics', () => {
     // Verify metric cards show 0
     const zeroElements = screen.getAllByText('0');
     expect(zeroElements.length).toBeGreaterThanOrEqual(3);
+
+    // Verify the yellow prescription alert banner is NOT displayed
+    expect(screen.queryByText(/أطفال بانتظار تصوير الوصفة/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/يرجى تصوير الروشتات/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/يوسف أحمد العلي/i)).not.toBeInTheDocument();
   });
 });
+

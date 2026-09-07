@@ -16,6 +16,8 @@ import {
   getClinicNotifications,
   playNotificationChime,
   ClinicNotification,
+  cleanLegacyMockStorage,
+  isMockNotification,
 } from "@/services/notificationService";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { useLanguage } from "@/context/LanguageContext";
@@ -165,6 +167,9 @@ export default function DoctorClinicalWorkstationPage() {
 
   // Load patients on mount and subscribe to Realtime Arrival Alerts from Secretary
   useEffect(() => {
+    // 0. Clean legacy mock data from storage safely
+    cleanLegacyMockStorage();
+
     let previousPatientCount = 0;
 
     async function loadData() {
@@ -183,17 +188,22 @@ export default function DoctorClinicalWorkstationPage() {
     }
     loadData();
 
-    // فحص الإشعارات المعلقة مسبقاً
-    const unreadArrivals = getClinicNotifications().filter(
-      (n) => n.type === "new_patient_arrived" && !n.isRead
-    );
-    if (unreadArrivals.length > 0) {
-      setActiveArrivalAlert(unreadArrivals[0]);
+    // فحص الإشعارات المعلقة مسبقاً (في وضع offline فقط)
+    if (!isSupabaseConfigured()) {
+      const unreadArrivals = getClinicNotifications().filter(
+        (n) => n.type === "new_patient_arrived" && !n.isRead
+      );
+      if (unreadArrivals.length > 0) {
+        setActiveArrivalAlert(unreadArrivals[0]);
+      }
     }
 
     // 1. الاستماع الفوري للبث المباشر (BroadcastChannel)
     const unsubscribe = subscribeToClinicNotifications((notif) => {
       if (notif.type === "new_patient_arrived") {
+        if (isSupabaseConfigured() && isMockNotification(notif)) {
+          return;
+        }
         playNotificationChime("high");
         setActiveArrivalAlert(notif);
         fetchPatients()

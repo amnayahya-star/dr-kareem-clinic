@@ -22,6 +22,8 @@ import {
   markNotificationSnapped,
   playNotificationChime,
   notifySecretarySavedVisit,
+  cleanLegacyMockStorage,
+  isMockNotification,
 } from "@/services/notificationService";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { useLanguage } from "@/context/LanguageContext";
@@ -69,7 +71,7 @@ export default function SecretaryPureWorkflowPage() {
 
   // Real-time notifications for Doctor Approvals
   const [activeAlert, setActiveAlert] = useState<ClinicNotification | null>(null);
-  const [pendingNotifications, setPendingNotifications] = useState<ClinicNotification[]>([]);
+  const [liveNotifications, setLiveNotifications] = useState<ClinicNotification[]>([]);
 
   // Date Filter State ('all' | 'today' | 'yesterday' | 'custom')
   const [dateFilterMode, setDateFilterMode] = useState<"all" | "today" | "yesterday" | "custom">("all");
@@ -103,6 +105,9 @@ export default function SecretaryPureWorkflowPage() {
 
   // Load patients from Database and subscribe to live doctor notifications
   useEffect(() => {
+    // 0. Clean legacy mock data from storage safely
+    cleanLegacyMockStorage();
+
     async function loadData() {
       setIsLoading(true);
       setLoadError(null);
@@ -124,22 +129,26 @@ export default function SecretaryPureWorkflowPage() {
     loadData();
 
     // Load initial pending notifications
-    setPendingNotifications(getClinicNotifications().filter((n) => !n.isSnapped));
+    setLiveNotifications(getClinicNotifications().filter((n) => !n.isSnapped));
 
     // Listen for Realtime alerts from the Doctor
     const unsubscribe = subscribeToClinicNotifications((notif) => {
       if (notif.type === "visit_approved_needs_rx") {
+        if (isSupabaseConfigured() && isMockNotification(notif)) {
+          return;
+        }
         playNotificationChime();
         setActiveAlert(notif);
-        setPendingNotifications((prev) => [
+        setLiveNotifications((prev) => [
           notif,
           ...prev.filter((n) => n.visitId !== notif.visitId),
         ]);
+        fetchPatients().then((data) => setPatients(data || [])).catch(() => {});
       }
     });
 
     const handleUpdate = () => {
-      setPendingNotifications(getClinicNotifications().filter((n) => !n.isSnapped));
+      setLiveNotifications(getClinicNotifications().filter((n) => !n.isSnapped));
     };
     window.addEventListener("clinic:notification_updated", handleUpdate);
 
@@ -152,6 +161,55 @@ export default function SecretaryPureWorkflowPage() {
   // Today & Yesterday Strings (YYYY-MM-DD)
   const todayStr = new Date().toISOString().split("T")[0];
   const yesterdayStr = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+
+  // Derived Pending Prescription Queue (strictly derived from Supabase live data in production)
+  const pendingNotifications = useMemo(() => {
+    if (isSupabaseConfigured()) {
+      if (!patients || patients.length === 0) {
+        return [];
+      }
+      const list: ClinicNotification[] = [];
+      const seenVisitIds = new Set<string>();
+
+      // 1. Derive from live Supabase patients & visits
+      for (const p of patients) {
+        for (const v of p.visits) {
+          if (v.status === "completed" && !v.prescriptionPhoto) {
+            seenVisitIds.add(v.id);
+            list.push({
+              id: `rx-pending-${v.id}`,
+              type: "visit_approved_needs_rx",
+              visitId: v.id,
+              patientId: p.id,
+              childName: p.fullName,
+              diagnosisText: v.diagnosisText,
+              timestamp: v.date,
+              isRead: false,
+              isSnapped: false,
+            });
+          }
+        }
+      }
+
+      // 2. Include live real-time notifications for verified patients
+      for (const notif of liveNotifications) {
+        if (
+          notif.type === "visit_approved_needs_rx" &&
+          !notif.isSnapped &&
+          notif.visitId &&
+          !seenVisitIds.has(notif.visitId) &&
+          patients.some((p) => p.id === notif.patientId)
+        ) {
+          list.push(notif);
+          seenVisitIds.add(notif.visitId);
+        }
+      }
+
+      return list;
+    } else {
+      return liveNotifications.filter((n) => !n.isSnapped);
+    }
+  }, [patients, liveNotifications]);
 
   // Toggle Visit Accordion
   const toggleVisitExpand = (visitId: string) => {
@@ -291,7 +349,7 @@ export default function SecretaryPureWorkflowPage() {
 
       setPatients(patients.map((p) => (p.id === activePatient.id ? updatedPatient : p)));
       markNotificationSnapped(targetVisitId);
-      setPendingNotifications((prev) => prev.filter((n) => n.visitId !== targetVisitId));
+      setLiveNotifications((prev) => prev.filter((n) => n.visitId !== targetVisitId));
       setIsSnapRxModalOpen(false);
       setRxPhotoNotes("");
       setRxPhotoFile(null);
