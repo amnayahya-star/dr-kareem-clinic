@@ -225,6 +225,50 @@ describe('Electronic Prescription Service (نظام الوصفة الطبية ا
       }));
     });
 
+    it('preserves null values when saving draft with partial fields (no syrup/3x/5d fallback)', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: 'rx-draft-partial',
+        error: null,
+      });
+      mockMaybeSingle.mockResolvedValueOnce({
+        data: {
+          id: 'rx-draft-partial',
+          visit_id: 'visit-100',
+          patient_id: 'patient-200',
+          status: 'draft',
+          prescription_items: [
+            {
+              id: 'item-partial-1',
+              medication_name: 'TEST MEDICATION',
+              dosage_form: null,
+              dose: null,
+              frequency: null,
+              duration: null,
+            },
+          ],
+        },
+        error: null,
+      });
+
+      const saved = await savePrescriptionWithItems({
+        visit_id: 'visit-100',
+        patient_id: 'patient-200',
+        action: 'draft',
+        items: [
+          {
+            medication_name: 'TEST MEDICATION',
+          },
+        ],
+      });
+
+      expect(saved.items![0].dosage_form).toBeNull();
+      expect(saved.items![0].frequency).toBeNull();
+      expect(saved.items![0].duration).toBeNull();
+      expect(saved.items![0].dosage_form).not.toBe('syrup');
+      expect(saved.items![0].frequency).not.toBe('3 مرات يومياً');
+      expect(saved.items![0].duration).not.toBe('5 أيام');
+    });
+
     it('fails to issue a prescription with 0 items (إصدار وصفة بلا أدوية يفشل)', async () => {
       await expect(
         savePrescriptionWithItems({

@@ -7,11 +7,11 @@ export interface PrescriptionItemInput {
   medication_name: string;
   active_ingredient?: string | null;
   strength?: string | null;
-  dosage_form?: DosageForm;
+  dosage_form?: DosageForm | null;
   dose?: string | null;
   route?: string | null;
-  frequency: string;
-  duration: string;
+  frequency?: string | null;
+  duration?: string | null;
   quantity?: string | null;
   instructions?: string | null;
   display_order?: number;
@@ -35,11 +35,11 @@ export interface AddPrescriptionItemInput {
   medication_name: string;
   active_ingredient?: string | null;
   strength?: string | null;
-  dosage_form?: DosageForm;
+  dosage_form?: DosageForm | null;
   dose?: string | null;
   route?: string | null;
-  frequency: string;
-  duration: string;
+  frequency?: string | null;
+  duration?: string | null;
   quantity?: string | null;
   instructions?: string | null;
   display_order?: number;
@@ -175,11 +175,11 @@ export async function createPrescription(input: CreatePrescriptionInput): Promis
       medication_name: it.medication_name.trim(),
       active_ingredient: it.active_ingredient?.trim() || null,
       strength: it.strength?.trim() || null,
-      dosage_form: it.dosage_form || "syrup",
+      dosage_form: it.dosage_form || null as any,
       dose: it.dose?.trim() || null,
       route: it.route?.trim() || null,
-      frequency: it.frequency?.trim() || "3 مرات يومياً",
-      duration: it.duration?.trim() || "5 أيام",
+      frequency: it.frequency ? it.frequency.trim() : null as any,
+      duration: it.duration ? it.duration.trim() : null as any,
       quantity: it.quantity?.trim() || null,
       instructions: it.instructions?.trim() || null,
       display_order: it.display_order ?? idx + 1,
@@ -217,11 +217,11 @@ export async function createPrescription(input: CreatePrescriptionInput): Promis
       medication_name: it.medication_name.trim(),
       active_ingredient: it.active_ingredient?.trim() || null,
       strength: it.strength?.trim() || null,
-      dosage_form: it.dosage_form || "syrup",
+      dosage_form: it.dosage_form || null,
       dose: it.dose?.trim() || null,
       route: it.route?.trim() || null,
-      frequency: it.frequency?.trim() || "3 مرات يومياً",
-      duration: it.duration?.trim() || "5 أيام",
+      frequency: it.frequency ? it.frequency.trim() : null,
+      duration: it.duration ? it.duration.trim() : null,
       quantity: it.quantity?.trim() || null,
       instructions: it.instructions?.trim() || null,
       display_order: it.display_order ?? idx + 1,
@@ -328,11 +328,11 @@ export async function addPrescriptionItem(input: AddPrescriptionItemInput): Prom
       medication_name: input.medication_name.trim(),
       active_ingredient: input.active_ingredient?.trim() || null,
       strength: input.strength?.trim() || null,
-      dosage_form: input.dosage_form || "syrup",
+      dosage_form: input.dosage_form || null as any,
       dose: input.dose?.trim() || null,
       route: input.route?.trim() || null,
-      frequency: input.frequency.trim(),
-      duration: input.duration.trim(),
+      frequency: input.frequency ? input.frequency.trim() : null as any,
+      duration: input.duration ? input.duration.trim() : null as any,
       quantity: input.quantity?.trim() || null,
       instructions: input.instructions?.trim() || null,
       display_order: input.display_order ?? (rx.items?.length || 0) + 1,
@@ -352,11 +352,11 @@ export async function addPrescriptionItem(input: AddPrescriptionItemInput): Prom
       medication_name: input.medication_name.trim(),
       active_ingredient: input.active_ingredient?.trim() || null,
       strength: input.strength?.trim() || null,
-      dosage_form: input.dosage_form || "syrup",
+      dosage_form: input.dosage_form || null,
       dose: input.dose?.trim() || null,
       route: input.route?.trim() || null,
-      frequency: input.frequency.trim(),
-      duration: input.duration.trim(),
+      frequency: input.frequency ? input.frequency.trim() : null,
+      duration: input.duration ? input.duration.trim() : null,
       quantity: input.quantity?.trim() || null,
       instructions: input.instructions?.trim() || null,
       display_order: input.display_order ?? 0,

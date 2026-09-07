@@ -69,6 +69,58 @@ describe('Patient Service Supabase Data Contracts (No Mock Fallback in Productio
       expect(result.length).toBeGreaterThan(0);
       expect(result[0].fileNumber).toBeDefined();
     });
+
+    it('preserves null values for prescription items from Supabase without injecting clinical defaults', async () => {
+      const mockPatientRow = {
+        id: 'p-uuid-1',
+        file_number: 'P-6680',
+        full_name: 'TEST-RX-E2E-001',
+        gender: 'male',
+        date_of_birth: '2022-01-01',
+        visits: [
+          {
+            id: 'v-uuid-1',
+            patient_id: 'p-uuid-1',
+            visit_date: '2026-09-07T10:00:00Z',
+            status: 'completed',
+            prescriptions: [
+              {
+                id: 'rx-uuid-1',
+                visit_id: 'v-uuid-1',
+                patient_id: 'p-uuid-1',
+                status: 'draft',
+                prescription_items: [
+                  {
+                    id: 'item-uuid-1',
+                    medication_name: 'TEST MEDICATION',
+                    dosage_form: null,
+                    dose: null,
+                    frequency: null,
+                    duration: null,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      mockOrder.mockResolvedValueOnce({ data: [mockPatientRow], error: null });
+
+      const result = await fetchPatients();
+      expect(result.length).toBe(1);
+      const visit = result[0].visits[0];
+      expect(visit.prescription).toBeDefined();
+      const item = visit.prescription?.items?.[0];
+      expect(item).toBeDefined();
+      expect(item?.medication_name).toBe('TEST MEDICATION');
+      expect(item?.dosage_form).toBeNull();
+      expect(item?.frequency).toBeNull();
+      expect(item?.duration).toBeNull();
+      expect(item?.dosage_form).not.toBe('syrup');
+      expect(item?.frequency).not.toBe('3 مرات يومياً');
+      expect(item?.duration).not.toBe('5 أيام');
+    });
   });
 
   describe('fetchPatientById()', () => {

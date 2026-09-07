@@ -203,10 +203,20 @@ export function ElectronicPrescriptionSection({
     setIsSavingDraft(true);
 
     // Include items where doctor started typing medication_name
-    const draftItems = items
+    const draftItems: PrescriptionItemInput[] = items
       .filter((it) => it.medication_name && it.medication_name.trim() !== "")
       .map((it, idx) => ({
         ...it,
+        medication_name: it.medication_name.trim(),
+        active_ingredient: it.active_ingredient?.trim() || null,
+        strength: it.strength?.trim() || null,
+        dosage_form: it.dosage_form || null,
+        dose: it.dose?.trim() || null,
+        route: it.route?.trim() || null,
+        frequency: it.frequency ? it.frequency.trim() : null,
+        duration: it.duration ? it.duration.trim() : null,
+        quantity: it.quantity?.trim() || null,
+        instructions: it.instructions?.trim() || null,
         display_order: idx + 1,
       }));
 
@@ -221,6 +231,24 @@ export function ElectronicPrescriptionSection({
       });
 
       setPrescription(saved);
+      if (saved.items && saved.items.length > 0) {
+        setItems(
+          saved.items.map((it, idx) => ({
+            id: it.id,
+            medication_name: it.medication_name || "",
+            active_ingredient: it.active_ingredient || "",
+            strength: it.strength || "",
+            dosage_form: it.dosage_form || ("" as any),
+            dose: it.dose || "",
+            route: it.route || it.route_or_instructions || "",
+            frequency: it.frequency || "",
+            duration: it.duration || "",
+            quantity: it.quantity || "",
+            instructions: it.instructions || "",
+            display_order: it.display_order ?? idx + 1,
+          }))
+        );
+      }
       setSuccessMessage(language === "ar" ? "تم حفظ مسودة الوصفة الطبية بنجاح" : "Prescription draft saved successfully");
       if (onPrescriptionChanged) onPrescriptionChanged(saved);
     } catch (err: any) {
@@ -532,7 +560,7 @@ export function ElectronicPrescriptionSection({
                 required
                 disabled={isLocked}
                 placeholder="مثال: 3 مرات يومياً / كل 8 ساعات"
-                value={item.frequency}
+                value={item.frequency || ""}
                 onChange={(e) => handleUpdateItem(index, "frequency", e.target.value)}
                 className="text-xs font-semibold"
               />
@@ -542,7 +570,7 @@ export function ElectronicPrescriptionSection({
                 required
                 disabled={isLocked}
                 placeholder="مثال: 5 أيام / أسبوع"
-                value={item.duration}
+                value={item.duration || ""}
                 onChange={(e) => handleUpdateItem(index, "duration", e.target.value)}
                 className="text-xs font-semibold"
               />
