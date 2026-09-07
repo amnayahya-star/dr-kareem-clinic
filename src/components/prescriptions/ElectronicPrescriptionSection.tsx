@@ -52,18 +52,24 @@ const ROUTE_OPTIONS = [
   { value: "otic", labelAr: "قطرة أذن (Otic)", labelEn: "Ear Drops" },
 ];
 
-export function ElectronicPrescriptionSection({
-  visitId,
-  patientId,
-  diagnosisId,
-  initialPrescription,
-  readOnly = false,
-  onPrescriptionChanged,
-}: ElectronicPrescriptionSectionProps) {
-  const { language, isRTL } = useLanguage();
-
-  const [prescription, setPrescription] = useState<Prescription | null>(initialPrescription || null);
-  const [items, setItems] = useState<PrescriptionItemInput[]>([
+function mapPrescriptionToFormItems(rx?: Prescription | null): PrescriptionItemInput[] {
+  if (rx?.items && rx.items.length > 0) {
+    return rx.items.map((it, idx) => ({
+      id: it.id,
+      medication_name: it.medication_name || "",
+      active_ingredient: it.active_ingredient || "",
+      strength: it.strength || "",
+      dosage_form: it.dosage_form || ("" as any),
+      dose: it.dose || "",
+      route: it.route || it.route_or_instructions || "",
+      frequency: it.frequency || "",
+      duration: it.duration || "",
+      quantity: it.quantity || "",
+      instructions: it.instructions || "",
+      display_order: it.display_order ?? idx + 1,
+    }));
+  }
+  return [
     {
       medication_name: "",
       active_ingredient: "",
@@ -77,9 +83,26 @@ export function ElectronicPrescriptionSection({
       instructions: "",
       display_order: 1,
     },
-  ]);
-  const [generalInstructions, setGeneralInstructions] = useState("");
+  ];
+}
 
+export function ElectronicPrescriptionSection({
+  visitId,
+  patientId,
+  diagnosisId,
+  initialPrescription,
+  readOnly = false,
+  onPrescriptionChanged,
+}: ElectronicPrescriptionSectionProps) {
+  const { language, isRTL } = useLanguage();
+
+  const [prescription, setPrescription] = useState<Prescription | null>(initialPrescription || null);
+  const [items, setItems] = useState<PrescriptionItemInput[]>(() => mapPrescriptionToFormItems(initialPrescription));
+  const [generalInstructions, setGeneralInstructions] = useState<string>(
+    initialPrescription?.general_instructions || ""
+  );
+
+  const [isDirty, setIsDirty] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [isIssuing, setIsIssuing] = useState(false);
@@ -91,32 +114,34 @@ export function ElectronicPrescriptionSection({
   const [cancellationReason, setCancellationReason] = useState("");
   const [isCancelling, setIsCancelling] = useState(false);
 
-  // Hydrate from initial or fetch on visitId change
+  // Stable Hydration tracking
+  const lastHydratedVisitIdRef = React.useRef<string | null>(null);
+  const savedBaselineRef = React.useRef<{
+    items: PrescriptionItemInput[];
+    generalInstructions: string;
+  } | null>(null);
+
+  // Hydrate only when visitId genuinely changes or on initial load
   useEffect(() => {
     let isCurrent = true;
-    if (initialPrescription) {
+
+    // GUARD: If this visit is already hydrated, DO NOT rehydrate from polling!
+    if (lastHydratedVisitIdRef.current === visitId) {
+      return;
+    }
+
+    lastHydratedVisitIdRef.current = visitId;
+    setIsDirty(false);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    if (initialPrescription && initialPrescription.visit_id === visitId) {
       setPrescription(initialPrescription);
-      if (initialPrescription.items && initialPrescription.items.length > 0) {
-        setItems(
-          initialPrescription.items.map((it, idx) => ({
-            id: it.id,
-            medication_name: it.medication_name || "",
-            active_ingredient: it.active_ingredient || "",
-            strength: it.strength || "",
-            dosage_form: it.dosage_form || ("" as any),
-            dose: it.dose || "",
-            route: it.route || it.route_or_instructions || "",
-            frequency: it.frequency || "",
-            duration: it.duration || "",
-            quantity: it.quantity || "",
-            instructions: it.instructions || "",
-            display_order: it.display_order ?? idx + 1,
-          }))
-        );
-      }
-      if (initialPrescription.general_instructions) {
-        setGeneralInstructions(initialPrescription.general_instructions);
-      }
+      const mapped = mapPrescriptionToFormItems(initialPrescription);
+      setItems(mapped);
+      const instructions = initialPrescription.general_instructions || "";
+      setGeneralInstructions(instructions);
+      savedBaselineRef.current = { items: mapped, generalInstructions: instructions };
       return;
     }
 
@@ -127,27 +152,17 @@ export function ElectronicPrescriptionSection({
           if (!isCurrent) return;
           if (rx) {
             setPrescription(rx);
-            if (rx.items && rx.items.length > 0) {
-              setItems(
-                rx.items.map((it, idx) => ({
-                  id: it.id,
-                  medication_name: it.medication_name || "",
-                  active_ingredient: it.active_ingredient || "",
-                  strength: it.strength || "",
-                  dosage_form: it.dosage_form || ("" as any),
-                  dose: it.dose || "",
-                  route: it.route || it.route_or_instructions || "",
-                  frequency: it.frequency || "",
-                  duration: it.duration || "",
-                  quantity: it.quantity || "",
-                  instructions: it.instructions || "",
-                  display_order: it.display_order ?? idx + 1,
-                }))
-              );
-            }
-            if (rx.general_instructions) {
-              setGeneralInstructions(rx.general_instructions);
-            }
+            const mapped = mapPrescriptionToFormItems(rx);
+            setItems(mapped);
+            const instructions = rx.general_instructions || "";
+            setGeneralInstructions(instructions);
+            savedBaselineRef.current = { items: mapped, generalInstructions: instructions };
+          } else {
+            setPrescription(null);
+            const mapped = mapPrescriptionToFormItems(null);
+            setItems(mapped);
+            setGeneralInstructions("");
+            savedBaselineRef.current = { items: mapped, generalInstructions: "" };
           }
         })
         .catch((err) => {
@@ -161,10 +176,50 @@ export function ElectronicPrescriptionSection({
     return () => {
       isCurrent = false;
     };
-  }, [visitId, initialPrescription]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visitId]);
+
+  // Sync late-arriving initialPrescription or external status change when NOT dirty
+  useEffect(() => {
+    if (
+      initialPrescription &&
+      initialPrescription.visit_id === visitId &&
+      !isDirty &&
+      lastHydratedVisitIdRef.current === visitId
+    ) {
+      if (
+        prescription === null ||
+        prescription?.id !== initialPrescription.id ||
+        prescription?.status !== initialPrescription.status
+      ) {
+        setPrescription(initialPrescription);
+        const mapped = mapPrescriptionToFormItems(initialPrescription);
+        setItems(mapped);
+        setGeneralInstructions(initialPrescription.general_instructions || "");
+        savedBaselineRef.current = {
+          items: mapped,
+          generalInstructions: initialPrescription.general_instructions || "",
+        };
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialPrescription?.id, initialPrescription?.status, isDirty, visitId]);
+
+  // Browser BeforeUnload Guard when there are unsaved edits
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirty && !readOnly && prescription?.status !== "issued" && prescription?.status !== "cancelled") {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isDirty, readOnly, prescription?.status]);
 
   // Add a new medication line
   const handleAddItem = () => {
+    setIsDirty(true);
     setItems((prev) => [
       ...prev,
       {
@@ -186,11 +241,13 @@ export function ElectronicPrescriptionSection({
   // Remove a medication line
   const handleRemoveItem = (index: number) => {
     if (items.length <= 1) return;
+    setIsDirty(true);
     setItems((prev) => prev.filter((_, idx) => idx !== index));
   };
 
   // Update item field
   const handleUpdateItem = (index: number, field: keyof PrescriptionItemInput, value: any) => {
+    setIsDirty(true);
     setItems((prev) =>
       prev.map((it, idx) => (idx === index ? { ...it, [field]: value } : it))
     );
@@ -231,27 +288,17 @@ export function ElectronicPrescriptionSection({
       });
 
       setPrescription(saved);
-      if (saved.items && saved.items.length > 0) {
-        setItems(
-          saved.items.map((it, idx) => ({
-            id: it.id,
-            medication_name: it.medication_name || "",
-            active_ingredient: it.active_ingredient || "",
-            strength: it.strength || "",
-            dosage_form: it.dosage_form || ("" as any),
-            dose: it.dose || "",
-            route: it.route || it.route_or_instructions || "",
-            frequency: it.frequency || "",
-            duration: it.duration || "",
-            quantity: it.quantity || "",
-            instructions: it.instructions || "",
-            display_order: it.display_order ?? idx + 1,
-          }))
-        );
-      }
+      const savedMapped = mapPrescriptionToFormItems(saved);
+      setItems(savedMapped);
+      savedBaselineRef.current = {
+        items: savedMapped,
+        generalInstructions: generalInstructions.trim(),
+      };
+      setIsDirty(false); // Clean dirty state after confirmed save
       setSuccessMessage(language === "ar" ? "تم حفظ مسودة الوصفة الطبية بنجاح" : "Prescription draft saved successfully");
       if (onPrescriptionChanged) onPrescriptionChanged(saved);
     } catch (err: any) {
+      // Retain doctor's typed items in state and keep isDirty
       setErrorMessage(err.message || (language === "ar" ? "فشل حفظ مسودة الوصفة" : "Failed to save draft"));
     } finally {
       setIsSavingDraft(false);
@@ -348,6 +395,13 @@ export function ElectronicPrescriptionSection({
       });
 
       setPrescription(issued);
+      const mapped = mapPrescriptionToFormItems(issued);
+      setItems(mapped);
+      savedBaselineRef.current = {
+        items: mapped,
+        generalInstructions: generalInstructions.trim(),
+      };
+      setIsDirty(false); // Clean dirty state after issuance
       setSuccessMessage(
         language === "ar"
           ? "تم اعتماد وإصدار الوصفة الطبية بنجاح! أصبحت جاهزة للطباعة."
@@ -371,6 +425,7 @@ export function ElectronicPrescriptionSection({
       const cancelled = await cancelPrescription(prescription.id, cancellationReason);
       setPrescription(cancelled);
       setIsCancelModalOpen(false);
+      setIsDirty(false);
       setSuccessMessage(language === "ar" ? "تم إلغاء الوصفة الطبية بنجاح" : "Prescription cancelled successfully");
       if (onPrescriptionChanged) onPrescriptionChanged(cancelled);
     } catch (err: any) {
@@ -401,7 +456,7 @@ export function ElectronicPrescriptionSection({
             <Pill className="w-5 h-5 text-clinic-600" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-base font-black text-slate-900">
                 {language === "ar" ? "الوصفة الطبية الإلكترونية" : "Electronic Prescription (e-Rx)"}
               </h3>
@@ -424,6 +479,15 @@ export function ElectronicPrescriptionSection({
                 <Badge variant="info" size="sm" className="font-bold">
                   {language === "ar" ? "مسودة جاهزة للإصدار" : "Draft (Ready to Issue)"}
                 </Badge>
+              )}
+              {isDirty && !isLocked && (
+                <span
+                  data-testid="rx-dirty-badge"
+                  className="inline-flex items-center gap-1 rounded-full border bg-amber-50 text-amber-800 border-amber-300 px-2.5 py-0.5 text-xs font-bold shadow-2xs animate-pulse"
+                >
+                  <Clock className="w-3.5 h-3.5 text-amber-600" />
+                  <span>{language === "ar" ? "تعديلات غير محفوظة" : "Unsaved Changes"}</span>
+                </span>
               )}
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
@@ -676,7 +740,10 @@ export function ElectronicPrescriptionSection({
             disabled={isLocked}
             rows={2}
             value={generalInstructions}
-            onChange={(e) => setGeneralInstructions(e.target.value)}
+            onChange={(e) => {
+              setIsDirty(true);
+              setGeneralInstructions(e.target.value);
+            }}
             className="text-xs font-medium"
           />
         </div>

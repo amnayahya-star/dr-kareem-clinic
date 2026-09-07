@@ -552,6 +552,270 @@ describe('ElectronicPrescriptionSection (التحقق من رسائل الخطأ
     // 3. RPC for issue was NOT called
     expect(spySave).toHaveBeenCalledTimes(1); // Only the previous draft save
   });
+
+  it('preserves typed values during polling re-renders and displays unsaved changes badge', async () => {
+    const { rerender } = render(
+      <LanguageProvider>
+        <ElectronicPrescriptionSection
+          visitId="v-100"
+          patientId="p-100"
+          initialPrescription={mockInitialDraft as any}
+        />
+      </LanguageProvider>
+    );
+
+    // Initial state: no dirty badge
+    expect(screen.queryByTestId('rx-dirty-badge')).not.toBeInTheDocument();
+
+    // Type in medication name and frequency
+    const nameInput = screen.getByDisplayValue('TEST MEDICATION');
+    fireEvent.change(nameInput, { target: { value: 'Paracetamol Syrup 120mg' } });
+
+    // Dirty badge should now appear
+    expect(screen.getByTestId('rx-dirty-badge')).toBeInTheDocument();
+    expect(screen.getByText('تعديلات غير محفوظة')).toBeInTheDocument();
+
+    // Simulate 1st background polling (3s later): new object reference with old data arrives
+    const pollingPrescription1 = {
+      ...mockInitialDraft,
+      items: [
+        {
+          id: 'item-1',
+          prescription_id: 'rx-draft-1',
+          medication_name: 'TEST MEDICATION',
+          dosage_form: null,
+          dose: null,
+          frequency: null,
+          duration: null,
+          display_order: 1,
+        },
+      ],
+    };
+
+    rerender(
+      <LanguageProvider>
+        <ElectronicPrescriptionSection
+          visitId="v-100"
+          patientId="p-100"
+          initialPrescription={pollingPrescription1 as any}
+        />
+      </LanguageProvider>
+    );
+
+    // Verify typed value is PRESERVED and NOT wiped out by polling
+    expect(screen.getByDisplayValue('Paracetamol Syrup 120mg')).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('TEST MEDICATION')).not.toBeInTheDocument();
+    expect(screen.getByTestId('rx-dirty-badge')).toBeInTheDocument();
+
+    // Type in frequency and duration
+    const freqInput = screen.getByPlaceholderText('مثال: 3 مرات يومياً / كل 8 ساعات');
+    fireEvent.change(freqInput, { target: { value: 'كل 8 ساعات عند اللزوم' } });
+
+    const durInput = screen.getByPlaceholderText('مثال: 5 أيام / أسبوع');
+    fireEvent.change(durInput, { target: { value: '3 أيام' } });
+
+    // Simulate 2nd background polling (6s later): another new object reference
+    const pollingPrescription2 = { ...mockInitialDraft };
+    rerender(
+      <LanguageProvider>
+        <ElectronicPrescriptionSection
+          visitId="v-100"
+          patientId="p-100"
+          initialPrescription={pollingPrescription2 as any}
+        />
+      </LanguageProvider>
+    );
+
+    // Verify all typed values remain intact
+    expect(screen.getByDisplayValue('Paracetamol Syrup 120mg')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('كل 8 ساعات عند اللزوم')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('3 أيام')).toBeInTheDocument();
+    expect(screen.getByTestId('rx-dirty-badge')).toBeInTheDocument();
+  });
+
+  it('clears dirty state and unsaved badge upon successful draft save', async () => {
+    const spySave = vi.spyOn(prescriptionService, 'savePrescriptionWithItems');
+    spySave.mockResolvedValueOnce({
+      id: 'rx-draft-1',
+      visit_id: 'v-100',
+      patient_id: 'p-100',
+      status: 'draft',
+      items: [
+        {
+          id: 'item-1',
+          prescription_id: 'rx-draft-1',
+          medication_name: 'Ibuprofen 100mg',
+          dosage_form: 'syrup',
+          frequency: '2 times daily',
+          duration: '5 days',
+          display_order: 1,
+        },
+      ],
+    } as any);
+
+    render(
+      <LanguageProvider>
+        <ElectronicPrescriptionSection
+          visitId="v-100"
+          patientId="p-100"
+          initialPrescription={mockInitialDraft as any}
+        />
+      </LanguageProvider>
+    );
+
+    // Edit field
+    const nameInput = screen.getByDisplayValue('TEST MEDICATION');
+    fireEvent.change(nameInput, { target: { value: 'Ibuprofen 100mg' } });
+    expect(screen.getByTestId('rx-dirty-badge')).toBeInTheDocument();
+
+    // Click Save Draft
+    const draftBtn = screen.getByRole('button', { name: /حفظ كمسودة/i });
+    fireEvent.click(draftBtn);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('rx-success-alert')).toBeInTheDocument();
+      // Dirty badge MUST be removed
+      expect(screen.queryByTestId('rx-dirty-badge')).not.toBeInTheDocument();
+      expect(screen.getByDisplayValue('Ibuprofen 100mg')).toBeInTheDocument();
+    });
+  });
+
+  it('preserves typed inputs and keeps dirty badge when draft save fails', async () => {
+    const spySave = vi.spyOn(prescriptionService, 'savePrescriptionWithItems');
+    spySave.mockRejectedValueOnce(new Error('فشل الاتصال بقاعدة البيانات'));
+
+    render(
+      <LanguageProvider>
+        <ElectronicPrescriptionSection
+          visitId="v-100"
+          patientId="p-100"
+          initialPrescription={mockInitialDraft as any}
+        />
+      </LanguageProvider>
+    );
+
+    // Edit field
+    const nameInput = screen.getByDisplayValue('TEST MEDICATION');
+    fireEvent.change(nameInput, { target: { value: 'Amoxicillin 250mg' } });
+    expect(screen.getByTestId('rx-dirty-badge')).toBeInTheDocument();
+
+    // Click Save Draft
+    const draftBtn = screen.getByRole('button', { name: /حفظ كمسودة/i });
+    fireEvent.click(draftBtn);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('rx-error-alert')).toBeInTheDocument();
+      expect(screen.getByText(/فشل الاتصال بقاعدة البيانات/i)).toBeInTheDocument();
+      // Typed value and dirty badge MUST stay
+      expect(screen.getByDisplayValue('Amoxicillin 250mg')).toBeInTheDocument();
+      expect(screen.getByTestId('rx-dirty-badge')).toBeInTheDocument();
+    });
+  });
+
+  it('correctly loads new prescription when visitId changes (switching patients or visits)', async () => {
+    const { rerender } = render(
+      <LanguageProvider>
+        <ElectronicPrescriptionSection
+          visitId="v-100"
+          patientId="p-100"
+          initialPrescription={mockInitialDraft as any}
+        />
+      </LanguageProvider>
+    );
+
+    expect(screen.getByDisplayValue('TEST MEDICATION')).toBeInTheDocument();
+
+    // Switch to another patient / visit (v-200)
+    const newVisitPrescription = {
+      id: 'rx-v200',
+      visit_id: 'v-200',
+      patient_id: 'p-200',
+      status: 'issued' as const,
+      items: [
+        {
+          id: 'item-200',
+          prescription_id: 'rx-v200',
+          medication_name: 'Cefixime Syrup',
+          dosage_form: 'syrup',
+          frequency: 'مرة واحدة يومياً',
+          duration: '7 أيام',
+          display_order: 1,
+        },
+      ],
+    };
+
+    rerender(
+      <LanguageProvider>
+        <ElectronicPrescriptionSection
+          visitId="v-200"
+          patientId="p-200"
+          initialPrescription={newVisitPrescription as any}
+        />
+      </LanguageProvider>
+    );
+
+    // Verify the new visit's prescription is loaded and old one is replaced
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Cefixime Syrup')).toBeInTheDocument();
+      expect(screen.queryByDisplayValue('TEST MEDICATION')).not.toBeInTheDocument();
+      expect(screen.getByText('وصفة صادرة ومعتمدة')).toBeInTheDocument();
+      expect(screen.queryByTestId('rx-dirty-badge')).not.toBeInTheDocument();
+    });
+  });
+
+  it('correctly hydrates when initialPrescription arrives asynchronously after initial mount', async () => {
+    // Initial mount without initialPrescription (undefined/null)
+    const { rerender } = render(
+      <LanguageProvider>
+        <ElectronicPrescriptionSection
+          visitId="v-300"
+          patientId="p-300"
+          initialPrescription={null}
+        />
+      </LanguageProvider>
+    );
+
+    // Initial state: empty fields
+    expect(screen.queryByDisplayValue('Azithromycin 200mg')).not.toBeInTheDocument();
+
+    // Now parent finishes fetching data and passes initialPrescription
+    const lateArrivedPrescription = {
+      id: 'rx-v300',
+      visit_id: 'v-300',
+      patient_id: 'p-300',
+      status: 'draft' as const,
+      items: [
+        {
+          id: 'item-300',
+          prescription_id: 'rx-v300',
+          medication_name: 'Azithromycin 200mg',
+          dosage_form: 'suspension',
+          frequency: 'مرة واحدة يومياً',
+          duration: '3 أيام',
+          display_order: 1,
+        },
+      ],
+    };
+
+    rerender(
+      <LanguageProvider>
+        <ElectronicPrescriptionSection
+          visitId="v-300"
+          patientId="p-300"
+          initialPrescription={lateArrivedPrescription as any}
+        />
+      </LanguageProvider>
+    );
+
+    // Verify late arrived prescription is correctly hydrated
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Azithromycin 200mg')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('مرة واحدة يومياً')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('3 أيام')).toBeInTheDocument();
+      expect(screen.queryByTestId('rx-dirty-badge')).not.toBeInTheDocument();
+    });
+  });
 });
+
 
 
