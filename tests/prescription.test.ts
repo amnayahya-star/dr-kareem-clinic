@@ -12,6 +12,11 @@ import {
   savePrescriptionWithItems,
 } from '../src/services/prescriptionService';
 import { PrescriptionItem, PrescriptionStatus } from '../src/types/database';
+import {
+  isPrescriptionDraftReady,
+  isPrescriptionItemComplete,
+  isPrescriptionItemTouched,
+} from '../src/components/prescriptions/ElectronicPrescriptionSection';
 import fs from 'fs';
 import path from 'path';
 
@@ -550,6 +555,170 @@ describe('Electronic Prescription Service (نظام الوصفة الطبية ا
       expect(sql).toContain('Staff view prescriptions policy');
       expect(sql).toContain('Doctor can insert prescriptions');
       expect(sql).toContain('Staff view prescription items policy');
+    });
+  });
+
+  describe('Local Draft Readiness Calculation (isPrescriptionDraftReady)', () => {
+    it('returns false for empty items array or null/undefined', () => {
+      expect(isPrescriptionDraftReady([])).toBe(false);
+      expect(isPrescriptionDraftReady(null as any)).toBe(false);
+      expect(isPrescriptionDraftReady(undefined as any)).toBe(false);
+    });
+
+    it('returns false when items contain only an untouched blank item', () => {
+      const items: any[] = [
+        {
+          medication_name: '',
+          active_ingredient: '',
+          strength: '',
+          dosage_form: '',
+          dose: '',
+          route: '',
+          frequency: '',
+          duration: '',
+          quantity: '',
+          instructions: '',
+        },
+      ];
+      expect(isPrescriptionDraftReady(items)).toBe(false);
+    });
+
+    it('returns true when mandatory fields (medication_name, dosage_form, frequency, duration) are filled', () => {
+      const items: any[] = [
+        {
+          medication_name: 'TEST MEDICATION',
+          dosage_form: 'syrup',
+          frequency: 'TEST ONLY',
+          duration: 'TEST ONLY',
+        },
+      ];
+      expect(isPrescriptionDraftReady(items)).toBe(true);
+    });
+
+    it('returns true even if optional fields (active_ingredient, strength, dose, route, quantity, instructions) are omitted', () => {
+      const items: any[] = [
+        {
+          medication_name: 'Paracetamol',
+          dosage_form: 'syrup',
+          frequency: '3 times daily',
+          duration: '5 days',
+          active_ingredient: '',
+          strength: '',
+          dose: '',
+          route: '',
+          quantity: '',
+          instructions: '',
+        },
+      ];
+      expect(isPrescriptionDraftReady(items)).toBe(true);
+    });
+
+    it('returns false if medication_name is empty or whitespace only', () => {
+      const items: any[] = [
+        {
+          medication_name: '   ',
+          dosage_form: 'syrup',
+          frequency: '3 times daily',
+          duration: '5 days',
+        },
+      ];
+      expect(isPrescriptionDraftReady(items)).toBe(false);
+    });
+
+    it('returns false if dosage_form is empty or null', () => {
+      const items: any[] = [
+        {
+          medication_name: 'Paracetamol',
+          dosage_form: '',
+          frequency: '3 times daily',
+          duration: '5 days',
+        },
+      ];
+      expect(isPrescriptionDraftReady(items)).toBe(false);
+    });
+
+    it('returns false if frequency is empty or whitespace only', () => {
+      const items: any[] = [
+        {
+          medication_name: 'Paracetamol',
+          dosage_form: 'syrup',
+          frequency: '   ',
+          duration: '5 days',
+        },
+      ];
+      expect(isPrescriptionDraftReady(items)).toBe(false);
+    });
+
+    it('returns false if duration is empty or whitespace only', () => {
+      const items: any[] = [
+        {
+          medication_name: 'Paracetamol',
+          dosage_form: 'syrup',
+          frequency: '3 times daily',
+          duration: '  ',
+        },
+      ];
+      expect(isPrescriptionDraftReady(items)).toBe(false);
+    });
+
+    it('returns true when multiple items are all complete', () => {
+      const items: any[] = [
+        {
+          medication_name: 'Medication A',
+          dosage_form: 'syrup',
+          frequency: '3x',
+          duration: '5 days',
+        },
+        {
+          medication_name: 'Medication B',
+          dosage_form: 'tablets',
+          frequency: '1x',
+          duration: '10 days',
+        },
+      ];
+      expect(isPrescriptionDraftReady(items)).toBe(true);
+    });
+
+    it('returns false when one of multiple touched items is incomplete', () => {
+      const items: any[] = [
+        {
+          medication_name: 'Medication A',
+          dosage_form: 'syrup',
+          frequency: '3x',
+          duration: '5 days',
+        },
+        {
+          medication_name: 'Medication B',
+          dosage_form: 'tablets',
+          frequency: '',
+          duration: '10 days',
+        },
+      ];
+      expect(isPrescriptionDraftReady(items)).toBe(false);
+    });
+
+    it('ignores completely untouched placeholder rows when another item is complete', () => {
+      const items: any[] = [
+        {
+          medication_name: 'Medication A',
+          dosage_form: 'syrup',
+          frequency: '3x',
+          duration: '5 days',
+        },
+        {
+          medication_name: '',
+          dosage_form: '',
+          frequency: '',
+          duration: '',
+          active_ingredient: '',
+          strength: '',
+          dose: '',
+          route: '',
+          quantity: '',
+          instructions: '',
+        },
+      ];
+      expect(isPrescriptionDraftReady(items)).toBe(true);
     });
   });
 });

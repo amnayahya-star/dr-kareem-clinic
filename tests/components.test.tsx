@@ -815,6 +815,167 @@ describe('ElectronicPrescriptionSection (التحقق من رسائل الخطأ
       expect(screen.queryByTestId('rx-dirty-badge')).not.toBeInTheDocument();
     });
   });
+
+  it('updates readiness badge to ready in real-time when mandatory fields are filled without requiring a draft save', async () => {
+    const { container } = render(
+      <LanguageProvider>
+        <ElectronicPrescriptionSection
+          visitId="v-100"
+          patientId="p-100"
+          initialPrescription={mockInitialDraft as any}
+        />
+      </LanguageProvider>
+    );
+
+    // Initial state: badge is "مسودة غير مكتملة"
+    expect(screen.getByTestId('rx-draft-incomplete-badge')).toBeInTheDocument();
+    expect(screen.queryByTestId('rx-draft-ready-badge')).not.toBeInTheDocument();
+
+    // 1. Fill dosage_form
+    const dosageSelect = container.querySelector('#medication-item-0-dosage_form') as HTMLSelectElement;
+    expect(dosageSelect).toBeInTheDocument();
+    fireEvent.change(dosageSelect, { target: { value: 'syrup' } });
+
+    // 2. Fill frequency
+    const freqInput = screen.getByPlaceholderText('مثال: 3 مرات يومياً / كل 8 ساعات');
+    fireEvent.change(freqInput, { target: { value: 'TEST ONLY' } });
+
+    // 3. Fill duration
+    const durInput = screen.getByPlaceholderText('مثال: 5 أيام / أسبوع');
+    fireEvent.change(durInput, { target: { value: 'TEST ONLY' } });
+
+    // Badge MUST immediately flip to "مسودة جاهزة للإصدار" without clicking Save
+    await waitFor(() => {
+      expect(screen.getByTestId('rx-draft-ready-badge')).toBeInTheDocument();
+      expect(screen.getByText('مسودة جاهزة للإصدار')).toBeInTheDocument();
+      expect(screen.queryByTestId('rx-draft-incomplete-badge')).not.toBeInTheDocument();
+    });
+
+    // Both readiness badge and unsaved changes badge are visible together
+    expect(screen.getByTestId('rx-dirty-badge')).toBeInTheDocument();
+
+    // 4. Clear frequency -> badge immediately reverts to "مسودة غير مكتملة"
+    fireEvent.change(freqInput, { target: { value: '   ' } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('rx-draft-incomplete-badge')).toBeInTheDocument();
+      expect(screen.getByText('مسودة غير مكتملة')).toBeInTheDocument();
+      expect(screen.queryByTestId('rx-draft-ready-badge')).not.toBeInTheDocument();
+    });
+  });
+
+  it('allows ready badge even when optional fields (active_ingredient, strength, dose, route, quantity, instructions) are empty', async () => {
+    const minimalCompletePrescription = {
+      id: 'rx-min-1',
+      visit_id: 'v-min-1',
+      patient_id: 'p-min-1',
+      status: 'draft' as const,
+      items: [
+        {
+          id: 'item-1',
+          prescription_id: 'rx-min-1',
+          medication_name: 'Calamine Lotion',
+          dosage_form: 'lotion',
+          frequency: 'عند الحكة',
+          duration: 'أسبوع',
+          active_ingredient: null,
+          strength: null,
+          dose: null,
+          route: null,
+          quantity: null,
+          instructions: null,
+          display_order: 1,
+        },
+      ],
+    };
+
+    render(
+      <LanguageProvider>
+        <ElectronicPrescriptionSection
+          visitId="v-min-1"
+          patientId="p-min-1"
+          initialPrescription={minimalCompletePrescription as any}
+        />
+      </LanguageProvider>
+    );
+
+    // Optional fields empty -> still ready to issue
+    expect(screen.getByTestId('rx-draft-ready-badge')).toBeInTheDocument();
+    expect(screen.getByText('مسودة جاهزة للإصدار')).toBeInTheDocument();
+  });
+
+  it('reverts readiness badge to incomplete when adding an incomplete second medication line and restores ready when completed', async () => {
+    const singleCompletePrescription = {
+      id: 'rx-single-1',
+      visit_id: 'v-s-1',
+      patient_id: 'p-s-1',
+      status: 'draft' as const,
+      items: [
+        {
+          id: 'item-1',
+          prescription_id: 'rx-single-1',
+          medication_name: 'TEST MEDICATION',
+          dosage_form: 'syrup',
+          frequency: 'TEST ONLY',
+          duration: 'TEST ONLY',
+          display_order: 1,
+        },
+      ],
+    };
+
+    const { container } = render(
+      <LanguageProvider>
+        <ElectronicPrescriptionSection
+          visitId="v-s-1"
+          patientId="p-s-1"
+          initialPrescription={singleCompletePrescription as any}
+        />
+      </LanguageProvider>
+    );
+
+    // Initial state: ready
+    expect(screen.getByTestId('rx-draft-ready-badge')).toBeInTheDocument();
+
+    // Click "Add Another Medication"
+    const addBtn = screen.getByRole('button', { name: /إضافة دواء آخر للوصفة/i });
+    fireEvent.click(addBtn);
+
+    // Untouched second row doesn't break readiness
+    expect(screen.getByTestId('rx-draft-ready-badge')).toBeInTheDocument();
+
+    // Start typing medication_name in second item
+    const medInputs = screen.getAllByLabelText(/اسم الدواء/i);
+    expect(medInputs).toHaveLength(2);
+    fireEvent.change(medInputs[1], { target: { value: 'Ibuprofen' } });
+
+    // Now item 2 is touched but incomplete -> badge MUST immediately flip to incomplete
+    await waitFor(() => {
+      expect(screen.getByTestId('rx-draft-incomplete-badge')).toBeInTheDocument();
+      expect(screen.queryByTestId('rx-draft-ready-badge')).not.toBeInTheDocument();
+    });
+
+    // Complete item 2 fields
+    const dosageSelects = container.querySelectorAll('select[id$="-dosage_form"]');
+    expect(dosageSelects).toHaveLength(2);
+    fireEvent.change(dosageSelects[1], { target: { value: 'syrup' } });
+
+    const freqInputs = screen.getAllByLabelText(/عدد مرات الاستخدام/i);
+    expect(freqInputs).toHaveLength(2);
+    fireEvent.change(freqInputs[1], { target: { value: 'مرتين يومياً' } });
+
+    const durInputs = screen.getAllByLabelText(/المدة/i);
+    expect(durInputs).toHaveLength(2);
+    fireEvent.change(durInputs[1], { target: { value: '3 أيام' } });
+
+    // Now all touched items are complete -> badge flips back to ready
+    await waitFor(() => {
+      expect(screen.getByTestId('rx-draft-ready-badge')).toBeInTheDocument();
+      expect(screen.queryByTestId('rx-draft-incomplete-badge')).not.toBeInTheDocument();
+    });
+
+    // Unsaved changes badge must also be present alongside
+    expect(screen.getByTestId('rx-dirty-badge')).toBeInTheDocument();
+  });
 });
 
 

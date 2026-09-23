@@ -86,6 +86,46 @@ function mapPrescriptionToFormItems(rx?: Prescription | null): PrescriptionItemI
   ];
 }
 
+/**
+ * Check if a single prescription item has all mandatory fields completed
+ */
+export function isPrescriptionItemComplete(it: PrescriptionItemInput): boolean {
+  const hasMedName = Boolean(it.medication_name && it.medication_name.trim().length > 0);
+  const hasDosageForm = Boolean(it.dosage_form && String(it.dosage_form).trim().length > 0);
+  const hasFrequency = Boolean(it.frequency && it.frequency.trim().length > 0);
+  const hasDuration = Boolean(it.duration && it.duration.trim().length > 0);
+
+  return hasMedName && hasDosageForm && hasFrequency && hasDuration;
+}
+
+/**
+ * Check if a prescription item has been touched/has any field entered
+ */
+export function isPrescriptionItemTouched(it: PrescriptionItemInput): boolean {
+  return Boolean(
+    (it.medication_name && it.medication_name.trim().length > 0) ||
+    (it.dosage_form && String(it.dosage_form).trim().length > 0) ||
+    (it.frequency && it.frequency.trim().length > 0) ||
+    (it.duration && it.duration.trim().length > 0) ||
+    (it.active_ingredient && it.active_ingredient.trim().length > 0) ||
+    (it.strength && it.strength.trim().length > 0) ||
+    (it.dose && it.dose.trim().length > 0) ||
+    (it.route && it.route.trim().length > 0) ||
+    (it.quantity && it.quantity.trim().length > 0) ||
+    (it.instructions && it.instructions.trim().length > 0)
+  );
+}
+
+/**
+ * Calculate readiness of prescription draft items in real time based on current local state
+ */
+export function isPrescriptionDraftReady(items: PrescriptionItemInput[]): boolean {
+  if (!items || items.length === 0) return false;
+  const touched = items.filter(isPrescriptionItemTouched);
+  if (touched.length === 0) return false;
+  return touched.every(isPrescriptionItemComplete);
+}
+
 export function ElectronicPrescriptionSection({
   visitId,
   patientId,
@@ -437,15 +477,10 @@ export function ElectronicPrescriptionSection({
 
   const isIssued = prescription?.status === "issued";
   const isCancelled = prescription?.status === "cancelled";
-  const isDraft = prescription?.status === "draft";
   const isLocked = isIssued || isCancelled || readOnly;
 
-  // Check if saved draft has incomplete items
-  const hasNoSavedItems = !prescription?.items || prescription.items.length === 0;
-  const hasIncompleteSavedItem = prescription?.items?.some(
-    (it) => !it.medication_name?.trim() || !it.dosage_form || !it.frequency?.trim() || !it.duration?.trim()
-  );
-  const isDraftIncomplete = isDraft && (hasNoSavedItems || hasIncompleteSavedItem);
+  // Real-time readiness calculation based strictly on local draft items
+  const isDraftReadyToIssue = isPrescriptionDraftReady(items);
 
   return (
     <Card className="border border-slate-200 shadow-sm space-y-5 bg-white p-5 sm:p-6 rounded-3xl">
@@ -470,13 +505,13 @@ export function ElectronicPrescriptionSection({
                   {language === "ar" ? "وصفة ملغاة" : "Cancelled"}
                 </Badge>
               )}
-              {isDraft && isDraftIncomplete && (
-                <Badge variant="warning" size="sm" className="font-bold">
+              {!isIssued && !isCancelled && !isDraftReadyToIssue && (
+                <Badge variant="warning" size="sm" className="font-bold" data-testid="rx-draft-incomplete-badge">
                   {language === "ar" ? "مسودة غير مكتملة" : "Draft (Incomplete)"}
                 </Badge>
               )}
-              {isDraft && !isDraftIncomplete && (
-                <Badge variant="info" size="sm" className="font-bold">
+              {!isIssued && !isCancelled && isDraftReadyToIssue && (
+                <Badge variant="info" size="sm" className="font-bold" data-testid="rx-draft-ready-badge">
                   {language === "ar" ? "مسودة جاهزة للإصدار" : "Draft (Ready to Issue)"}
                 </Badge>
               )}
@@ -558,7 +593,7 @@ export function ElectronicPrescriptionSection({
         {items.map((item, index) => (
           <div
             id={`medication-item-${index}`}
-            key={item.id || `item-${index}`}
+            key={item.id ? `persisted-${item.id}` : `draft-item-${index}`}
             className={`p-4 rounded-2xl border transition-all ${
               isLocked
                 ? "bg-slate-50/70 border-slate-200"
