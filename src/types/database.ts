@@ -139,6 +139,8 @@ export type PrescriptionStatus = 'draft' | 'issued' | 'cancelled';
 export interface PrescriptionItem {
   id: string;
   prescription_id: string;
+  catalog_product_id?: string | null;
+  is_custom_medication?: boolean;
   medication_name: string;
   active_ingredient?: string | null;
   strength?: string | null;
@@ -227,3 +229,5 @@ export interface AuditLog {
   created_at: string;
   user_name?: string;
 }
+
+export * from './medications';
