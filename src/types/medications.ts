@@ -151,3 +151,5 @@ export interface DrugSearchResultItem {
   dailymed_set_id?: string | null;
   matched_alias?: string | null;
 }
+
+export * from './openfda';

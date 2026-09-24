@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "sync:openfda": "npx tsx scripts/syncOpenFdaDrugs.ts",
+    "sync:openfda:dry-run": "npx tsx scripts/syncOpenFdaDrugs.ts --dry-run"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.5",
