@@ -42,8 +42,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const verifiedUser = await getCurrentSessionUser();
       setUser(verifiedUser);
     } catch (err: any) {
-      console.warn("Session verification warning:", err.message);
-      setAuthError(err.message || "تعذر التحقق من الجلسة");
+      console.warn("Session verification warning:", err?.message);
+      setAuthError(err?.message || "تعذر التحقق من الجلسة");
       setUser(null);
       await signOutUser().catch(() => {});
     } finally {
@@ -52,16 +52,55 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   useEffect(() => {
-    refreshSession();
+    let isMounted = true;
+    let authEventFired = false;
+    let currentInitId = 0;
 
-    if (!isSupabaseConfigured()) return;
+    // Async session verification on mount
+    async function initSession() {
+      const thisInitId = ++currentInitId;
+      try {
+        const verifiedUser = await getCurrentSessionUser();
+        // Guard: ignore stale init if an auth state event already took precedence
+        if (isMounted && !authEventFired && thisInitId === currentInitId) {
+          setUser(verifiedUser);
+          setAuthError(null);
+        }
+      } catch (err: any) {
+        console.warn("Session verification warning:", err?.message);
+        if (isMounted && !authEventFired && thisInitId === currentInitId) {
+          setAuthError(err?.message || "تعذر التحقق من الجلسة");
+          setUser(null);
+        }
+        await signOutUser().catch(() => {});
+      } finally {
+        if (isMounted && !authEventFired && thisInitId === currentInitId) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    initSession();
+
+    if (!isSupabaseConfigured()) {
+      return () => {
+        isMounted = false;
+      };
+    }
 
     const supabase = createClient();
-    if (!supabase) return;
+    if (!supabase) {
+      return () => {
+        isMounted = false;
+      };
+    }
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!isMounted) return;
+      authEventFired = true; // Mark that real-time auth event has fired
+
       if (event === "SIGNED_OUT" || !session?.user) {
         setUser(null);
         setIsLoading(false);
@@ -75,22 +114,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             session.user.id,
             session.user.email || ""
           );
-          setUser(verifiedUser);
+          if (isMounted) {
+            setUser(verifiedUser);
+            setAuthError(null);
+          }
         } catch (err: any) {
-          console.error("Auth state change verification failed:", err.message);
-          setAuthError(err.message || "فشل التحقق من الحساب");
-          setUser(null);
+          console.error("Auth state change verification failed:", err?.message);
+          if (isMounted) {
+            setAuthError(err?.message || "فشل التحقق من الحساب");
+            setUser(null);
+          }
           await signOutUser(supabase).catch(() => {});
         } finally {
-          setIsLoading(false);
+          if (isMounted) {
+            setIsLoading(false);
+          }
         }
       }
     });
 
     return () => {
+      isMounted = false;
       subscription.unsubscribe();
     };
-  }, [refreshSession]);
+  }, []);
 
   // تسجيل الدخول عبر خدمة المصادقة
   const login = async (

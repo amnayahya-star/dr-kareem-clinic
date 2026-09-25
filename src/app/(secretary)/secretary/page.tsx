@@ -59,6 +59,32 @@ import {
   Archive,
   ShieldAlert,
 } from "lucide-react";
+import { getClinicDateString } from "@/lib/clinicDate";
+
+function createFallbackRxPhoto(
+  targetVisitId: string,
+  notes: string,
+  lang: string,
+  previewUrl: string | null
+): MedicalPhoto {
+  const now = new Date();
+  const dateStr = now.toISOString().split("T")[0];
+  return {
+    id: `rx-photo-${targetVisitId}-${now.getTime()}`,
+    title:
+      lang === "ar"
+        ? `صورة وصفة الزيارة (${formatArabicDate(now)})`
+        : `Prescription Photo (${now.toLocaleDateString()})`,
+    type: "prescription",
+    date: dateStr,
+    notes:
+      notes ||
+      (lang === "ar" ? "وصفة الطبيب المعتمدة" : "Doctor Approved Prescription"),
+    imageUrl:
+      previewUrl ||
+      "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=600&auto=format&fit=crop&q=80",
+  };
+}
 
 export default function SecretaryPureWorkflowPage() {
   const { language, t, isRTL } = useLanguage();
@@ -66,12 +92,14 @@ export default function SecretaryPureWorkflowPage() {
   const [deletedPatients, setDeletedPatients] = useState<PatientFile[]>([]);
   const [activeTabMode, setActiveTabMode] = useState<"active" | "recycle_bin">("active");
   const [searchQuery, setSearchQuery] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   // Real-time notifications for Doctor Approvals
   const [activeAlert, setActiveAlert] = useState<ClinicNotification | null>(null);
-  const [liveNotifications, setLiveNotifications] = useState<ClinicNotification[]>([]);
+  const [liveNotifications, setLiveNotifications] = useState<ClinicNotification[]>(() =>
+    getClinicNotifications().filter((n) => !n.isSnapped)
+  );
 
   // Date Filter State ('all' | 'today' | 'yesterday' | 'custom')
   const [dateFilterMode, setDateFilterMode] = useState<"all" | "today" | "yesterday" | "custom">("all");
@@ -109,7 +137,6 @@ export default function SecretaryPureWorkflowPage() {
     cleanLegacyMockStorage();
 
     async function loadData() {
-      setIsLoading(true);
       setLoadError(null);
       try {
         const [activeData, deletedData] = await Promise.all([
@@ -127,9 +154,6 @@ export default function SecretaryPureWorkflowPage() {
       }
     }
     loadData();
-
-    // Load initial pending notifications
-    setLiveNotifications(getClinicNotifications().filter((n) => !n.isSnapped));
 
     // Listen for Realtime alerts from the Doctor
     const unsubscribe = subscribeToClinicNotifications((notif) => {
@@ -158,9 +182,20 @@ export default function SecretaryPureWorkflowPage() {
     };
   }, []);
 
-  // Today & Yesterday Strings (YYYY-MM-DD)
-  const todayStr = new Date().toISOString().split("T")[0];
-  const yesterdayStr = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+  // Clinic dates (YYYY-MM-DD in Asia/Baghdad) initialized stably and updated safely across midnight
+  const [todayStr, setTodayStr] = useState(() => getClinicDateString(0));
+  const [yesterdayStr, setYesterdayStr] = useState(() => getClinicDateString(-1));
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const currentToday = getClinicDateString(0);
+      const currentYesterday = getClinicDateString(-1);
+      setTodayStr((prev) => (prev !== currentToday ? currentToday : prev));
+      setYesterdayStr((prev) => (prev !== currentYesterday ? currentYesterday : prev));
+    }, 60000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   // Derived Pending Prescription Queue (strictly derived from Supabase live data in production)
   const pendingNotifications = useMemo(() => {
@@ -328,14 +363,12 @@ export default function SecretaryPureWorkflowPage() {
           rxPhotoNotes
         );
       } else {
-        savedRxPhoto = {
-          id: `rx-photo-${Date.now()}`,
-          title: language === "ar" ? `صورة وصفة الزيارة (${formatArabicDate(new Date())})` : `Prescription Photo (${new Date().toLocaleDateString()})`,
-          type: "prescription",
-          date: new Date().toISOString().split("T")[0],
-          notes: rxPhotoNotes || (language === "ar" ? "وصفة الطبيب المعتمدة" : "Doctor Approved Prescription"),
-          imageUrl: uploadedRxPhotoPreview || "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=600&auto=format&fit=crop&q=80",
-        };
+        savedRxPhoto = createFallbackRxPhoto(
+          targetVisitId,
+          rxPhotoNotes,
+          language,
+          uploadedRxPhotoPreview
+        );
       }
 
       const updatedVisits = activePatient.visits.map((v) =>

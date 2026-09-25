@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useEffect, useSyncExternalStore } from "react";
 
 export type Language = "ar" | "en";
 
@@ -387,28 +387,62 @@ const translations: Record<Language, Record<string, string>> = {
   },
 };
 
+const LANGUAGE_STORAGE_KEY = "dr_kareem_lang";
+const LANGUAGE_EVENT = "clinic:language_change";
+
+function subscribeLanguage(callback: () => void) {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener("storage", callback);
+  window.addEventListener(LANGUAGE_EVENT, callback);
+  return () => {
+    window.removeEventListener("storage", callback);
+    window.removeEventListener(LANGUAGE_EVENT, callback);
+  };
+}
+
+function getLanguageClientSnapshot(): Language {
+  if (typeof window === "undefined") return "ar";
+  try {
+    const saved = localStorage.getItem(LANGUAGE_STORAGE_KEY);
+    if (saved === "ar" || saved === "en") {
+      return saved;
+    }
+  } catch {
+    // Ignore storage read errors
+  }
+  return "ar";
+}
+
+function getLanguageServerSnapshot(): Language {
+  return "ar";
+}
+
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
 export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [language, setLanguageState] = useState<Language>("ar");
+  const language = useSyncExternalStore(
+    subscribeLanguage,
+    getLanguageClientSnapshot,
+    getLanguageServerSnapshot
+  );
 
+  // Keep DOM synchronized with current language
   useEffect(() => {
-    const savedLang = localStorage.getItem("dr_kareem_lang") as Language;
-    if (savedLang === "ar" || savedLang === "en") {
-      setLanguageState(savedLang);
-      document.documentElement.dir = savedLang === "ar" ? "rtl" : "ltr";
-      document.documentElement.lang = savedLang;
-    } else {
-      document.documentElement.dir = "rtl";
-      document.documentElement.lang = "ar";
-    }
-  }, []);
+    document.documentElement.dir = language === "ar" ? "rtl" : "ltr";
+    document.documentElement.lang = language;
+  }, [language]);
 
   const setLanguage = (lang: Language) => {
-    setLanguageState(lang);
-    localStorage.setItem("dr_kareem_lang", lang);
-    document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
-    document.documentElement.lang = lang;
+    try {
+      localStorage.setItem(LANGUAGE_STORAGE_KEY, lang);
+    } catch {
+      // Ignore localStorage write errors
+    }
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event(LANGUAGE_EVENT));
+      document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+      document.documentElement.lang = lang;
+    }
   };
 
   const toggleLanguage = () => {

@@ -50,6 +50,7 @@ import {
   FileText,
   ShieldAlert,
 } from "lucide-react";
+import { getClinicDateString } from "@/lib/clinicDate";
 
 /**
  * مكون لعرض الصور الطبية الخاصة المحمية عبر Signed URLs
@@ -63,20 +64,22 @@ function SecureMedicalImage({
   alt?: string;
   className?: string;
 }) {
+  const [prevSrc, setPrevSrc] = useState(src);
   const [signedSrc, setSignedSrc] = useState<string | null>(null);
   const [hasError, setHasError] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => Boolean(src));
+
+  if (src !== prevSrc) {
+    setPrevSrc(src);
+    setSignedSrc(null);
+    setHasError(false);
+    setLoading(Boolean(src));
+  }
 
   useEffect(() => {
-    if (!src) {
-      setSignedSrc(null);
-      setLoading(false);
-      return;
-    }
-    let isCurrent = true;
-    setLoading(true);
-    setHasError(false);
+    if (!src) return;
 
+    let isCurrent = true;
     getSignedPhotoUrl(src)
       .then((url) => {
         if (!isCurrent) return;
@@ -162,11 +165,30 @@ export default function DoctorClinicalWorkstationPage() {
   const [paperRxNotifiedVisits, setPaperRxNotifiedVisits] = useState<Record<string, boolean>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Today & Yesterday Strings
-  const todayStr = new Date().toISOString().split("T")[0];
-  const yesterdayStr = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+  // Clinic dates (YYYY-MM-DD in Asia/Baghdad) initialized stably and updated safely across midnight
+  const [todayStr, setTodayStr] = useState(() => getClinicDateString(0));
+  const [yesterdayStr, setYesterdayStr] = useState(() => getClinicDateString(-1));
 
-  const [activeArrivalAlert, setActiveArrivalAlert] = useState<ClinicNotification | null>(null);
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const currentToday = getClinicDateString(0);
+      const currentYesterday = getClinicDateString(-1);
+      setTodayStr((prev) => (prev !== currentToday ? currentToday : prev));
+      setYesterdayStr((prev) => (prev !== currentYesterday ? currentYesterday : prev));
+    }, 60000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const [activeArrivalAlert, setActiveArrivalAlert] = useState<ClinicNotification | null>(() => {
+    if (typeof window !== "undefined" && !isSupabaseConfigured()) {
+      const unreadArrivals = getClinicNotifications().filter(
+        (n) => n.type === "new_patient_arrived" && !n.isRead
+      );
+      return unreadArrivals.length > 0 ? unreadArrivals[0] : null;
+    }
+    return null;
+  });
 
   // Load patients on mount and subscribe to Realtime Arrival Alerts from Secretary
   useEffect(() => {
@@ -176,7 +198,6 @@ export default function DoctorClinicalWorkstationPage() {
     let previousPatientCount = 0;
 
     async function loadData() {
-      setIsLoading(true);
       setLoadError(null);
       try {
         const data = await fetchPatients();
@@ -190,16 +211,6 @@ export default function DoctorClinicalWorkstationPage() {
       }
     }
     loadData();
-
-    // فحص الإشعارات المعلقة مسبقاً (في وضع offline فقط)
-    if (!isSupabaseConfigured()) {
-      const unreadArrivals = getClinicNotifications().filter(
-        (n) => n.type === "new_patient_arrived" && !n.isRead
-      );
-      if (unreadArrivals.length > 0) {
-        setActiveArrivalAlert(unreadArrivals[0]);
-      }
-    }
 
     // 1. الاستماع الفوري للبث المباشر (BroadcastChannel)
     const unsubscribe = subscribeToClinicNotifications((notif) => {
@@ -261,19 +272,18 @@ export default function DoctorClinicalWorkstationPage() {
   const activeVisitId = activeVisit?.id || null;
   const latestHistoricalVisit = activePatient?.visits?.[0] || null;
 
-  // Track the currently hydrated (patientId:visitId) key to guard against resets during normal typing or polling
-  const lastHydratedKeyRef = useRef<string | null>(null);
+  // Track currently hydrated key to adjust consultation form state during render safely
+  const currentKey = activePatientId ? `${activePatientId}:${activeVisitId || "no-active-visit"}` : null;
+  const [prevHydratedKey, setPrevHydratedKey] = useState<string | null>(null);
 
   // Prevent cross-patient data leakage & hydrate active visit draft if and only if patient/visit identity genuinely changes
-  useEffect(() => {
-    const currentKey = activePatientId ? `${activePatientId}:${activeVisitId || "no-active-visit"}` : null;
+  if (currentKey !== prevHydratedKey) {
+    setPrevHydratedKey(currentKey);
 
-    if (lastHydratedKeyRef.current === currentKey) {
-      return;
+    const prevPatientId = prevHydratedKey ? prevHydratedKey.split(":")[0] : null;
+    if (prevPatientId !== activePatientId) {
+      setIsApprovedSuccess(false);
     }
-
-    const previousKey = lastHydratedKeyRef.current;
-    lastHydratedKeyRef.current = currentKey;
 
     if (!activePatientId || !activePatient) {
       setSymptoms("");
@@ -285,11 +295,7 @@ export default function DoctorClinicalWorkstationPage() {
       setFollowUpDate("");
       setFormValidationErrors({});
       setSaveError(null);
-      setIsApprovedSuccess(false);
-      return;
-    }
-
-    if (activeVisit) {
+    } else if (activeVisit) {
       setSymptoms(activeVisit.symptoms || "");
       setPresentIllnessHistory(activeVisit.presentIllnessHistory || "");
       setClinicalExam(activeVisit.clinicalExamination || "");
@@ -297,6 +303,8 @@ export default function DoctorClinicalWorkstationPage() {
       setRecommendations(activeVisit.recommendations || "");
       setDoctorNotes(activeVisit.doctorNotes || "");
       setFollowUpDate(activeVisit.followUpDate || "");
+      setFormValidationErrors({});
+      setSaveError(null);
     } else {
       setSymptoms("");
       setPresentIllnessHistory("");
@@ -305,16 +313,10 @@ export default function DoctorClinicalWorkstationPage() {
       setRecommendations("");
       setDoctorNotes("");
       setFollowUpDate("");
+      setFormValidationErrors({});
+      setSaveError(null);
     }
-    setFormValidationErrors({});
-    setSaveError(null);
-
-    // Reset approval success only when switching between different patients
-    const prevPatientId = previousKey ? previousKey.split(":")[0] : null;
-    if (prevPatientId !== activePatientId) {
-      setIsApprovedSuccess(false);
-    }
-  }, [activePatientId, activeVisitId, activePatient, activeVisit]);
+  }
 
   // Filtered Children based on search & day selection
   const filteredPatients = useMemo(() => {

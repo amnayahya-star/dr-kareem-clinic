@@ -161,32 +161,61 @@ export function ElectronicPrescriptionSection({
     generalInstructions: string;
   } | null>(null);
 
-  // Hydrate only when visitId genuinely changes or on initial load
-  useEffect(() => {
-    let isCurrent = true;
+  // Track previous props to adjust state during render phase safely
+  const [prevVisitId, setPrevVisitId] = useState(visitId);
+  const [prevInitialRx, setPrevInitialRx] = useState(initialPrescription);
 
-    // GUARD: If this visit is already hydrated, DO NOT rehydrate from polling!
-    if (lastHydratedVisitIdRef.current === visitId) {
-      return;
-    }
-
-    lastHydratedVisitIdRef.current = visitId;
+  // When visitId changes, reset editable state to the new visit's prescription
+  if (visitId !== prevVisitId) {
+    setPrevVisitId(visitId);
+    setPrevInitialRx(initialPrescription);
+    const rx =
+      initialPrescription && initialPrescription.visit_id === visitId
+        ? initialPrescription
+        : null;
+    setPrescription(rx);
+    const mapped = mapPrescriptionToFormItems(rx);
+    setItems(mapped);
+    const instructions = rx?.general_instructions || "";
+    setGeneralInstructions(instructions);
     setIsDirty(false);
     setErrorMessage(null);
     setSuccessMessage(null);
-
-    if (initialPrescription && initialPrescription.visit_id === visitId) {
+  } else if (
+    initialPrescription &&
+    initialPrescription.visit_id === visitId &&
+    initialPrescription !== prevInitialRx &&
+    !isDirty
+  ) {
+    // When late-arriving initialPrescription arrives and user hasn't edited anything
+    setPrevInitialRx(initialPrescription);
+    if (
+      prescription === null ||
+      prescription.id !== initialPrescription.id ||
+      prescription.status !== initialPrescription.status
+    ) {
       setPrescription(initialPrescription);
       const mapped = mapPrescriptionToFormItems(initialPrescription);
       setItems(mapped);
       const instructions = initialPrescription.general_instructions || "";
       setGeneralInstructions(instructions);
-      savedBaselineRef.current = { items: mapped, generalInstructions: instructions };
-      return;
     }
+  }
 
-    if (visitId) {
-      setIsLoading(true);
+  // Update baseline ref when prescription or baseline items change
+  useEffect(() => {
+    savedBaselineRef.current = {
+      items,
+      generalInstructions,
+    };
+    lastHydratedVisitIdRef.current = visitId;
+  }, [visitId, items, generalInstructions]);
+
+  // Fetch prescription asynchronously from server if not provided via initialPrescription
+  useEffect(() => {
+    let isCurrent = true;
+
+    if (visitId && (!initialPrescription || initialPrescription.visit_id !== visitId)) {
       fetchPrescriptionByVisitId(visitId)
         .then((rx) => {
           if (!isCurrent) return;
@@ -196,13 +225,11 @@ export function ElectronicPrescriptionSection({
             setItems(mapped);
             const instructions = rx.general_instructions || "";
             setGeneralInstructions(instructions);
-            savedBaselineRef.current = { items: mapped, generalInstructions: instructions };
           } else {
             setPrescription(null);
             const mapped = mapPrescriptionToFormItems(null);
             setItems(mapped);
             setGeneralInstructions("");
-            savedBaselineRef.current = { items: mapped, generalInstructions: "" };
           }
         })
         .catch((err) => {
@@ -216,34 +243,7 @@ export function ElectronicPrescriptionSection({
     return () => {
       isCurrent = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visitId]);
-
-  // Sync late-arriving initialPrescription or external status change when NOT dirty
-  useEffect(() => {
-    if (
-      initialPrescription &&
-      initialPrescription.visit_id === visitId &&
-      !isDirty &&
-      lastHydratedVisitIdRef.current === visitId
-    ) {
-      if (
-        prescription === null ||
-        prescription?.id !== initialPrescription.id ||
-        prescription?.status !== initialPrescription.status
-      ) {
-        setPrescription(initialPrescription);
-        const mapped = mapPrescriptionToFormItems(initialPrescription);
-        setItems(mapped);
-        setGeneralInstructions(initialPrescription.general_instructions || "");
-        savedBaselineRef.current = {
-          items: mapped,
-          generalInstructions: initialPrescription.general_instructions || "",
-        };
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialPrescription?.id, initialPrescription?.status, isDirty, visitId]);
+  }, [visitId, initialPrescription]);
 
   // Browser BeforeUnload Guard when there are unsaved edits
   useEffect(() => {
