@@ -102,27 +102,6 @@ export default function PatientMedicalFilePage() {
   const [editEmail, setEditEmail] = useState("");
   const [editAddress, setEditAddress] = useState("");
 
-  // Load patient file
-  useEffect(() => {
-    async function load() {
-      setIsLoading(true);
-      try {
-        const data = await fetchPatientById(patientId);
-        if (data) {
-          setPatient(data);
-          populateEditForm(data);
-        } else {
-          setPatient(null);
-        }
-      } catch (err: any) {
-        setLoadError(err.message || "حدث خطأ أثناء تحميل ملف الطفل");
-      } finally {
-        setIsLoading(false);
-      }
-    }
-    load();
-  }, [patientId]);
-
   const populateEditForm = (data: PatientFile) => {
     setEditFullName(data.fullName || "");
     setEditBirthDate(data.dateOfBirth || "");
@@ -159,6 +138,27 @@ export default function PatientMedicalFilePage() {
     setEditEmail(data.email || "");
     setEditAddress(data.address || "");
   };
+
+  // Load patient file
+  useEffect(() => {
+    async function load() {
+      setIsLoading(true);
+      try {
+        const data = await fetchPatientById(patientId);
+        if (data) {
+          setPatient(data);
+          populateEditForm(data);
+        } else {
+          setPatient(null);
+        }
+      } catch (err: any) {
+        setLoadError(err.message || "حدث خطأ أثناء تحميل ملف الطفل");
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    load();
+  }, [patientId]);
 
   const handleOpenEditModal = () => {
     if (patient) {

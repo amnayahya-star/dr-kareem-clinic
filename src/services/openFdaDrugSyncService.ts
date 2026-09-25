@@ -21,9 +21,14 @@
  */
 
 import { createHash } from 'crypto';
-import { execFileSync } from 'child_process';
+import { spawn } from 'child_process';
 import zlib from 'zlib';
 import fs from 'fs';
+import { Readable, Transform } from 'stream';
+import chain from 'stream-chain';
+import parser from 'stream-json';
+import pick from 'stream-json/filters/pick.js';
+import streamArray from 'stream-json/streamers/stream-array.js';
 import { SupabaseClient } from '@supabase/supabase-js';
 import {
   OpenFdaNdcRecord,
@@ -538,7 +543,8 @@ export async function fetchOpenFdaNdcPage(options: {
 }
 
 /**
- * Loads records from real openFDA bulk files (.zip, .gz, or raw .json).
+ * Loads records from real openFDA bulk files (.zip, .gz, or raw .json) using true streaming.
+ * Processes items sequentially with bounded memory and terminates early as soon as `limit` records are collected.
  */
 export async function readOpenFdaBulkFile(
   filePath: string,
@@ -549,35 +555,205 @@ export async function readOpenFdaBulkFile(
     throw new Error(`Bulk file not found: ${filePath}`);
   }
 
-  let jsonText = '';
+  let inputStream: Readable;
+  let childProcess: ReturnType<typeof spawn> | null = null;
+  let sourceFileStream: fs.ReadStream | null = null;
+  let gunzipStream: zlib.Gunzip | null = null;
+  let stderrOutput = '';
 
   if (filePath.endsWith('.zip')) {
-    // Unzip directly from zip stream via system unzip
-    try {
-      jsonText = execFileSync('unzip', ['-p', filePath], {
-        maxBuffer: 200 * 1024 * 1024,
-        encoding: 'utf8',
-      });
-    } catch (zipErr) {
-      throw new Error(`Failed to extract bulk zip file (${filePath}): ${zipErr}`);
+    childProcess = spawn('unzip', ['-p', filePath], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    childProcess.stderr?.on('data', (chunk: Buffer) => {
+      stderrOutput += chunk.toString();
+    });
+
+    if (!childProcess.stdout) {
+      throw new Error(`Failed to initialize stdout stream for unzip process (${filePath})`);
     }
+
+    inputStream = childProcess.stdout;
   } else if (filePath.endsWith('.gz')) {
-    const compressedBuffer = fs.readFileSync(filePath);
-    jsonText = zlib.gunzipSync(compressedBuffer).toString('utf8');
+    sourceFileStream = fs.createReadStream(filePath);
+    gunzipStream = zlib.createGunzip();
+    sourceFileStream.pipe(gunzipStream);
+    inputStream = gunzipStream;
+
+    sourceFileStream.on('error', (err) => {
+      if (gunzipStream && !gunzipStream.destroyed) {
+        gunzipStream.destroy(err);
+      }
+    });
   } else {
-    jsonText = fs.readFileSync(filePath, 'utf8');
+    sourceFileStream = fs.createReadStream(filePath);
+    inputStream = sourceFileStream;
   }
 
-  const parsed = JSON.parse(jsonText) as OpenFdaNdcResponse;
-  const allResults = parsed.results || [];
-  const metaLastUpdated = parsed.meta?.last_updated;
+  let metaLastUpdated: string | undefined;
+  let metaTotal: number | undefined;
+  let lastKey = '';
+  let inMeta = false;
+  let inMetaResults = false;
+  let isEarlyExit = false;
+  let cleanedUp = false;
 
-  const sliced = allResults.slice(skip, skip + limit);
-  return {
-    records: sliced,
-    total: allResults.length,
-    metaLastUpdated,
-  };
+  const inspector = new Transform({
+    objectMode: true,
+    transform(chunk: { name: string; value?: unknown }, _encoding, callback) {
+      if (chunk.name === 'keyValue' && typeof chunk.value === 'string') {
+        lastKey = chunk.value;
+        if (lastKey === 'meta') {
+          inMeta = true;
+        } else if (lastKey === 'results' && inMeta) {
+          inMetaResults = true;
+        } else if (lastKey === 'results' && !inMeta) {
+          inMetaResults = false;
+        }
+      } else if (chunk.name === 'endObject' && inMetaResults) {
+        inMetaResults = false;
+      } else if (chunk.name === 'endObject' && inMeta) {
+        inMeta = false;
+      } else if (inMeta && lastKey === 'last_updated' && chunk.name === 'stringValue' && typeof chunk.value === 'string') {
+        metaLastUpdated = chunk.value;
+      } else if (inMetaResults && lastKey === 'total' && chunk.name === 'numberValue') {
+        const parsedNum = typeof chunk.value === 'number' ? chunk.value : parseInt(String(chunk.value), 10);
+        if (Number.isFinite(parsedNum)) {
+          metaTotal = parsedNum;
+        }
+      }
+      callback(null, chunk);
+    },
+  });
+
+  const pipeline = chain([
+    inputStream,
+    parser(),
+    inspector,
+    pick.asStream({ filter: 'results' }),
+    streamArray.asStream(),
+  ]);
+
+  const records: OpenFdaNdcRecord[] = [];
+  let currentIndex = 0;
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+
+    function cleanup() {
+      if (cleanedUp) return;
+      cleanedUp = true;
+      try {
+        pipeline.destroy();
+      } catch (_) {}
+      try {
+        inputStream.destroy();
+      } catch (_) {}
+      if (gunzipStream) {
+        try {
+          gunzipStream.destroy();
+        } catch (_) {}
+      }
+      if (sourceFileStream) {
+        try {
+          sourceFileStream.destroy();
+        } catch (_) {}
+      }
+      if (childProcess && !childProcess.killed) {
+        try {
+          childProcess.kill('SIGTERM');
+        } catch (_) {}
+      }
+    }
+
+    if (sourceFileStream) {
+      sourceFileStream.on('error', (err: Error) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(err);
+      });
+    }
+
+    if (gunzipStream) {
+      gunzipStream.on('error', (err: Error) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(err);
+      });
+    }
+
+    pipeline.on('data', (item: { key: number; value: OpenFdaNdcRecord }) => {
+      if (currentIndex >= skip && records.length < limit) {
+        records.push(item.value);
+      }
+      currentIndex++;
+
+      if (records.length >= limit) {
+        settled = true;
+        isEarlyExit = true;
+        cleanup();
+        resolve({
+          records,
+          total: metaTotal !== undefined ? metaTotal : currentIndex,
+          metaLastUpdated,
+        });
+      }
+    });
+
+    pipeline.on('end', () => {
+      if (!settled) {
+        settled = true;
+        cleanup();
+        resolve({
+          records,
+          total: metaTotal !== undefined ? metaTotal : currentIndex,
+          metaLastUpdated,
+        });
+      }
+    });
+
+    pipeline.on('error', (err: Error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (childProcess) {
+        reject(
+          new Error(
+            `Failed to extract bulk zip file (${filePath}): ${stderrOutput.trim() || err.message}`
+          )
+        );
+      } else {
+        reject(err);
+      }
+    });
+
+    if (childProcess) {
+      childProcess.on('error', (err: Error) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(new Error(`Failed to extract bulk zip file (${filePath}): ${err.message}`));
+      });
+
+      childProcess.on('close', (code: number | null) => {
+        if (settled) return;
+        if (code !== 0 && !isEarlyExit) {
+          settled = true;
+          cleanup();
+          reject(
+            new Error(
+              `Failed to extract bulk zip file (${filePath}): unzip exited with code ${code}${
+                stderrOutput ? ` - ${stderrOutput.trim()}` : ''
+              }`
+            )
+          );
+        }
+      });
+    }
+  });
 }
 
 /**
