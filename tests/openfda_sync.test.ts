@@ -14,6 +14,8 @@ import { OpenFdaNdcRecord, OpenFdaNdcResponse } from '../src/types/openfda';
 import { createHash } from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import zlib from 'zlib';
+import os from 'os';
 
 describe('OpenFDA Drug NDC Synchronization Engine (Hardened v2.0)', () => {
   describe('1. Canonical JSON & SHA-256 Stability', () => {
@@ -262,8 +264,8 @@ describe('OpenFDA Drug NDC Synchronization Engine (Hardened v2.0)', () => {
     });
   });
 
-  describe('8. Bulk Download Zipped File Reader (readOpenFdaBulkFile)', () => {
-    it('reads real openFDA zipped file and extracts records cleanly', async () => {
+  describe('8. Streaming Bulk Download File Reader (readOpenFdaBulkFile)', () => {
+    it('reads real openFDA zipped file and extracts records cleanly without breaking fixture', async () => {
       const zipPath = path.resolve(__dirname, 'fixtures/sample_ndc.json.zip');
       const data = await readOpenFdaBulkFile(zipPath, 0, 10);
 
@@ -274,6 +276,206 @@ describe('OpenFDA Drug NDC Synchronization Engine (Hardened v2.0)', () => {
       expect(data.records[1].generic_name).toBe('IBUPROFEN');
       expect(data.total).toBe(2);
       expect(data.metaLastUpdated).toBe('2026-09-23');
+    });
+
+    it('reads plain JSON file via streaming with skip and limit', async () => {
+      const tempJson = path.join(os.tmpdir(), `test_plain_${Date.now()}.json`);
+      fs.writeFileSync(
+        tempJson,
+        JSON.stringify({
+          meta: { last_updated: '2026-05-15', results: { total: 5 } },
+          results: [
+            { product_ndc: '0001-0001', generic_name: 'Drug 1' },
+            { product_ndc: '0001-0002', generic_name: 'Drug 2' },
+            { product_ndc: '0001-0003', generic_name: 'Drug 3' },
+            { product_ndc: '0001-0004', generic_name: 'Drug 4' },
+            { product_ndc: '0001-0005', generic_name: 'Drug 5' },
+          ],
+        })
+      );
+
+      try {
+        const data = await readOpenFdaBulkFile(tempJson, 1, 2);
+        expect(data.records.length).toBe(2);
+        expect(data.records[0].product_ndc).toBe('0001-0002');
+        expect(data.records[1].product_ndc).toBe('0001-0003');
+        expect(data.total).toBe(5);
+        expect(data.metaLastUpdated).toBe('2026-05-15');
+      } finally {
+        if (fs.existsSync(tempJson)) fs.unlinkSync(tempJson);
+      }
+    });
+
+    it('reads GZIP (.gz) file via streaming gunzip pipeline', async () => {
+      const tempGz = path.join(os.tmpdir(), `test_gz_${Date.now()}.json.gz`);
+      const payload = JSON.stringify({
+        meta: { last_updated: '2026-06-20', results: { total: 3 } },
+        results: [
+          { product_ndc: '0002-0001', generic_name: 'Gz Drug 1' },
+          { product_ndc: '0002-0002', generic_name: 'Gz Drug 2' },
+          { product_ndc: '0002-0003', generic_name: 'Gz Drug 3' },
+        ],
+      });
+      fs.writeFileSync(tempGz, zlib.gzipSync(payload));
+
+      try {
+        const data = await readOpenFdaBulkFile(tempGz, 0, 10);
+        expect(data.records.length).toBe(3);
+        expect(data.records[0].product_ndc).toBe('0002-0001');
+        expect(data.records[2].product_ndc).toBe('0002-0003');
+        expect(data.total).toBe(3);
+        expect(data.metaLastUpdated).toBe('2026-06-20');
+      } finally {
+        if (fs.existsSync(tempGz)) fs.unlinkSync(tempGz);
+      }
+    });
+
+    it('terminates early immediately upon reaching limit without continuing reading stream', async () => {
+      const tempJson = path.join(os.tmpdir(), `test_early_exit_${Date.now()}.json`);
+      const largeArray = Array.from({ length: 50 }, (_, i) => ({
+        product_ndc: `0003-${String(i).padStart(4, '0')}`,
+        generic_name: `Batch Drug ${i}`,
+      }));
+      fs.writeFileSync(
+        tempJson,
+        JSON.stringify({
+          meta: { last_updated: '2026-07-01', results: { total: 50 } },
+          results: largeArray,
+        })
+      );
+
+      try {
+        const data = await readOpenFdaBulkFile(tempJson, 0, 5);
+        expect(data.records.length).toBe(5);
+        expect(data.records[0].product_ndc).toBe('0003-0000');
+        expect(data.records[4].product_ndc).toBe('0003-0004');
+        expect(data.total).toBe(50);
+      } finally {
+        if (fs.existsSync(tempJson)) fs.unlinkSync(tempJson);
+      }
+    });
+
+    it('handles file without results gracefully returning empty records', async () => {
+      const tempJson = path.join(os.tmpdir(), `test_no_results_${Date.now()}.json`);
+      fs.writeFileSync(
+        tempJson,
+        JSON.stringify({
+          meta: { last_updated: '2026-08-01' },
+          other_field: 'not results',
+        })
+      );
+
+      try {
+        const data = await readOpenFdaBulkFile(tempJson, 0, 10);
+        expect(data.records).toEqual([]);
+        expect(data.metaLastUpdated).toBe('2026-08-01');
+      } finally {
+        if (fs.existsSync(tempJson)) fs.unlinkSync(tempJson);
+      }
+    });
+
+    it('handles corrupt / invalid ZIP file and rejects with descriptive error', async () => {
+      const badZip = path.join(os.tmpdir(), `bad_${Date.now()}.zip`);
+      fs.writeFileSync(badZip, 'This is definitely not a valid zip archive file contents.');
+
+      try {
+        await expect(readOpenFdaBulkFile(badZip, 0, 10)).rejects.toThrow(/Failed to extract bulk zip file/);
+      } finally {
+        if (fs.existsSync(badZip)) fs.unlinkSync(badZip);
+      }
+    });
+
+    it('handles corrupt / invalid JSON content and rejects with parse error', async () => {
+      const badJson = path.join(os.tmpdir(), `bad_${Date.now()}.json`);
+      fs.writeFileSync(badJson, '{"results": [ { invalid json syntax here ');
+
+      try {
+        await expect(readOpenFdaBulkFile(badJson, 0, 10)).rejects.toThrow();
+      } finally {
+        if (fs.existsSync(badJson)) fs.unlinkSync(badJson);
+      }
+    });
+
+    it('handles non-existent file path with clear error', async () => {
+      const nonExistent = path.join(os.tmpdir(), `missing_${Date.now()}.json`);
+      await expect(readOpenFdaBulkFile(nonExistent, 0, 10)).rejects.toThrow(/Bulk file not found/);
+    });
+
+    it('proves that execFileSync and maxBuffer are not used in readOpenFdaBulkFile implementation', () => {
+      const serviceFile = path.resolve(__dirname, '../src/services/openFdaDrugSyncService.ts');
+      const code = fs.readFileSync(serviceFile, 'utf8');
+
+      const fnIndex = code.indexOf('export async function readOpenFdaBulkFile');
+      expect(fnIndex).toBeGreaterThan(-1);
+
+      const fnCode = code.slice(fnIndex, fnIndex + 3000);
+      expect(fnCode).not.toContain('execFileSync');
+      expect(fnCode).not.toContain('maxBuffer');
+      expect(fnCode).toContain('streamArray');
+      expect(fnCode).toContain('parser');
+      expect(fnCode).toContain('spawn');
+    });
+
+    it('has stream-chain registered explicitly as a direct dependency in package.json', () => {
+      const pkgPath = path.resolve(__dirname, '../package.json');
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+      expect(pkg.dependencies).toBeDefined();
+      expect(pkg.dependencies['stream-chain']).toBeDefined();
+      expect(typeof pkg.dependencies['stream-chain']).toBe('string');
+    });
+
+    it('ensures GZIP path cleans up and destroys source stream and gunzip on early termination', async () => {
+      const tempGz = path.join(os.tmpdir(), `test_gz_cleanup_${Date.now()}.json.gz`);
+      const payload = JSON.stringify({
+        meta: { last_updated: '2026-06-20', results: { total: 100 } },
+        results: Array.from({ length: 100 }, (_, i) => ({
+          product_ndc: `0004-${String(i).padStart(4, '0')}`,
+          generic_name: `GZ Clean Drug ${i}`,
+        })),
+      });
+      fs.writeFileSync(tempGz, zlib.gzipSync(payload));
+
+      const createReadStreamSpy = vi.spyOn(fs, 'createReadStream');
+      const createGunzipSpy = vi.spyOn(zlib, 'createGunzip');
+
+      try {
+        const data = await readOpenFdaBulkFile(tempGz, 0, 5);
+        expect(data.records.length).toBe(5);
+
+        expect(createReadStreamSpy).toHaveBeenCalled();
+        expect(createGunzipSpy).toHaveBeenCalled();
+
+        const fileStreamInstance = createReadStreamSpy.mock.results[createReadStreamSpy.mock.results.length - 1].value as fs.ReadStream;
+        const gunzipInstance = createGunzipSpy.mock.results[createGunzipSpy.mock.results.length - 1].value as zlib.Gunzip;
+
+        // Allow tick for cleanup
+        await new Promise((r) => setTimeout(r, 50));
+
+        expect(fileStreamInstance.destroyed).toBe(true);
+        expect(gunzipInstance.destroyed).toBe(true);
+      } finally {
+        createReadStreamSpy.mockRestore();
+        createGunzipSpy.mockRestore();
+        if (fs.existsSync(tempGz)) fs.unlinkSync(tempGz);
+      }
+    });
+
+    it('is completely idempotent when cleanup is invoked multiple times without throwing', async () => {
+      const tempJson = path.join(os.tmpdir(), `test_idempotent_${Date.now()}.json`);
+      fs.writeFileSync(
+        tempJson,
+        JSON.stringify({
+          meta: { last_updated: '2026-09-01' },
+          results: [{ product_ndc: '0005-0001', generic_name: 'Idempotent Drug' }],
+        })
+      );
+
+      try {
+        const data = await readOpenFdaBulkFile(tempJson, 0, 1);
+        expect(data.records.length).toBe(1);
+      } finally {
+        if (fs.existsSync(tempJson)) fs.unlinkSync(tempJson);
+      }
     });
   });
 
