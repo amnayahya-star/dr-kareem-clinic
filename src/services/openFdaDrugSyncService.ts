@@ -33,6 +33,8 @@ import {
   NormalizedIngredientItem,
   SyncOptions,
   SyncStats,
+  ProductUpsertResult,
+  ProductUpsertOutcome,
 } from '../types/openfda';
 
 export const OPENFDA_NDC_DEFAULT_BASE_URL = 'https://api.fda.gov/drug/ndc.json';
@@ -611,6 +613,7 @@ export async function syncOpenFdaDrugs(
     ingredientsCreated: 0,
     productsCreated: 0,
     productsUpdated: 0,
+    productsUnchanged: 0,
     catalogEntriesCreated: 0, // Strict Invariant: Always 0 in sync
     rejectionReasons: {},
     batchesProcessed: 0,
@@ -746,12 +749,20 @@ export async function syncOpenFdaDrugs(
     // Finalize DB run logging
     if (!dryRun && supabase && syncRunId) {
       try {
+        const operationalErrorsCount = stats.errors.length;
+        const successfulCount =
+          stats.productsCreated + stats.productsUpdated + stats.productsUnchanged;
+
+        // Requirement 7:
+        // - status = success if NO operational errors occurred, even with rejected records
+        // - status = partial if some products succeeded and others failed due to operational errors
+        // - status = failed if no operations succeeded due to operational errors
         const finalStatus =
-          stats.errors.length > 0
-            ? stats.productsCreated > 0 || stats.productsUpdated > 0
+          operationalErrorsCount === 0
+            ? 'success'
+            : successfulCount > 0
               ? 'partial'
-              : 'failed'
-            : 'success';
+              : 'failed';
 
         await supabase
           .from('drug_sync_runs')
@@ -759,10 +770,15 @@ export async function syncOpenFdaDrugs(
             completed_at: new Date().toISOString(),
             status: finalStatus,
             processed_count: stats.totalReceived,
-            cached_count: stats.productsCreated,
+            accepted_count: stats.accepted,
+            rejected_count: stats.rejected,
+            created_count: stats.productsCreated,
             updated_count: stats.productsUpdated,
-            errors_count: stats.errors.length + stats.rejected,
-            error_log: stats.errors.length > 0 ? stats.errors.join('\n') : null,
+            unchanged_count: stats.productsUnchanged,
+            // Requirement 4: cached_count represents total successfully processed products
+            cached_count: successfulCount,
+            errors_count: operationalErrorsCount,
+            error_log: operationalErrorsCount > 0 ? stats.errors.join('\n') : null,
           })
           .eq('id', syncRunId);
       } catch (finalizeErr: unknown) {
@@ -778,8 +794,11 @@ export async function syncOpenFdaDrugs(
   return stats;
 }
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * Persists a single normalized drug record atomically via the `upsert_openfda_drug_product` RPC.
+ * Fail-Closed parsing: Malformed results or unknown outcomes are treated as operational errors.
  */
 async function persistProductViaRpc(
   supabase: SupabaseClient,
@@ -815,7 +834,7 @@ async function persistProductViaRpc(
       display_order: idx + 1,
     }));
 
-    const { data: productId, error: rpcError } = await supabase.rpc(
+    const { data: rpcResult, error: rpcError } = await supabase.rpc(
       'upsert_openfda_drug_product',
       {
         p_product: productPayload,
@@ -825,9 +844,35 @@ async function persistProductViaRpc(
 
     if (rpcError) {
       stats.errors.push(`RPC failed for product ${item.productNdc}: ${rpcError.message}`);
-    } else if (productId) {
+      return;
+    }
+
+    // Fail-Closed Validation (Requirement 5)
+    if (
+      typeof rpcResult !== 'object' ||
+      rpcResult === null ||
+      typeof (rpcResult as any).product_id !== 'string' ||
+      !UUID_REGEX.test((rpcResult as any).product_id) ||
+      !['created', 'updated', 'unchanged'].includes((rpcResult as any).outcome)
+    ) {
+      stats.errors.push(
+        `Malformed or unknown RPC outcome for product ${item.productNdc}: ${JSON.stringify(
+          rpcResult
+        )}`
+      );
+      return;
+    }
+
+    const { outcome } = rpcResult as ProductUpsertResult;
+
+    if (outcome === 'created') {
       stats.productsCreated++;
       stats.ingredientsCreated += item.activeIngredients.length;
+    } else if (outcome === 'updated') {
+      stats.productsUpdated++;
+      stats.ingredientsCreated += item.activeIngredients.length;
+    } else if (outcome === 'unchanged') {
+      stats.productsUnchanged++;
     }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);

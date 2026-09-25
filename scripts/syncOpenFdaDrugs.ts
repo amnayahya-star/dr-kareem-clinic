@@ -170,11 +170,12 @@ async function main() {
   console.log(`Total Records Received:  ${stats.totalReceived}`);
   console.log(`Accepted Records:        ${stats.accepted}`);
   console.log(`Rejected Records:        ${stats.rejected}`);
-  console.log(`Duplicate Records:       ${stats.duplicates}`);
   console.log(`Products Created:        ${stats.productsCreated}`);
   console.log(`Products Updated:        ${stats.productsUpdated}`);
+  console.log(`Products Unchanged:      ${stats.productsUnchanged}`);
   console.log(`Ingredients Extracted:   ${stats.ingredientsCreated}`);
   console.log(`Catalog Entries:         ${stats.catalogEntriesCreated} (Guaranteed 0 - Demand Only)`);
+  console.log(`Operational Errors:      ${stats.errors.length}`);
   console.log(`Batches Processed:       ${stats.batchesProcessed}`);
 
   if (Object.keys(stats.rejectionReasons).length > 0) {

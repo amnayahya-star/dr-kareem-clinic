@@ -126,6 +126,13 @@ export interface SyncOptions {
   targetProductType?: 'HUMAN_PRESCRIPTION' | 'HUMAN_OTC' | 'ALL_HUMAN';
 }
 
+export type ProductUpsertOutcome = 'created' | 'updated' | 'unchanged';
+
+export interface ProductUpsertResult {
+  product_id: string;
+  outcome: ProductUpsertOutcome;
+}
+
 export interface SyncStats {
   mode: SyncMode;
   dryRun: boolean;
@@ -136,6 +143,7 @@ export interface SyncStats {
   ingredientsCreated: number;
   productsCreated: number;
   productsUpdated: number;
+  productsUnchanged: number;
   catalogEntriesCreated: number; // Always 0 per clinic design (catalog entries created on demand)
   rejectionReasons: Record<string, number>;
   batchesProcessed: number;

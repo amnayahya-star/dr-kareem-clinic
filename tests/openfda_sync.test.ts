@@ -308,4 +308,281 @@ describe('OpenFDA Drug NDC Synchronization Engine (Hardened v2.0)', () => {
       expect(sql).toContain('GRANT EXECUTE ON FUNCTION public.upsert_openfda_drug_product(JSONB, JSONB) TO service_role;');
     });
   });
+
+  describe('10. Migration 00010 & Outcome Tracking Verification', () => {
+    const migration10Path = path.resolve(__dirname, '../supabase/migrations/00010_openfda_sync_outcome_tracking.sql');
+    const sql10 = fs.readFileSync(migration10Path, 'utf8');
+
+    it('adds backward-compatible counter columns to drug_sync_runs', () => {
+      expect(sql10).toContain('ADD COLUMN IF NOT EXISTS accepted_count');
+      expect(sql10).toContain('ADD COLUMN IF NOT EXISTS rejected_count');
+      expect(sql10).toContain('ADD COLUMN IF NOT EXISTS created_count');
+      expect(sql10).toContain('ADD COLUMN IF NOT EXISTS unchanged_count');
+    });
+
+    it('redefines upsert_openfda_drug_product to return JSONB with structured outcome', () => {
+      expect(sql10).toContain('DROP FUNCTION IF EXISTS public.upsert_openfda_drug_product(JSONB, JSONB);');
+      expect(sql10).toContain('RETURNS JSONB');
+      expect(sql10).toContain("'product_id', v_product_id");
+      expect(sql10).toContain("'outcome', v_outcome");
+    });
+
+    it('uses deterministic advisory transaction locks for concurrency-safe outcome determination', () => {
+      expect(sql10).toContain('pg_advisory_xact_lock');
+      expect(sql10).toContain('hashtextextended');
+      expect(sql10).toContain("v_outcome := 'created';");
+      expect(sql10).toContain("v_outcome := 'updated';");
+      expect(sql10).toContain("v_outcome := 'unchanged';");
+    });
+
+    it('skips redundant ingredient writes when outcome is unchanged', () => {
+      expect(sql10).toContain("IF v_outcome IN ('created', 'updated') THEN");
+    });
+
+    it('enforces service_role security on new JSONB RPC function', () => {
+      expect(sql10).toContain('REVOKE ALL ON FUNCTION public.upsert_openfda_drug_product(JSONB, JSONB) FROM PUBLIC, anon, authenticated;');
+      expect(sql10).toContain('GRANT EXECUTE ON FUNCTION public.upsert_openfda_drug_product(JSONB, JSONB) TO service_role;');
+    });
+
+    it('correctly tracks valid created, updated, and unchanged outcomes with valid UUIDs', async () => {
+      let callCount = 0;
+      const updatePayloadSpy = vi.fn().mockReturnValue({
+        eq: vi.fn().mockResolvedValue({ error: null }),
+      });
+      const mockSupabase = {
+        from: vi.fn().mockReturnValue({
+          insert: vi.fn().mockReturnValue({
+            select: vi.fn().mockReturnValue({
+              single: vi.fn().mockResolvedValue({ data: { id: 'test-run-id' }, error: null }),
+            }),
+          }),
+          update: updatePayloadSpy,
+        }),
+        rpc: vi.fn().mockImplementation(() => {
+          callCount++;
+          if (callCount === 1) {
+            return Promise.resolve({ data: { product_id: '11111111-1111-1111-1111-111111111111', outcome: 'created' }, error: null });
+          } else if (callCount === 2) {
+            return Promise.resolve({ data: { product_id: '22222222-2222-2222-2222-222222222222', outcome: 'updated' }, error: null });
+          } else {
+            return Promise.resolve({ data: { product_id: '33333333-3333-3333-3333-333333333333', outcome: 'unchanged' }, error: null });
+          }
+        }),
+      };
+
+      const mockApiResponse: OpenFdaNdcResponse = {
+        results: [
+          {
+            product_ndc: '0001-0001',
+            generic_name: 'Drug One',
+            dosage_form: 'TABLET',
+            product_type: 'HUMAN PRESCRIPTION DRUG',
+            active_ingredients: [{ name: 'Ing1', strength: '10 mg/1' }],
+          },
+          {
+            product_ndc: '0001-0002',
+            generic_name: 'Drug Two',
+            dosage_form: 'TABLET',
+            product_type: 'HUMAN PRESCRIPTION DRUG',
+            active_ingredients: [{ name: 'Ing2', strength: '20 mg/1' }],
+          },
+          {
+            product_ndc: '0001-0003',
+            generic_name: 'Drug Three',
+            dosage_form: 'TABLET',
+            product_type: 'HUMAN PRESCRIPTION DRUG',
+            active_ingredients: [{ name: 'Ing3', strength: '30 mg/1' }],
+          },
+        ],
+      };
+
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => mockApiResponse,
+      });
+
+      const stats = await syncOpenFdaDrugs(mockSupabase as any, {
+        dryRun: false,
+        maxRecords: 3,
+        limit: 3,
+        fetchImpl: mockFetch as any,
+      });
+
+      expect(stats.productsCreated).toBe(1);
+      expect(stats.productsUpdated).toBe(1);
+      expect(stats.productsUnchanged).toBe(1);
+      expect(stats.accepted).toBe(3);
+      expect(stats.catalogEntriesCreated).toBe(0);
+      expect(stats.errors).toEqual([]);
+
+      // Verify cached_count backward compatibility = created + updated + unchanged
+      expect(updatePayloadSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'success',
+          created_count: 1,
+          updated_count: 1,
+          unchanged_count: 1,
+          cached_count: 3,
+          errors_count: 0,
+        })
+      );
+    });
+
+    it('handles fail-closed parsing for malformed RPC results, unknown outcomes, and RPC errors', async () => {
+      let callCount = 0;
+      const updatePayloadSpy = vi.fn().mockReturnValue({
+        eq: vi.fn().mockResolvedValue({ error: null }),
+      });
+      const mockSupabase = {
+        from: vi.fn().mockReturnValue({
+          insert: vi.fn().mockReturnValue({
+            select: vi.fn().mockReturnValue({
+              single: vi.fn().mockResolvedValue({ data: { id: 'test-run-id' }, error: null }),
+            }),
+          }),
+          update: updatePayloadSpy,
+        }),
+        rpc: vi.fn().mockImplementation(() => {
+          callCount++;
+          if (callCount === 1) {
+            // Case A: Valid created
+            return Promise.resolve({ data: { product_id: '11111111-1111-1111-1111-111111111111', outcome: 'created' }, error: null });
+          } else if (callCount === 2) {
+            // Case B: Malformed result (not an object or non-UUID)
+            return Promise.resolve({ data: 'not-an-object', error: null });
+          } else if (callCount === 3) {
+            // Case C: Unknown outcome
+            return Promise.resolve({ data: { product_id: '33333333-3333-3333-3333-333333333333', outcome: 'archived' }, error: null });
+          } else {
+            // Case D: RPC error
+            return Promise.resolve({ data: null, error: { message: 'Database query timeout' } });
+          }
+        }),
+      };
+
+      const mockApiResponse: OpenFdaNdcResponse = {
+        results: [
+          {
+            product_ndc: '0001-0001',
+            generic_name: 'Drug One',
+            dosage_form: 'TABLET',
+            product_type: 'HUMAN PRESCRIPTION DRUG',
+            active_ingredients: [{ name: 'Ing1', strength: '10 mg/1' }],
+          },
+          {
+            product_ndc: '0001-0002',
+            generic_name: 'Drug Two',
+            dosage_form: 'TABLET',
+            product_type: 'HUMAN PRESCRIPTION DRUG',
+            active_ingredients: [{ name: 'Ing2', strength: '20 mg/1' }],
+          },
+          {
+            product_ndc: '0001-0003',
+            generic_name: 'Drug Three',
+            dosage_form: 'TABLET',
+            product_type: 'HUMAN PRESCRIPTION DRUG',
+            active_ingredients: [{ name: 'Ing3', strength: '30 mg/1' }],
+          },
+          {
+            product_ndc: '0001-0004',
+            generic_name: 'Drug Four',
+            dosage_form: 'TABLET',
+            product_type: 'HUMAN PRESCRIPTION DRUG',
+            active_ingredients: [{ name: 'Ing4', strength: '40 mg/1' }],
+          },
+        ],
+      };
+
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => mockApiResponse,
+      });
+
+      const stats = await syncOpenFdaDrugs(mockSupabase as any, {
+        dryRun: false,
+        maxRecords: 4,
+        limit: 4,
+        fetchImpl: mockFetch as any,
+      });
+
+      // Exactly 1 product succeeded
+      expect(stats.productsCreated).toBe(1);
+      expect(stats.productsUpdated).toBe(0);
+      expect(stats.productsUnchanged).toBe(0);
+
+      // Exactly 3 operational errors logged (malformed, unknown outcome, rpc error)
+      expect(stats.errors.length).toBe(3);
+      expect(stats.errors[0]).toContain('Malformed or unknown RPC outcome');
+      expect(stats.errors[1]).toContain('Malformed or unknown RPC outcome');
+      expect(stats.errors[2]).toContain('RPC failed for product 0001-0004: Database query timeout');
+
+      // Status must be partial since 1 succeeded and 3 failed with operational errors
+      expect(updatePayloadSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'partial',
+          created_count: 1,
+          updated_count: 0,
+          unchanged_count: 0,
+          cached_count: 1,
+          errors_count: 3,
+        })
+      );
+    });
+
+    it('sets status = failed when all products fail due to operational errors', async () => {
+      const updatePayloadSpy = vi.fn().mockReturnValue({
+        eq: vi.fn().mockResolvedValue({ error: null }),
+      });
+      const mockSupabase = {
+        from: vi.fn().mockReturnValue({
+          insert: vi.fn().mockReturnValue({
+            select: vi.fn().mockReturnValue({
+              single: vi.fn().mockResolvedValue({ data: { id: 'test-run-id' }, error: null }),
+            }),
+          }),
+          update: updatePayloadSpy,
+        }),
+        rpc: vi.fn().mockResolvedValue({ data: null, error: { message: 'Fatal DB deadlock' } }),
+      };
+
+      const mockApiResponse: OpenFdaNdcResponse = {
+        results: [
+          {
+            product_ndc: '0001-0001',
+            generic_name: 'Drug One',
+            dosage_form: 'TABLET',
+            product_type: 'HUMAN PRESCRIPTION DRUG',
+            active_ingredients: [{ name: 'Ing1', strength: '10 mg/1' }],
+          },
+        ],
+      };
+
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => mockApiResponse,
+      });
+
+      const stats = await syncOpenFdaDrugs(mockSupabase as any, {
+        dryRun: false,
+        maxRecords: 1,
+        limit: 1,
+        fetchImpl: mockFetch as any,
+      });
+
+      expect(stats.productsCreated).toBe(0);
+      expect(stats.errors.length).toBe(1);
+
+      expect(updatePayloadSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'failed',
+          created_count: 0,
+          cached_count: 0,
+          errors_count: 1,
+        })
+      );
+    });
+  });
 });
