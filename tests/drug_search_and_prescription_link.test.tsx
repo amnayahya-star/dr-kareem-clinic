@@ -734,6 +734,119 @@ describe('Drug Search & Prescription Catalog Link (ربط قاعدة بيانا�
       expect(mockSelectResult).toHaveBeenCalledWith(mockResult);
       expect(screen.queryByTestId('medication-autocomplete-dropdown')).not.toBeInTheDocument();
     });
+
+    it('renders long drug names completely with whitespace-normal and break-words without truncate or line-clamp', async () => {
+      const longDrugName = 'Amoxicillin and Clavulanate Potassium For Oral Suspension USP 600 mg / 42.9 mg per 5 mL';
+      const mockResult: DrugSearchResult = {
+        product_id: 'p-long-1',
+        source_identifier: '0069-long-42',
+        display_name: longDrugName,
+        generic_name: 'Amoxicillin and Clavulanate Potassium',
+        brand_name: 'Augmentin ES-600',
+        dosage_form: 'FOR SUSPENSION',
+        route: 'ORAL',
+        active_ingredient: 'Amoxicillin + Clavulanic Acid',
+        strength: '600 mg / 42.9 mg per 5 mL',
+      };
+      mockRpc.mockResolvedValue({ data: [mockResult], error: null });
+
+      render(
+        <MedicationAutocompleteInput
+          value=""
+          onChange={vi.fn()}
+          onSelectResult={vi.fn()}
+        />
+      );
+
+      const input = screen.getByTestId('medication-search-input');
+      fireEvent.change(input, { target: { value: 'Augm' } });
+
+      act(() => {
+        vi.advanceTimersByTime(300);
+      });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      const dropdown = screen.getByTestId('medication-autocomplete-dropdown');
+      expect(dropdown).toBeInTheDocument();
+
+      // Check dropdown has min-w-full and responsive width classes
+      expect(dropdown.className).toContain('min-w-full');
+      expect(dropdown.className).toContain('w-full');
+      expect(dropdown.className).toContain('sm:w-[28rem]');
+      expect(dropdown.className).toContain('max-w-[calc(100vw-2rem)]');
+
+      // Check the long name element
+      const nameEl = screen.getByTestId('medication-search-result-name');
+      expect(nameEl).toHaveTextContent(longDrugName);
+
+      // Verify NO truncation or line-clamp is present
+      expect(nameEl.className).not.toContain('truncate');
+      expect(nameEl.className).not.toContain('line-clamp');
+
+      // Verify whitespace-normal and break-words for wrapping
+      expect(nameEl.className).toContain('whitespace-normal');
+      expect(nameEl.className).toContain('break-words');
+
+      // Verify secondary information is rendered clearly without squishing the name
+      expect(screen.getByText(/Augmentin ES-600/)).toBeInTheDocument();
+      expect(screen.getByText('Amoxicillin + Clavulanic Acid')).toBeInTheDocument();
+      expect(screen.getByText('600 mg / 42.9 mg per 5 mL')).toBeInTheDocument();
+      expect(screen.getByText('FOR SUSPENSION')).toBeInTheDocument();
+      expect(screen.getByText('ORAL')).toBeInTheDocument();
+    });
+
+    it('positions dropdown correctly with right-0 for Arabic (RTL) and left-0 for English (LTR)', async () => {
+      const mockResult: DrugSearchResult = {
+        product_id: 'p-rtl-1',
+        source_identifier: '001',
+        display_name: 'Panadol 500mg',
+        generic_name: 'Paracetamol',
+        brand_name: 'Panadol',
+        dosage_form: 'TABLET',
+        route: 'ORAL',
+        active_ingredient: 'Paracetamol',
+        strength: '500 mg',
+      };
+      mockRpc.mockResolvedValue({ data: [mockResult], error: null });
+
+      const { rerender } = render(
+        <MedicationAutocompleteInput
+          value=""
+          language="ar"
+          onChange={vi.fn()}
+          onSelectResult={vi.fn()}
+        />
+      );
+
+      const input = screen.getByTestId('medication-search-input');
+      fireEvent.change(input, { target: { value: 'Pana' } });
+
+      act(() => {
+        vi.advanceTimersByTime(300);
+      });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      let dropdown = screen.getByTestId('medication-autocomplete-dropdown');
+      expect(dropdown.className).toContain('right-0');
+
+      // Rerender with English LTR
+      rerender(
+        <MedicationAutocompleteInput
+          value=""
+          language="en"
+          onChange={vi.fn()}
+          onSelectResult={vi.fn()}
+        />
+      );
+      dropdown = screen.getByTestId('medication-autocomplete-dropdown');
+      expect(dropdown.className).toContain('left-0');
+    });
   });
 
   // ----------------------------------------------------------------------------

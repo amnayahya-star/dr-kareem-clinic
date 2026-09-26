@@ -160,7 +160,7 @@ export function MedicationAutocompleteInput({
   const inputId = id || (label ? label.replace(/\s+/g, "-") : undefined);
 
   return (
-    <div ref={containerRef} className="w-full relative space-y-1.5 text-right">
+    <div ref={containerRef} className={cn("w-full relative space-y-1.5", language === "ar" ? "text-right" : "text-left")}>
       {label && (
         <div className="flex items-center justify-between">
           <label htmlFor={inputId} className="block text-sm font-semibold text-slate-700">
@@ -232,7 +232,12 @@ export function MedicationAutocompleteInput({
           id={`${inputId}-listbox`}
           role="listbox"
           data-testid="medication-autocomplete-dropdown"
-          className="absolute z-50 left-0 right-0 top-full mt-1.5 bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden max-h-72 overflow-y-auto divide-y divide-slate-100"
+          className={cn(
+            "absolute z-50 top-full mt-1.5 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden max-h-80 overflow-y-auto divide-y divide-slate-100",
+            "min-w-full w-full sm:w-[28rem] md:w-[32rem] lg:w-[36rem]",
+            "max-w-[calc(100vw-2rem)]",
+            language === "ar" ? "right-0 left-auto text-right" : "left-0 right-auto text-left"
+          )}
         >
           {/* حالة التحميل */}
           {isLoading && results.length === 0 && (
@@ -287,35 +292,59 @@ export function MedicationAutocompleteInput({
                 onClick={() => handleSelectDrug(drug)}
                 onMouseEnter={() => setHighlightedIndex(index)}
                 className={cn(
-                  "p-3 text-right cursor-pointer transition-colors duration-150",
-                  isHighlighted ? "bg-clinic-50/80 text-clinic-950" : "hover:bg-slate-50 text-slate-800"
+                  "p-3.5 cursor-pointer transition-colors duration-150",
+                  language === "ar" ? "text-right" : "text-left",
+                  isHighlighted ? "bg-clinic-50/90 text-clinic-950" : "hover:bg-slate-50 text-slate-800"
                 )}
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="font-bold text-sm text-slate-900 leading-snug">
-                    {drug.display_name}
+                {/* السطر الأول: اسم الدواء بالكامل بدون قص + شارة التركيز */}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div
+                      data-testid="medication-search-result-name"
+                      className="font-bold text-sm text-slate-900 leading-snug whitespace-normal break-words"
+                    >
+                      {drug.display_name}
+                    </div>
+                    {drug.brand_name && drug.brand_name.trim().toLowerCase() !== drug.display_name.trim().toLowerCase() && (
+                      <span className="inline-block mt-0.5 text-xs text-amber-700 font-medium whitespace-normal break-words">
+                        {language === "ar" ? `الاسم التجاري: ${drug.brand_name}` : `Brand: ${drug.brand_name}`}
+                      </span>
+                    )}
                   </div>
+
                   {drug.strength && (
-                    <span className="shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
+                    <span className="shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 font-mono whitespace-nowrap">
                       {drug.strength}
                     </span>
                   )}
                 </div>
 
-                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
+                {/* السطر الثاني: الاسم العلمي إذا اختلف عن اسم العرض */}
+                {drug.generic_name && drug.generic_name.trim().toLowerCase() !== drug.display_name.trim().toLowerCase() && (
+                  <div className="mt-1 text-xs text-slate-600 font-medium whitespace-normal break-words">
+                    <span className="text-slate-400 font-normal">
+                      {language === "ar" ? "الاسم العلمي: " : "Generic: "}
+                    </span>
+                    {drug.generic_name}
+                  </div>
+                )}
+
+                {/* السطر الثالث: تفاصيل المادة الفعالة والشكل الدوائي وطريق الاستخدام */}
+                <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
                   {drug.active_ingredient && (
-                    <span className="inline-flex items-center gap-1 text-clinic-700 font-medium">
-                      <Pill className="w-3 h-3 text-clinic-500" />
-                      {drug.active_ingredient}
+                    <span className="inline-flex items-center gap-1 text-clinic-700 font-medium bg-clinic-50/80 px-2 py-0.5 rounded border border-clinic-200/50 whitespace-normal break-words">
+                      <Pill className="w-3 h-3 text-clinic-500 shrink-0" />
+                      <span>{drug.active_ingredient}</span>
                     </span>
                   )}
                   {drug.dosage_form && (
-                    <span className="text-[11px] text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
+                    <span className="text-[11px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 whitespace-normal">
                       {drug.dosage_form}
                     </span>
                   )}
                   {drug.route && (
-                    <span className="text-[11px] text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
+                    <span className="text-[11px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 whitespace-normal">
                       {drug.route}
                     </span>
                   )}
