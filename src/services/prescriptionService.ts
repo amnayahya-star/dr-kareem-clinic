@@ -4,6 +4,8 @@ import { MOCK_VISITS } from "@/lib/mock-data/patients";
 
 export interface PrescriptionItemInput {
   id?: string;
+  catalog_product_id?: string | null;
+  is_custom_medication?: boolean;
   medication_name: string;
   active_ingredient?: string | null;
   strength?: string | null;
@@ -32,6 +34,8 @@ export interface UpdatePrescriptionInput {
 
 export interface AddPrescriptionItemInput {
   prescription_id: string;
+  catalog_product_id?: string | null;
+  is_custom_medication?: boolean;
   medication_name: string;
   active_ingredient?: string | null;
   strength?: string | null;
@@ -46,6 +50,8 @@ export interface AddPrescriptionItemInput {
 }
 
 export interface UpdatePrescriptionItemInput {
+  catalog_product_id?: string | null;
+  is_custom_medication?: boolean;
   medication_name?: string;
   active_ingredient?: string | null;
   strength?: string | null;
@@ -125,6 +131,8 @@ function mapSupabasePrescriptionRow(row: any): Prescription {
     .map((item: any) => ({
       id: item.id,
       prescription_id: item.prescription_id,
+      catalog_product_id: item.catalog_product_id || null,
+      is_custom_medication: item.is_custom_medication !== undefined ? item.is_custom_medication : (item.catalog_product_id ? false : true),
       medication_name: item.medication_name,
       active_ingredient: item.active_ingredient || null,
       strength: item.strength || null,
@@ -172,6 +180,8 @@ export async function createPrescription(input: CreatePrescriptionInput): Promis
     const items: PrescriptionItem[] = (input.items || []).map((it, idx) => ({
       id: it.id || `rxi-${Date.now()}-${idx}`,
       prescription_id: rxId,
+      catalog_product_id: it.catalog_product_id || null,
+      is_custom_medication: it.is_custom_medication !== undefined ? it.is_custom_medication : (it.catalog_product_id ? false : true),
       medication_name: it.medication_name.trim(),
       active_ingredient: it.active_ingredient?.trim() || null,
       strength: it.strength?.trim() || null,
@@ -214,6 +224,8 @@ export async function createPrescription(input: CreatePrescriptionInput): Promis
     p_diagnosis_id: input.diagnosis_id || null,
     p_general_instructions: input.general_instructions?.trim() || null,
     p_items: (input.items || []).map((it, idx) => ({
+      catalog_product_id: it.catalog_product_id || null,
+      is_custom_medication: it.is_custom_medication !== undefined ? it.is_custom_medication : (it.catalog_product_id ? false : true),
       medication_name: it.medication_name.trim(),
       active_ingredient: it.active_ingredient?.trim() || null,
       strength: it.strength?.trim() || null,
@@ -325,6 +337,8 @@ export async function addPrescriptionItem(input: AddPrescriptionItemInput): Prom
     const newItem: PrescriptionItem = {
       id: `rxi-${Date.now()}`,
       prescription_id: input.prescription_id,
+      catalog_product_id: input.catalog_product_id || null,
+      is_custom_medication: input.is_custom_medication !== undefined ? input.is_custom_medication : (input.catalog_product_id ? false : true),
       medication_name: input.medication_name.trim(),
       active_ingredient: input.active_ingredient?.trim() || null,
       strength: input.strength?.trim() || null,
@@ -349,6 +363,8 @@ export async function addPrescriptionItem(input: AddPrescriptionItemInput): Prom
     .from("prescription_items")
     .insert({
       prescription_id: input.prescription_id,
+      catalog_product_id: input.catalog_product_id || null,
+      is_custom_medication: input.is_custom_medication !== undefined ? input.is_custom_medication : (input.catalog_product_id ? false : true),
       medication_name: input.medication_name.trim(),
       active_ingredient: input.active_ingredient?.trim() || null,
       strength: input.strength?.trim() || null,
@@ -371,6 +387,8 @@ export async function addPrescriptionItem(input: AddPrescriptionItemInput): Prom
   return {
     id: data.id,
     prescription_id: data.prescription_id,
+    catalog_product_id: data.catalog_product_id || null,
+    is_custom_medication: data.is_custom_medication ?? (data.catalog_product_id ? false : true),
     medication_name: data.medication_name,
     active_ingredient: data.active_ingredient || null,
     strength: data.strength || null,
@@ -407,6 +425,8 @@ export async function updatePrescriptionItem(
         const existing = rx.items![idx];
         const updatedItem: PrescriptionItem = {
           ...existing,
+          catalog_product_id: input.catalog_product_id !== undefined ? input.catalog_product_id : existing.catalog_product_id,
+          is_custom_medication: input.is_custom_medication !== undefined ? input.is_custom_medication : existing.is_custom_medication,
           medication_name: input.medication_name !== undefined ? input.medication_name.trim() : existing.medication_name,
           active_ingredient: input.active_ingredient !== undefined ? input.active_ingredient?.trim() || null : existing.active_ingredient,
           strength: input.strength !== undefined ? input.strength?.trim() || null : existing.strength,
@@ -431,6 +451,8 @@ export async function updatePrescriptionItem(
   const updates: Record<string, any> = {
     updated_at: new Date().toISOString(),
   };
+  if (input.catalog_product_id !== undefined) updates.catalog_product_id = input.catalog_product_id || null;
+  if (input.is_custom_medication !== undefined) updates.is_custom_medication = input.is_custom_medication;
   if (input.medication_name !== undefined) updates.medication_name = input.medication_name.trim();
   if (input.active_ingredient !== undefined) updates.active_ingredient = input.active_ingredient?.trim() || null;
   if (input.strength !== undefined) updates.strength = input.strength?.trim() || null;
@@ -457,6 +479,8 @@ export async function updatePrescriptionItem(
   return {
     id: data.id,
     prescription_id: data.prescription_id,
+    catalog_product_id: data.catalog_product_id || null,
+    is_custom_medication: data.is_custom_medication ?? (data.catalog_product_id ? false : true),
     medication_name: data.medication_name,
     active_ingredient: data.active_ingredient || null,
     strength: data.strength || null,
@@ -727,6 +751,8 @@ export async function savePrescriptionWithItems(input: SavePrescriptionWithItems
     const items: PrescriptionItem[] = input.items.map((it, idx) => ({
       id: it.id || `rxi-${Date.now()}-${idx}`,
       prescription_id: rxId,
+      catalog_product_id: it.catalog_product_id || null,
+      is_custom_medication: it.is_custom_medication !== undefined ? it.is_custom_medication : (it.catalog_product_id ? false : true),
       medication_name: it.medication_name.trim(),
       active_ingredient: it.active_ingredient?.trim() || null,
       strength: it.strength?.trim() || null,
@@ -770,6 +796,8 @@ export async function savePrescriptionWithItems(input: SavePrescriptionWithItems
     p_diagnosis_id: input.diagnosis_id || null,
     p_general_instructions: input.general_instructions?.trim() || null,
     p_items: input.items.map((it, idx) => ({
+      catalog_product_id: it.catalog_product_id || null,
+      is_custom_medication: it.is_custom_medication !== undefined ? it.is_custom_medication : (it.catalog_product_id ? false : true),
       medication_name: it.medication_name.trim(),
       active_ingredient: it.active_ingredient?.trim() || null,
       strength: it.strength?.trim() || null,

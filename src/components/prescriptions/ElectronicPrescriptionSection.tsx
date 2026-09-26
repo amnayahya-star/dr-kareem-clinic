@@ -15,6 +15,12 @@ import {
   fetchPrescriptionByVisitId,
   PrescriptionItemInput,
 } from "@/services/prescriptionService";
+import { MedicationAutocompleteInput } from "./MedicationAutocompleteInput";
+import {
+  DrugSearchResult,
+  mapDosageFormToFormType,
+  mapRouteToStandardRoute,
+} from "@/services/drugSearchService";
 import { useLanguage } from "@/context/LanguageContext";
 import {
   Pill,
@@ -56,6 +62,8 @@ function mapPrescriptionToFormItems(rx?: Prescription | null): PrescriptionItemI
   if (rx?.items && rx.items.length > 0) {
     return rx.items.map((it, idx) => ({
       id: it.id,
+      catalog_product_id: it.catalog_product_id || null,
+      is_custom_medication: it.is_custom_medication !== undefined ? it.is_custom_medication : (it.catalog_product_id ? false : true),
       medication_name: it.medication_name || "",
       active_ingredient: it.active_ingredient || "",
       strength: it.strength || "",
@@ -71,6 +79,8 @@ function mapPrescriptionToFormItems(rx?: Prescription | null): PrescriptionItemI
   }
   return [
     {
+      catalog_product_id: null,
+      is_custom_medication: true,
       medication_name: "",
       active_ingredient: "",
       strength: "",
@@ -263,6 +273,8 @@ export function ElectronicPrescriptionSection({
     setItems((prev) => [
       ...prev,
       {
+        catalog_product_id: null,
+        is_custom_medication: true,
         medication_name: "",
         active_ingredient: "",
         strength: "",
@@ -289,7 +301,44 @@ export function ElectronicPrescriptionSection({
   const handleUpdateItem = (index: number, field: keyof PrescriptionItemInput, value: any) => {
     setIsDirty(true);
     setItems((prev) =>
-      prev.map((it, idx) => (idx === index ? { ...it, [field]: value } : it))
+      prev.map((it, idx) => {
+        if (idx !== index) return it;
+        if (field === "medication_name") {
+          // عندما يعدّل الطبيب اسم الدواء يدويًا بعد اختيار نتيجة:
+          // امسح catalog_product_id واجعل is_custom_medication = true
+          // دون مسح بقية الحقول تلقائيًا
+          return {
+            ...it,
+            medication_name: value,
+            catalog_product_id: null,
+            is_custom_medication: true,
+          };
+        }
+        return { ...it, [field]: value };
+      })
+    );
+  };
+
+  // اختيار دواء من الكتالوج عبر قائمة الإكمال التلقائي
+  const handleSelectMedicationResult = (index: number, drug: DrugSearchResult) => {
+    setIsDirty(true);
+    const convertedForm = mapDosageFormToFormType(drug.dosage_form);
+    const convertedRoute = mapRouteToStandardRoute(drug.route);
+
+    setItems((prev) =>
+      prev.map((it, idx) => {
+        if (idx !== index) return it;
+        return {
+          ...it,
+          catalog_product_id: drug.product_id,
+          is_custom_medication: false,
+          medication_name: drug.display_name,
+          active_ingredient: drug.active_ingredient || it.active_ingredient || "",
+          strength: drug.strength || it.strength || "",
+          dosage_form: convertedForm || it.dosage_form,
+          route: convertedRoute || it.route,
+        };
+      })
     );
   };
 
@@ -304,6 +353,8 @@ export function ElectronicPrescriptionSection({
       .filter((it) => it.medication_name && it.medication_name.trim() !== "")
       .map((it, idx) => ({
         ...it,
+        catalog_product_id: it.catalog_product_id || null,
+        is_custom_medication: it.is_custom_medication !== undefined ? it.is_custom_medication : (it.catalog_product_id ? false : true),
         medication_name: it.medication_name.trim(),
         active_ingredient: it.active_ingredient?.trim() || null,
         strength: it.strength?.trim() || null,
@@ -626,13 +677,17 @@ export function ElectronicPrescriptionSection({
 
             {/* Row 1: Name, Active Ingredient, Strength, Dosage Form */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-              <Input
+              <MedicationAutocompleteInput
                 label={language === "ar" ? "اسم الدواء (العلمي/التجاري)" : "Medication Name"}
                 required
                 disabled={isLocked}
                 placeholder="مثال: Paracetamol / Amoxicillin"
                 value={item.medication_name}
-                onChange={(e) => handleUpdateItem(index, "medication_name", e.target.value)}
+                isCustomMedication={item.is_custom_medication ?? !item.catalog_product_id}
+                hasCatalogLink={Boolean(item.catalog_product_id)}
+                language={language}
+                onChange={(val) => handleUpdateItem(index, "medication_name", val)}
+                onSelectResult={(drug) => handleSelectMedicationResult(index, drug)}
                 className="font-bold text-slate-900 text-xs"
               />
 
