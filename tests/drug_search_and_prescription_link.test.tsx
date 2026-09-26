@@ -122,24 +122,43 @@ describe('Drug Search & Prescription Catalog Link (ربط قاعدة بيانا�
   describe('2. Pure Route Mapping (mapRouteToStandardRoute)', () => {
     it('maps standard routes correctly', () => {
       expect(mapRouteToStandardRoute('ORAL')).toBe('oral');
-      expect(mapRouteToStandardRoute('INTRAVENOUS')).toBe('iv');
-      expect(mapRouteToStandardRoute('IV')).toBe('iv');
-      expect(mapRouteToStandardRoute('INTRAMUSCULAR')).toBe('im');
-      expect(mapRouteToStandardRoute('IM')).toBe('im');
       expect(mapRouteToStandardRoute('TOPICAL')).toBe('topical');
       expect(mapRouteToStandardRoute('CUTANEOUS')).toBe('topical');
-      expect(mapRouteToStandardRoute('RESPIRATORY')).toBe('inhalation');
+      expect(mapRouteToStandardRoute('RESPIRATORY (INHALATION)')).toBe('inhalation');
       expect(mapRouteToStandardRoute('INHALATION')).toBe('inhalation');
       expect(mapRouteToStandardRoute('RECTAL')).toBe('rectal');
       expect(mapRouteToStandardRoute('NASAL')).toBe('nasal');
       expect(mapRouteToStandardRoute('OPHTHALMIC')).toBe('ophthalmic');
       expect(mapRouteToStandardRoute('OTIC')).toBe('otic');
+      expect(mapRouteToStandardRoute('INTRAVENOUS')).toBe('iv');
+      expect(mapRouteToStandardRoute('IV')).toBe('iv');
+      expect(mapRouteToStandardRoute('INTRAMUSCULAR')).toBe('im');
+      expect(mapRouteToStandardRoute('IM')).toBe('im');
     });
 
-    it('preserves non-standard routes verbatim without inventing false route', () => {
-      expect(mapRouteToStandardRoute('Sublingual')).toBe('Sublingual');
-      expect(mapRouteToStandardRoute('Epidural')).toBe('Epidural');
+    it('tolerates case variations and extra whitespaces', () => {
+      expect(mapRouteToStandardRoute('  oral  ')).toBe('oral');
+      expect(mapRouteToStandardRoute('Oral')).toBe('oral');
+      expect(mapRouteToStandardRoute('  Topical  ')).toBe('topical');
+      expect(mapRouteToStandardRoute('  respiratory (inhalation)  ')).toBe('inhalation');
+    });
+
+    it('handles composite values and source arrays gracefully', () => {
+      expect(mapRouteToStandardRoute(['ORAL'])).toBe('oral');
+      expect(mapRouteToStandardRoute(['RESPIRATORY (INHALATION)'])).toBe('inhalation');
+      expect(mapRouteToStandardRoute(['TOPICAL', 'CUTANEOUS'])).toBe('topical');
+      expect(mapRouteToStandardRoute('RESPIRATORY (INHALATION)')).toBe('inhalation');
+      expect(mapRouteToStandardRoute('ORAL; TOPICAL')).toBe('oral');
+    });
+
+    it('returns empty string for unknown routes without inventing a false value', () => {
+      expect(mapRouteToStandardRoute('Sublingual')).toBe('');
+      expect(mapRouteToStandardRoute('Epidural')).toBe('');
+      expect(mapRouteToStandardRoute('UNKNOWN_ROUTE_123')).toBe('');
       expect(mapRouteToStandardRoute(null)).toBe('');
+      expect(mapRouteToStandardRoute(undefined)).toBe('');
+      expect(mapRouteToStandardRoute('')).toBe('');
+      expect(mapRouteToStandardRoute(['UNKNOWN_XYZ'])).toBe('');
     });
   });
 
@@ -761,8 +780,188 @@ describe('Drug Search & Prescription Catalog Link (ربط قاعدة بيانا�
       expect(screen.getByDisplayValue('Acetaminophen')).toBeInTheDocument();
       expect(screen.getByDisplayValue('120 mg / 5 mL')).toBeInTheDocument();
 
+      // Check route select was correctly populated with internal value 'oral'
+      const routeSelect = screen.getByTestId('medication-item-0-route') as HTMLSelectElement;
+      expect(routeSelect.value).toBe('oral');
+
       // Check catalog badge appears
       expect(screen.getByText('كتالوج الأدوية')).toBeInTheDocument();
+
+      vi.useRealTimers();
+    });
+
+    it('populates route with "oral" when selecting Amoxicillin POWDER, FOR SUSPENSION with route ORAL', async () => {
+      const mockResult: DrugSearchResult = {
+        product_id: 'prod-amox-susp-1',
+        source_identifier: '0069-4201',
+        display_name: 'Amoxicillin POWDER, FOR SUSPENSION',
+        generic_name: 'Amoxicillin',
+        brand_name: 'Amoxil',
+        dosage_form: 'POWDER, FOR SUSPENSION',
+        route: 'ORAL',
+        active_ingredient: 'AMOXICILLIN',
+        strength: '250 mg / 5 mL',
+      };
+      mockRpc.mockResolvedValue({ data: [mockResult], error: null });
+
+      vi.useFakeTimers();
+
+      render(
+        <LanguageProvider>
+          <ElectronicPrescriptionSection
+            visitId="v-amox-susp"
+            patientId="p-amox-susp"
+          />
+        </LanguageProvider>
+      );
+
+      const medInput = screen.getByTestId('medication-search-input');
+      fireEvent.change(medInput, { target: { value: 'Amox' } });
+
+      await act(async () => {
+        vi.advanceTimersByTime(300);
+      });
+
+      const option = screen.getByTestId('medication-search-result-item');
+      fireEvent.click(option);
+
+      const routeSelect = screen.getByTestId('medication-item-0-route') as HTMLSelectElement;
+      expect(routeSelect.value).toBe('oral');
+      expect(screen.getByText('فموي (Oral)')).toBeInTheDocument();
+      expect(screen.getByText('كتالوج الأدوية')).toBeInTheDocument();
+
+      vi.useRealTimers();
+    });
+
+    it('populates route correctly for RESPIRATORY (INHALATION) and TOPICAL', async () => {
+      const mockInhaler: DrugSearchResult = {
+        product_id: 'prod-salbutamol-1',
+        source_identifier: '0173-0682',
+        display_name: 'Albuterol Inhaler',
+        generic_name: 'Albuterol',
+        brand_name: 'Ventolin',
+        dosage_form: 'AEROSOL',
+        route: 'RESPIRATORY (INHALATION)',
+        active_ingredient: 'Albuterol',
+        strength: '90 mcg',
+      };
+      mockRpc.mockResolvedValue({ data: [mockInhaler], error: null });
+
+      vi.useFakeTimers();
+
+      render(
+        <LanguageProvider>
+          <ElectronicPrescriptionSection
+            visitId="v-inhaler"
+            patientId="p-inhaler"
+          />
+        </LanguageProvider>
+      );
+
+      const medInput = screen.getByTestId('medication-search-input');
+      fireEvent.change(medInput, { target: { value: 'Vento' } });
+
+      await act(async () => {
+        vi.advanceTimersByTime(300);
+      });
+
+      const option = screen.getByTestId('medication-search-result-item');
+      fireEvent.click(option);
+
+      const routeSelect = screen.getByTestId('medication-item-0-route') as HTMLSelectElement;
+      expect(routeSelect.value).toBe('inhalation');
+      expect(screen.getByText('استنشاق (Inhalation)')).toBeInTheDocument();
+
+      vi.useRealTimers();
+    });
+
+    it('leaves route empty when product has an unknown route without inventing a false value', async () => {
+      const mockUnknownRoute: DrugSearchResult = {
+        product_id: 'prod-unknown-1',
+        source_identifier: '0000-0000',
+        display_name: 'Specialized Test Drug',
+        generic_name: 'Test Generic',
+        brand_name: null,
+        dosage_form: 'TABLET',
+        route: 'Sublingual / Epidural Non-Standard',
+        active_ingredient: 'Test Generic',
+        strength: '10 mg',
+      };
+      mockRpc.mockResolvedValue({ data: [mockUnknownRoute], error: null });
+
+      vi.useFakeTimers();
+
+      render(
+        <LanguageProvider>
+          <ElectronicPrescriptionSection
+            visitId="v-unknown"
+            patientId="p-unknown"
+          />
+        </LanguageProvider>
+      );
+
+      const medInput = screen.getByTestId('medication-search-input');
+      fireEvent.change(medInput, { target: { value: 'Spec' } });
+
+      await act(async () => {
+        vi.advanceTimersByTime(300);
+      });
+
+      const option = screen.getByTestId('medication-search-result-item');
+      fireEvent.click(option);
+
+      const routeSelect = screen.getByTestId('medication-item-0-route') as HTMLSelectElement;
+      expect(routeSelect.value).toBe('');
+
+      vi.useRealTimers();
+    });
+
+    it('allows doctor to manually select route without altering catalog_product_id or is_custom_medication', async () => {
+      const mockResult: DrugSearchResult = {
+        product_id: 'prod-amox-manual-route',
+        source_identifier: '0069-4202',
+        display_name: 'Amoxicillin 500 MG Capsule',
+        generic_name: 'Amoxicillin',
+        brand_name: 'Amoxil',
+        dosage_form: 'CAPSULE',
+        route: 'ORAL',
+        active_ingredient: 'Amoxicillin',
+        strength: '500 mg',
+      };
+      mockRpc.mockResolvedValue({ data: [mockResult], error: null });
+
+      vi.useFakeTimers();
+
+      render(
+        <LanguageProvider>
+          <ElectronicPrescriptionSection
+            visitId="v-manual-route"
+            patientId="p-manual-route"
+          />
+        </LanguageProvider>
+      );
+
+      const medInput = screen.getByTestId('medication-search-input');
+      fireEvent.change(medInput, { target: { value: 'Amox' } });
+
+      await act(async () => {
+        vi.advanceTimersByTime(300);
+      });
+
+      const option = screen.getByTestId('medication-search-result-item');
+      fireEvent.click(option);
+
+      // Verify initially catalog_product_id was linked
+      expect(screen.getByText('كتالوج الأدوية')).toBeInTheDocument();
+
+      // Doctor manually changes route to 'topical'
+      const routeSelect = screen.getByTestId('medication-item-0-route') as HTMLSelectElement;
+      fireEvent.change(routeSelect, { target: { value: 'topical' } });
+
+      expect(routeSelect.value).toBe('topical');
+      // Badge MUST remain catalog_product_id linked (NOT switched to manual)
+      expect(screen.getByText('كتالوج الأدوية')).toBeInTheDocument();
+      expect(screen.queryByText('إدخال يدوي')).not.toBeInTheDocument();
 
       vi.useRealTimers();
     });

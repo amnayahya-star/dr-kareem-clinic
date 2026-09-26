@@ -20,6 +20,7 @@ import {
   DrugSearchResult,
   mapDosageFormToFormType,
   mapRouteToStandardRoute,
+  ROUTE_OPTIONS,
 } from "@/services/drugSearchService";
 import { useLanguage } from "@/context/LanguageContext";
 import {
@@ -45,18 +46,6 @@ export interface ElectronicPrescriptionSectionProps {
   readOnly?: boolean;
   onPrescriptionChanged?: (rx: Prescription) => void;
 }
-
-const ROUTE_OPTIONS = [
-  { value: "oral", labelAr: "عن طريق الفم (Oral)", labelEn: "Oral (PO)" },
-  { value: "iv", labelAr: "وريدي (IV)", labelEn: "Intravenous (IV)" },
-  { value: "im", labelAr: "عضلي (IM)", labelEn: "Intramuscular (IM)" },
-  { value: "topical", labelAr: "موضعي (Topical)", labelEn: "Topical" },
-  { value: "inhalation", labelAr: "استنشاق (Inhalation)", labelEn: "Inhalation" },
-  { value: "rectal", labelAr: "شرجي (Rectal)", labelEn: "Rectal" },
-  { value: "nasal", labelAr: "أنفي (Nasal)", labelEn: "Nasal" },
-  { value: "ophthalmic", labelAr: "قطرة عين (Ophthalmic)", labelEn: "Eye Drops" },
-  { value: "otic", labelAr: "قطرة أذن (Otic)", labelEn: "Ear Drops" },
-];
 
 function mapPrescriptionToFormItems(rx?: Prescription | null): PrescriptionItemInput[] {
   if (rx?.items && rx.items.length > 0) {
@@ -746,17 +735,22 @@ export function ElectronicPrescriptionSection({
                   {language === "ar" ? "طريق الاستخدام" : "Route"}
                 </label>
                 <select
+                  id={`medication-item-${index}-route`}
+                  data-testid={`medication-item-${index}-route`}
                   disabled={isLocked}
                   className="block w-full rounded-xl border border-slate-200 bg-white text-slate-800 text-xs h-11 px-3 focus:outline-none focus:ring-2 focus:ring-clinic-500 disabled:bg-slate-100 disabled:text-slate-500 font-medium"
-                  value={item.route || ""}
+                  value={mapRouteToStandardRoute(item.route) || item.route || ""}
                   onChange={(e) => handleUpdateItem(index, "route", e.target.value)}
                 >
                   <option value="">{language === "ar" ? "-- اختياري: اختر الطريق --" : "-- Optional: Select Route --"}</option>
                   {ROUTE_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={language === "ar" ? opt.labelAr : opt.labelEn}>
+                    <option key={opt.value} value={opt.value}>
                       {language === "ar" ? opt.labelAr : opt.labelEn}
                     </option>
                   ))}
+                  {Boolean(item.route && !ROUTE_OPTIONS.some((opt) => opt.value === mapRouteToStandardRoute(item.route))) && (
+                    <option value={item.route || ""}>{item.route}</option>
+                  )}
                 </select>
               </div>
 

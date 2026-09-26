@@ -100,37 +100,102 @@ export function mapDosageFormToFormType(rawForm?: string | null): DosageForm {
   return "other";
 }
 
+export interface RouteOption {
+  value: string;
+  labelAr: string;
+  labelEn: string;
+}
+
+export const ROUTE_OPTIONS: RouteOption[] = [
+  { value: "oral", labelAr: "فموي (Oral)", labelEn: "Oral (PO)" },
+  { value: "iv", labelAr: "وريدي (IV)", labelEn: "Intravenous (IV)" },
+  { value: "im", labelAr: "عضلي (IM)", labelEn: "Intramuscular (IM)" },
+  { value: "topical", labelAr: "موضعي (Topical)", labelEn: "Topical" },
+  { value: "inhalation", labelAr: "استنشاق (Inhalation)", labelEn: "Inhalation" },
+  { value: "rectal", labelAr: "شرجي (Rectal)", labelEn: "Rectal" },
+  { value: "nasal", labelAr: "أنفي (Nasal)", labelEn: "Nasal" },
+  { value: "ophthalmic", labelAr: "قطرة عين (Ophthalmic)", labelEn: "Eye Drops" },
+  { value: "otic", labelAr: "قطرة أذن (Otic)", labelEn: "Ear Drops" },
+];
+
 /**
- * تحويل طريق استخدام الدواء route إلى القيمة القياسية
- * 
+ * الحصول على تسمية طريق الاستخدام المعروضة للمستخدم
+ */
+export function getRouteLabel(route?: string | null, language: "ar" | "en" = "ar"): string {
+  if (!route) return "";
+  const standard = mapRouteToStandardRoute(route);
+  const found = ROUTE_OPTIONS.find((opt) => opt.value === (standard || route));
+  if (found) {
+    return language === "ar" ? found.labelAr : found.labelEn;
+  }
+  return route;
+}
+
+/**
+ * تحويل طريق استخدام الدواء route إلى القيمة القياسية المتوافقة مع ROUTE_OPTIONS
+ *
  * - ORAL → oral
- * - INTRAVENOUS → iv
- * - INTRAMUSCULAR → im
  * - TOPICAL أو CUTANEOUS → topical
- * - RESPIRATORY أو INHALATION → inhalation
+ * - RESPIRATORY (INHALATION) أو INHALATION → inhalation
  * - RECTAL → rectal
  * - NASAL → nasal
  * - OPHTHALMIC → ophthalmic
  * - OTIC → otic
- * - غير ذلك يبقى نصًا قابلًا للمراجعة ولا يُخترع له طريق خاطئ.
+ * - INTRAVENOUS / IV → iv
+ * - INTRAMUSCULAR / IM → im
+ *
+ * يتحمل:
+ * - الأحرف الكبيرة والصغيرة (Case-insensitive)
+ * - الفراغات الزائدة
+ * - القيم المركبة (مثل "RESPIRATORY (INHALATION)" أو "ORAL; TOPICAL")
+ * - المصفوفات (مثل ["ORAL"]) إن كانت قادمة من المصدر
+ * - عدم اختلاق قيمة إذا كان الطريق غير معروف؛ عندها يبقى الحقل فارغاً ("")
  */
-export function mapRouteToStandardRoute(rawRoute?: string | null): string {
+export function mapRouteToStandardRoute(rawRoute?: unknown): string {
   if (!rawRoute) return "";
-  const trimmed = rawRoute.trim();
+
+  let inputStr = "";
+  if (Array.isArray(rawRoute)) {
+    inputStr = rawRoute.filter(Boolean).map(String).join(" ");
+  } else if (typeof rawRoute === "string") {
+    inputStr = rawRoute;
+  } else {
+    inputStr = String(rawRoute);
+  }
+
+  const trimmed = inputStr.trim();
+  if (!trimmed) return "";
   const upper = trimmed.toUpperCase();
 
-  if (upper.includes("ORAL")) return "oral";
-  if (upper.includes("INTRAVENOUS") || upper === "IV") return "iv";
-  if (upper.includes("INTRAMUSCULAR") || upper === "IM") return "im";
-  if (upper.includes("TOPICAL") || upper.includes("CUTANEOUS")) return "topical";
-  if (upper.includes("RESPIRATORY") || upper.includes("INHALATION")) return "inhalation";
-  if (upper.includes("RECTAL")) return "rectal";
-  if (upper.includes("NASAL")) return "nasal";
-  if (upper.includes("OPHTHALMIC")) return "ophthalmic";
-  if (upper.includes("OTIC")) return "otic";
+  // 1. الفموي: ORAL
+  if (upper.includes("ORAL") || upper.includes("فم")) return "oral";
 
-  // غير ذلك يبقى نصًا قابلًا للمراجعة
-  return trimmed;
+  // 2. الاستنشاق: RESPIRATORY (INHALATION) أو INHALATION
+  if (upper.includes("RESPIRATORY") || upper.includes("INHALATION") || upper.includes("استنشاق")) return "inhalation";
+
+  // 3. الموضعي: TOPICAL أو CUTANEOUS
+  if (upper.includes("TOPICAL") || upper.includes("CUTANEOUS") || upper.includes("موضع")) return "topical";
+
+  // 4. الشرجي: RECTAL
+  if (upper.includes("RECTAL") || upper.includes("شرج")) return "rectal";
+
+  // 5. الأنفي: NASAL
+  if (upper.includes("NASAL") || upper.includes("أنف") || upper.includes("انف")) return "nasal";
+
+  // 6. العيني: OPHTHALMIC
+  if (upper.includes("OPHTHALMIC") || upper.includes("عين") || upper.includes("EYE")) return "ophthalmic";
+
+  // 7. الأذني: OTIC
+  if (upper.includes("OTIC") || upper.includes("أذن") || upper.includes("اذن") || upper.includes("EAR")) return "otic";
+
+  // 8. الحقن الوريدي: INTRAVENOUS أو IV
+  if (upper.includes("INTRAVENOUS") || /\bIV\b/.test(upper) || upper.includes("وريد")) return "iv";
+
+  // 9. الحقن العضلي: INTRAMUSCULAR أو IM
+  if (upper.includes("INTRAMUSCULAR") || /\bIM\b/.test(upper) || upper.includes("عضل")) return "im";
+
+  // عدم اختلاق قيمة إذا كان الطريق غير معروف؛ عندها يبقى الحقل فارغاً
+  return "";
 }
 
 /**

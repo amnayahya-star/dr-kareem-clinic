@@ -10,6 +10,7 @@ import { fetchPatients } from "@/services/patientService";
 import { PatientFile, VisitRecord } from "@/lib/mock-data/patients";
 import { Prescription } from "@/types/database";
 import { calculateArabicAge, formatArabicDate, DOSAGE_FORM_LABELS } from "@/lib/utils";
+import { getRouteLabel } from "@/services/drugSearchService";
 import { Printer, ArrowRight, Ban, Stethoscope } from "lucide-react";
 
 export default function PrescriptionPrintPage() {
@@ -275,7 +276,7 @@ export default function PrescriptionPrintPage() {
 
                   {(item.route || item.instructions || item.route_or_instructions) && (
                     <p className="text-[11px] text-slate-600 mt-1.5 font-medium border-t border-slate-200/60 pt-1">
-                      {item.route && <span className="font-bold">طريقة الإعطاء: {item.route} | </span>}
+                      {item.route && <span className="font-bold">طريقة الإعطاء: {getRouteLabel(item.route, 'ar')} | </span>}
                       <span>طريقة الاستخدام والتعليمات: {item.instructions || item.route_or_instructions}</span>
                     </p>
                   )}
