@@ -12,6 +12,7 @@ import {
   fetchPrescriptionRevisions,
   _resetInMemoryPrescriptions,
 } from '../src/services/prescriptionService';
+import * as prescriptionService from '../src/services/prescriptionService';
 import { ElectronicPrescriptionSection } from '../src/components/prescriptions/ElectronicPrescriptionSection';
 import PrescriptionPrintPage from '../src/app/(secretary)/secretary/prescriptions/[visitId]/print/page';
 import { LanguageProvider } from '../src/context/LanguageContext';
@@ -35,14 +36,19 @@ vi.mock('../src/lib/supabase/client', () => ({
 
 // Mock Next.js navigation
 const mockBack = vi.fn();
+const mockPush = vi.fn();
+const mockReplace = vi.fn();
+let mockPathname = '/doctor/examination/visit-rev-1';
 let mockParams = { visitId: 'visit-rev-1' };
 let mockSearchParamsGet = vi.fn().mockReturnValue(null);
 
 vi.mock('next/navigation', () => ({
   useParams: () => mockParams,
+  usePathname: () => mockPathname,
   useRouter: () => ({
     back: mockBack,
-    push: vi.fn(),
+    push: mockPush,
+    replace: mockReplace,
   }),
   useSearchParams: () => ({
     get: (key: string) => mockSearchParamsGet(key),
@@ -707,6 +713,415 @@ describe('Prescription Revision & Amendment Workflow (نظام مراجعة وت
         expect(warning).toBeInTheDocument();
         expect(warning).toHaveTextContent('نسخة قديمة مستبدلة — غير معتمدة للاستخدام الحالي');
       });
+    });
+  });
+
+  // ============================================================================
+  // 6. Production Regression Suite: Revision Selection Stability, URL Sync, and Security
+  // ============================================================================
+  describe('6. Production Regression Suite: Revision Selection Stability, URL Sync, and Security', () => {
+    it('1. clicking v2 draft pill keeps v2 displayed even when parent re-renders with v1', async () => {
+      const visitId = 'visit-reg-keep-v2';
+      const patientId = 'patient-reg-keep-v2';
+
+      // Seed v1 issued
+      const v1 = await savePrescriptionWithItems({
+        visit_id: visitId,
+        patient_id: patientId,
+        items: [
+          {
+            medication_name: 'Amoxicillin 250mg',
+            dosage_form: 'capsules',
+            frequency: '3 times daily',
+            duration: '5 days',
+          },
+        ],
+        action: 'issue',
+      });
+
+      // Seed v2 draft
+      await createPrescriptionRevision(v1.id, 'جرعة جديدة');
+
+      const { rerender } = render(
+        <LanguageProvider>
+          <ElectronicPrescriptionSection
+            visitId={visitId}
+            patientId={patientId}
+            initialPrescription={v1}
+          />
+        </LanguageProvider>
+      );
+
+      // Initially displays v1 from initialPrescription
+      await waitFor(() => {
+        expect(screen.getByTestId('rx-revision-badge')).toHaveTextContent('نسخة 1');
+      });
+
+      // Switch to revision 2
+      const pillV2 = await screen.findByTestId('rx-revision-tab-2');
+      await act(async () => {
+        fireEvent.click(pillV2);
+      });
+
+      // Displays v2
+      await waitFor(() => {
+        expect(screen.getByTestId('rx-revision-badge')).toHaveTextContent('نسخة 2');
+        expect(screen.getByTestId('rx-draft-ready-badge')).toBeInTheDocument();
+      });
+
+      // Simulate parent component re-render / polling passing initialPrescription={v1}
+      rerender(
+        <LanguageProvider>
+          <ElectronicPrescriptionSection
+            visitId={visitId}
+            patientId={patientId}
+            initialPrescription={v1}
+          />
+        </LanguageProvider>
+      );
+
+      // Verify v2 remains active and is NOT overwritten back to v1!
+      await waitFor(() => {
+        expect(screen.getByTestId('rx-revision-badge')).toHaveTextContent('نسخة 2');
+        expect(screen.getByTestId('rx-draft-ready-badge')).toBeInTheDocument();
+      });
+    });
+
+    it('2. delayed fetch response for v1 does not overwrite newly selected v2 (request sequencing)', async () => {
+      const visitId = 'visit-reg-seq';
+      const patientId = 'patient-reg-seq';
+
+      const v1 = await savePrescriptionWithItems({
+        visit_id: visitId,
+        patient_id: patientId,
+        items: [
+          {
+            medication_name: 'Drug A 100mg',
+            dosage_form: 'tablets',
+            frequency: 'once daily',
+            duration: '3 days',
+          },
+        ],
+        action: 'issue',
+      });
+
+      await createPrescriptionRevision(v1.id, 'استبدال بـ Drug B');
+
+      render(
+        <LanguageProvider>
+          <ElectronicPrescriptionSection
+            visitId={visitId}
+            patientId={patientId}
+            initialPrescription={v1}
+          />
+        </LanguageProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('rx-revision-badge')).toHaveTextContent('نسخة 1');
+      });
+
+      // Delay a fetch call to simulate slow network response for v1
+      let delayedResolve!: (val: any) => void;
+      const delayedPromise = new Promise((resolve) => {
+        delayedResolve = resolve;
+      });
+
+      const originalFetch = prescriptionService.fetchPrescriptionByVisitId;
+      const fetchSpy = vi.spyOn(prescriptionService, 'fetchPrescriptionByVisitId');
+      fetchSpy.mockImplementation(async (vId, options) => {
+        const targetId = typeof options === 'string' ? options : options?.prescriptionId;
+        if (targetId === v1.id) {
+          await delayedPromise;
+          return v1;
+        }
+        return originalFetch(vId, options);
+      });
+
+      // Doctor clicks revision 2
+      const pillV2 = await screen.findByTestId('rx-revision-tab-2');
+      await act(async () => {
+        fireEvent.click(pillV2);
+      });
+
+      // Verify v2 is displayed
+      await waitFor(() => {
+        expect(screen.getByTestId('rx-revision-badge')).toHaveTextContent('نسخة 2');
+      });
+
+      // Now resolve the stale delayed response for v1
+      await act(async () => {
+        delayedResolve(v1);
+      });
+
+      // Verify v2 is STILL displayed and was not replaced by stale v1 response
+      expect(screen.getByTestId('rx-revision-badge')).toHaveTextContent('نسخة 2');
+      fetchSpy.mockRestore();
+    });
+
+    it('3. updates URL query param prescriptionId when a revision is selected', async () => {
+      const visitId = 'visit-reg-url-sync';
+      const patientId = 'patient-reg-url-sync';
+
+      const v1 = await savePrescriptionWithItems({
+        visit_id: visitId,
+        patient_id: patientId,
+        items: [
+          {
+            medication_name: 'Drug 1',
+            dosage_form: 'syrup',
+            frequency: 'bid',
+            duration: '5 days',
+          },
+        ],
+        action: 'issue',
+      });
+
+      const draftV2 = await createPrescriptionRevision(v1.id, 'مراجعة ثانية');
+
+      render(
+        <LanguageProvider>
+          <ElectronicPrescriptionSection
+            visitId={visitId}
+            patientId={patientId}
+            initialPrescription={v1}
+          />
+        </LanguageProvider>
+      );
+
+      const pillV2 = await screen.findByTestId('rx-revision-tab-2');
+      await act(async () => {
+        fireEvent.click(pillV2);
+      });
+
+      // Expect router.replace to have been called with prescriptionId=<draftV2.id>
+      expect(mockReplace).toHaveBeenCalledWith(
+        expect.stringContaining(`prescriptionId=${draftV2.id}`),
+        { scroll: false }
+      );
+    });
+
+    it('4. loads and displays specified revision when prescriptionId is in URL', async () => {
+      const visitId = 'visit-reg-url-load';
+      const patientId = 'patient-reg-url-load';
+
+      const v1 = await savePrescriptionWithItems({
+        visit_id: visitId,
+        patient_id: patientId,
+        items: [
+          {
+            medication_name: 'Drug 1',
+            dosage_form: 'syrup',
+            frequency: 'bid',
+            duration: '5 days',
+          },
+        ],
+        action: 'issue',
+      });
+
+      const draftV2 = await createPrescriptionRevision(v1.id, 'مراجعة ثانية');
+
+      // Mock searchParams to return draftV2.id
+      mockSearchParamsGet.mockImplementation((key: string) => {
+        if (key === 'prescriptionId') return draftV2.id;
+        return null;
+      });
+
+      render(
+        <LanguageProvider>
+          <ElectronicPrescriptionSection
+            visitId={visitId}
+            patientId={patientId}
+          />
+        </LanguageProvider>
+      );
+
+      // Verify draftV2 is loaded from URL directly
+      await waitFor(() => {
+        expect(screen.getByTestId('rx-revision-badge')).toHaveTextContent('نسخة 2');
+        expect(screen.getByTestId('rx-draft-ready-badge')).toBeInTheDocument();
+      });
+    });
+
+    it('5. preserves selected revision on window focus and visibility change', async () => {
+      const visitId = 'visit-reg-tab-switch';
+      const patientId = 'patient-reg-tab-switch';
+
+      const v1 = await savePrescriptionWithItems({
+        visit_id: visitId,
+        patient_id: patientId,
+        items: [
+          {
+            medication_name: 'Drug 1',
+            dosage_form: 'drops',
+            frequency: 'daily',
+            duration: '2 days',
+          },
+        ],
+        action: 'issue',
+      });
+
+      await createPrescriptionRevision(v1.id, 'تعديل القطرة');
+
+      render(
+        <LanguageProvider>
+          <ElectronicPrescriptionSection
+            visitId={visitId}
+            patientId={patientId}
+            initialPrescription={v1}
+          />
+        </LanguageProvider>
+      );
+
+      // Switch to v2
+      const pillV2 = await screen.findByTestId('rx-revision-tab-2');
+      await act(async () => {
+        fireEvent.click(pillV2);
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('rx-revision-badge')).toHaveTextContent('نسخة 2');
+      });
+
+      // Simulate tab switch: user leaves and comes back (window focus / visibilitychange)
+      await act(async () => {
+        window.dispatchEvent(new Event('focus'));
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+
+      // Verify v2 is still the selected prescription and NOT reset to v1
+      await waitFor(() => {
+        expect(screen.getByTestId('rx-revision-badge')).toHaveTextContent('نسخة 2');
+      });
+    });
+
+    it('6. v1 issued fields are read-only / locked and v2 draft fields are editable', async () => {
+      const visitId = 'visit-reg-fields-mode';
+      const patientId = 'patient-reg-fields-mode';
+
+      const v1 = await savePrescriptionWithItems({
+        visit_id: visitId,
+        patient_id: patientId,
+        items: [
+          {
+            medication_name: 'Panadol 500mg',
+            dosage_form: 'tablets',
+            frequency: 'tid',
+            duration: '5 days',
+          },
+        ],
+        action: 'issue',
+      });
+
+      await createPrescriptionRevision(v1.id, 'تغيير الجرعة');
+
+      render(
+        <LanguageProvider>
+          <ElectronicPrescriptionSection
+            visitId={visitId}
+            patientId={patientId}
+            initialPrescription={v1}
+          />
+        </LanguageProvider>
+      );
+
+      // On v1: read-only
+      await waitFor(() => {
+        expect(screen.getByTestId('rx-revision-badge')).toHaveTextContent('نسخة 1');
+      });
+      // Add medication button should NOT exist when locked
+      expect(screen.queryByText('إضافة دواء آخر للوصفة')).not.toBeInTheDocument();
+      // Start revision button exists on issued
+      expect(screen.getByTestId('edit-prescription-btn')).toBeInTheDocument();
+
+      // Switch to v2 draft
+      const pillV2 = await screen.findByTestId('rx-revision-tab-2');
+      await act(async () => {
+        fireEvent.click(pillV2);
+      });
+
+      // On v2: editable
+      await waitFor(() => {
+        expect(screen.getByTestId('rx-revision-badge')).toHaveTextContent('نسخة 2');
+      });
+      // Add medication button IS visible
+      expect(screen.getByText('إضافة دواء آخر للوصفة')).toBeInTheDocument();
+      // Save draft and issue buttons are present
+      expect(screen.getByTestId('save-draft-prescription-btn')).toBeInTheDocument();
+      expect(screen.getByTestId('issue-prescription-btn')).toBeInTheDocument();
+    });
+
+    it('7. rejects prescriptionId belonging to another visit and returns null for security', async () => {
+      const visitA = 'visit-reg-sec-A';
+      const visitB = 'visit-reg-sec-B';
+      const patientId = 'patient-reg-sec';
+
+      const rxVisitB = await savePrescriptionWithItems({
+        visit_id: visitB,
+        patient_id: patientId,
+        items: [
+          {
+            medication_name: 'Drug from Visit B',
+            dosage_form: 'syrup',
+            frequency: 'daily',
+            duration: '3 days',
+          },
+        ],
+        action: 'issue',
+      });
+
+      // Try fetching prescription of visit B using visit A
+      const result = await fetchPrescriptionByVisitId(visitA, { prescriptionId: rxVisitB.id });
+      expect(result).toBeNull();
+    });
+
+    it('8. clicking an existing revision in history does NOT call createPrescriptionRevision', async () => {
+      const visitId = 'visit-reg-no-create';
+      const patientId = 'patient-reg-no-create';
+
+      const v1 = await savePrescriptionWithItems({
+        visit_id: visitId,
+        patient_id: patientId,
+        items: [
+          {
+            medication_name: 'Test Med',
+            dosage_form: 'ointment_cream',
+            frequency: 'once',
+            duration: '1 day',
+          },
+        ],
+        action: 'issue',
+      });
+
+      await createPrescriptionRevision(v1.id, 'ملاحظة');
+
+      const createRevisionSpy = vi.spyOn(prescriptionService, 'createPrescriptionRevision');
+
+      render(
+        <LanguageProvider>
+          <ElectronicPrescriptionSection
+            visitId={visitId}
+            patientId={patientId}
+            initialPrescription={v1}
+          />
+        </LanguageProvider>
+      );
+
+      // Click pill 2
+      const pillV2 = await screen.findByTestId('rx-revision-tab-2');
+      await act(async () => {
+        fireEvent.click(pillV2);
+      });
+
+      // Click pill 1
+      const pillV1 = await screen.findByTestId('rx-revision-tab-1');
+      await act(async () => {
+        fireEvent.click(pillV1);
+      });
+
+      // Ensure createPrescriptionRevision was NEVER called when clicking history pills
+      expect(createRevisionSpy).not.toHaveBeenCalled();
+      createRevisionSpy.mockRestore();
     });
   });
 });

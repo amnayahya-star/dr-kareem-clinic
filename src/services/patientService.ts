@@ -189,7 +189,20 @@ function mapSupabaseRowToPatientFile(row: any): PatientFile {
         }
       : null;
 
-    const rawRx = Array.isArray(v.prescriptions) ? v.prescriptions[0] : (v.prescriptions || v.prescription);
+    let rawRx = null;
+    if (Array.isArray(v.prescriptions) && v.prescriptions.length > 0) {
+      // Prioritize active draft (for ongoing editing), then active issued, then latest revision
+      const sorted = [...v.prescriptions].sort((a: any, b: any) => {
+        if (a.status === "draft" && b.status !== "draft") return -1;
+        if (b.status === "draft" && a.status !== "draft") return 1;
+        if (a.status === "issued" && b.status !== "issued") return -1;
+        if (b.status === "issued" && a.status !== "issued") return 1;
+        return (b.revision_number || 1) - (a.revision_number || 1);
+      });
+      rawRx = sorted[0];
+    } else {
+      rawRx = v.prescriptions || v.prescription || null;
+    }
     let prescriptionObj = null;
     if (rawRx) {
       const rxItems = (rawRx.prescription_items || rawRx.items || [])

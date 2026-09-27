@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Input";
@@ -56,6 +56,9 @@ export default function MedicalExaminationPage() {
   const [diagnosisError, setDiagnosisError] = useState<string | null>(null);
   const [diagnosisSuccess, setDiagnosisSuccess] = useState(false);
 
+  const searchParams = useSearchParams();
+  const urlPrescriptionId = searchParams?.get("prescriptionId") || undefined;
+
   useEffect(() => {
     let isCurrent = true;
     async function load() {
@@ -92,8 +95,8 @@ export default function MedicalExaminationPage() {
           setFollowUpDate(foundVisit.followUpDate || "");
         }
 
-        // Fetch prescription
-        const rx = await fetchPrescriptionByVisitId(visitId);
+        // Fetch prescription (respecting URL prescriptionId if present)
+        const rx = await fetchPrescriptionByVisitId(visitId, { prescriptionId: urlPrescriptionId });
         if (isCurrent && rx) {
           setPrescription(rx);
         }
@@ -108,7 +111,7 @@ export default function MedicalExaminationPage() {
     return () => {
       isCurrent = false;
     };
-  }, [visitId, language]);
+  }, [visitId, language, urlPrescriptionId]);
 
   const handleSaveDiagnosis = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -425,6 +428,7 @@ export default function MedicalExaminationPage() {
         visitId={visit.id}
         patientId={patient.id}
         initialPrescription={prescription}
+        selectedPrescriptionId={urlPrescriptionId}
         onPrescriptionChanged={(newRx) => setPrescription(newRx)}
       />
     </div>

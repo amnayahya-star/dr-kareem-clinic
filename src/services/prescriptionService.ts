@@ -569,7 +569,13 @@ export async function fetchPrescriptionByVisitId(
 
   if (prescriptionId) {
     const rx = await fetchPrescriptionById(prescriptionId);
-    if (forSecretary && rx?.status === "draft") {
+    if (!rx) return null;
+    // Security check: ensure prescription belongs to the requested visit
+    if (rx.visit_id !== visitId) {
+      console.warn(`Prescription ${prescriptionId} belongs to visit ${rx.visit_id}, not requested visit ${visitId}`);
+      return null;
+    }
+    if (forSecretary && rx.status === "draft") {
       return null; // Secretary is strictly forbidden from viewing draft prescriptions
     }
     return rx;

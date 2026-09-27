@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Input";
@@ -48,8 +49,10 @@ export interface ElectronicPrescriptionSectionProps {
   patientId: string;
   diagnosisId?: string | null;
   initialPrescription?: Prescription | null;
+  selectedPrescriptionId?: string | null;
   readOnly?: boolean;
   onPrescriptionChanged?: (rx: Prescription) => void;
+  onSelectPrescriptionId?: (id: string | null) => void;
 }
 
 function mapPrescriptionToFormItems(rx?: Prescription | null): PrescriptionItemInput[] {
@@ -135,10 +138,27 @@ export function ElectronicPrescriptionSection({
   patientId,
   diagnosisId,
   initialPrescription,
+  selectedPrescriptionId: propSelectedPrescriptionId,
   readOnly = false,
   onPrescriptionChanged,
+  onSelectPrescriptionId,
 }: ElectronicPrescriptionSectionProps) {
   const { language, isRTL } = useLanguage();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const urlPrescriptionId = searchParams?.get("prescriptionId") || null;
+
+  // Single Source of Truth for the selected prescription ID
+  const [selectedRxId, setSelectedRxId] = useState<string | null>(() => {
+    return (
+      propSelectedPrescriptionId ||
+      urlPrescriptionId ||
+      (initialPrescription && initialPrescription.visit_id === visitId ? initialPrescription.id : null)
+    );
+  });
+  const selectedRxIdRef = useRef<string | null>(selectedRxId);
+  const currentFetchSeqRef = useRef<number>(0);
 
   const [prescription, setPrescription] = useState<Prescription | null>(initialPrescription || null);
   const [items, setItems] = useState<PrescriptionItemInput[]>(() => mapPrescriptionToFormItems(initialPrescription));
@@ -147,6 +167,16 @@ export function ElectronicPrescriptionSection({
   );
 
   const [isDirty, setIsDirty] = useState(false);
+  const isDirtyRef = useRef<boolean>(isDirty);
+
+  useEffect(() => {
+    selectedRxIdRef.current = selectedRxId;
+  }, [selectedRxId]);
+
+  useEffect(() => {
+    isDirtyRef.current = isDirty;
+  }, [isDirty]);
+
   const [isLoading, setIsLoading] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [isIssuing, setIsIssuing] = useState(false);
@@ -164,6 +194,27 @@ export function ElectronicPrescriptionSection({
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [cancellationReason, setCancellationReason] = useState("");
   const [isCancelling, setIsCancelling] = useState(false);
+
+  // Synchronize URL with active prescription without creating history loops or page jumps
+  const updatePrescriptionUrl = useCallback(
+    (rxId: string | null) => {
+      if (typeof window === "undefined" || !router || !pathname) return;
+      const currentParam = searchParams?.get("prescriptionId") || null;
+      if (rxId) {
+        if (currentParam === rxId) return;
+        const params = new URLSearchParams(searchParams ? searchParams.toString() : "");
+        params.set("prescriptionId", rxId);
+        router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+      } else {
+        if (!currentParam) return;
+        const params = new URLSearchParams(searchParams ? searchParams.toString() : "");
+        params.delete("prescriptionId");
+        const query = params.toString();
+        router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+      }
+    },
+    [pathname, searchParams, router]
+  );
 
   // Load all revisions for this visit
   const loadRevisions = React.useCallback(async (targetVisitId: string) => {
@@ -211,6 +262,8 @@ export function ElectronicPrescriptionSection({
         ? initialPrescription
         : null;
     setPrescription(rx);
+    const newSelectedId = propSelectedPrescriptionId || urlPrescriptionId || rx?.id || null;
+    setSelectedRxId(newSelectedId);
     const mapped = mapPrescriptionToFormItems(rx);
     setItems(mapped);
     const instructions = rx?.general_instructions || "";
@@ -224,18 +277,24 @@ export function ElectronicPrescriptionSection({
     initialPrescription !== prevInitialRx &&
     !isDirty
   ) {
-    // When late-arriving initialPrescription arrives and user hasn't edited anything
     setPrevInitialRx(initialPrescription);
-    if (
-      prescription === null ||
-      prescription.id !== initialPrescription.id ||
-      prescription.status !== initialPrescription.status
-    ) {
-      setPrescription(initialPrescription);
-      const mapped = mapPrescriptionToFormItems(initialPrescription);
-      setItems(mapped);
-      const instructions = initialPrescription.general_instructions || "";
-      setGeneralInstructions(instructions);
+    // CRITICAL: Only accept incoming initialPrescription if no specific revision is currently selected,
+    // or if the incoming prescription ID matches the currently selected revision ID.
+    // If the doctor explicitly selected revision v2, and parent sends v1, we DO NOT overwrite the doctor's selected revision!
+    const activeSelected = selectedRxId;
+    if (!activeSelected || activeSelected === initialPrescription.id) {
+      if (
+        prescription === null ||
+        prescription.id !== initialPrescription.id ||
+        prescription.status !== initialPrescription.status
+      ) {
+        setPrescription(initialPrescription);
+        setSelectedRxId(initialPrescription.id);
+        const mapped = mapPrescriptionToFormItems(initialPrescription);
+        setItems(mapped);
+        const instructions = initialPrescription.general_instructions || "";
+        setGeneralInstructions(instructions);
+      }
     }
   }
 
@@ -249,38 +308,115 @@ export function ElectronicPrescriptionSection({
   }, [visitId, items, generalInstructions]);
 
   // Fetch prescription asynchronously from server if not provided via initialPrescription
+  // or if a specific prescriptionId is requested via URL / selection
   useEffect(() => {
     let isCurrent = true;
+    const fetchSeq = ++currentFetchSeqRef.current;
 
-    if (visitId && (!initialPrescription || initialPrescription.visit_id !== visitId)) {
-      fetchPrescriptionByVisitId(visitId)
+    const targetRxId = selectedRxIdRef.current || urlPrescriptionId || (initialPrescription?.visit_id === visitId ? initialPrescription.id : undefined);
+
+    // If prescription is already in state matching targetRxId, don't re-fetch
+    if (
+      prescription &&
+      prescription.visit_id === visitId &&
+      (!targetRxId || prescription.id === targetRxId)
+    ) {
+      return;
+    }
+
+    if (visitId) {
+      queueMicrotask(() => {
+        if (isCurrent) setIsLoading(true);
+      });
+      fetchPrescriptionByVisitId(visitId, { prescriptionId: targetRxId || undefined })
         .then((rx) => {
-          if (!isCurrent) return;
+          if (!isCurrent || fetchSeq !== currentFetchSeqRef.current) return;
           if (rx) {
+            if (rx.visit_id !== visitId) {
+              console.warn(`Prescription ${rx.id} does not belong to visit ${visitId}`);
+              return;
+            }
             setPrescription(rx);
+            setSelectedRxId(rx.id);
+            selectedRxIdRef.current = rx.id;
+            updatePrescriptionUrl(rx.id);
             const mapped = mapPrescriptionToFormItems(rx);
             setItems(mapped);
-            const instructions = rx.general_instructions || "";
-            setGeneralInstructions(instructions);
+            setGeneralInstructions(rx.general_instructions || "");
           } else {
-            setPrescription(null);
-            const mapped = mapPrescriptionToFormItems(null);
-            setItems(mapped);
-            setGeneralInstructions("");
+            // If targetRxId was invalid or rejected, fall back to default visit prescription
+            if (targetRxId) {
+              setSelectedRxId(null);
+              selectedRxIdRef.current = null;
+              updatePrescriptionUrl(null);
+              fetchPrescriptionByVisitId(visitId).then((defaultRx) => {
+                if (!isCurrent || fetchSeq !== currentFetchSeqRef.current) return;
+                setPrescription(defaultRx);
+                setSelectedRxId(defaultRx?.id || null);
+                selectedRxIdRef.current = defaultRx?.id || null;
+                if (defaultRx) updatePrescriptionUrl(defaultRx.id);
+                setItems(mapPrescriptionToFormItems(defaultRx));
+                setGeneralInstructions(defaultRx?.general_instructions || "");
+              });
+            } else {
+              setPrescription(null);
+              setSelectedRxId(null);
+              selectedRxIdRef.current = null;
+              setItems(mapPrescriptionToFormItems(null));
+              setGeneralInstructions("");
+            }
           }
         })
         .catch((err) => {
+          if (!isCurrent || fetchSeq !== currentFetchSeqRef.current) return;
           console.warn("Could not fetch existing prescription:", err);
         })
         .finally(() => {
-          if (isCurrent) setIsLoading(false);
+          if (isCurrent && fetchSeq === currentFetchSeqRef.current) {
+            setIsLoading(false);
+          }
         });
     }
 
     return () => {
       isCurrent = false;
     };
-  }, [visitId, initialPrescription]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visitId, urlPrescriptionId]);
+
+  // Tab switch or window focus handler: preserve selected revision without resetting to default
+  useEffect(() => {
+    const handleVisibilityOrFocus = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        if (!isDirtyRef.current && visitId) {
+          const currentId = selectedRxIdRef.current || urlPrescriptionId || undefined;
+          const fetchSeq = ++currentFetchSeqRef.current;
+
+          fetchPrescriptionByVisitId(visitId, { prescriptionId: currentId })
+            .then((rx) => {
+              if (fetchSeq !== currentFetchSeqRef.current) return;
+              if (rx && rx.visit_id === visitId) {
+                setPrescription(rx);
+                setSelectedRxId(rx.id);
+                selectedRxIdRef.current = rx.id;
+                setItems(mapPrescriptionToFormItems(rx));
+                setGeneralInstructions(rx.general_instructions || "");
+              }
+            })
+            .catch((err) => console.warn("Could not re-fetch prescription on focus:", err));
+
+          loadRevisions(visitId);
+        }
+      }
+    };
+
+    window.addEventListener("focus", handleVisibilityOrFocus);
+    document.addEventListener("visibilitychange", handleVisibilityOrFocus);
+    return () => {
+      window.removeEventListener("focus", handleVisibilityOrFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityOrFocus);
+    };
+  }, [visitId, urlPrescriptionId, loadRevisions]);
 
   // Browser BeforeUnload Guard when there are unsaved edits
   useEffect(() => {
@@ -371,6 +507,12 @@ export function ElectronicPrescriptionSection({
 
   // Switch active viewed revision
   const handleSelectRevision = (selectedRx: Prescription) => {
+    if (selectedRx.id === prescription?.id) return;
+    currentFetchSeqRef.current++; // Invalidate any pending background fetches
+    setSelectedRxId(selectedRx.id);
+    selectedRxIdRef.current = selectedRx.id;
+    updatePrescriptionUrl(selectedRx.id);
+
     setPrescription(selectedRx);
     const mapped = mapPrescriptionToFormItems(selectedRx);
     setItems(mapped);
@@ -378,6 +520,13 @@ export function ElectronicPrescriptionSection({
     setIsDirty(false);
     setErrorMessage(null);
     setSuccessMessage(null);
+
+    if (onSelectPrescriptionId) {
+      onSelectPrescriptionId(selectedRx.id);
+    }
+    if (onPrescriptionChanged) {
+      onPrescriptionChanged(selectedRx);
+    }
   };
 
   // Start new revision from issued prescription (Doctor only)
@@ -399,6 +548,11 @@ export function ElectronicPrescriptionSection({
 
     try {
       const newDraft = await createPrescriptionRevision(prescription.id, cleanReason);
+      currentFetchSeqRef.current++;
+      setSelectedRxId(newDraft.id);
+      selectedRxIdRef.current = newDraft.id;
+      updatePrescriptionUrl(newDraft.id);
+
       setPrescription(newDraft);
       const mapped = mapPrescriptionToFormItems(newDraft);
       setItems(mapped);
@@ -412,6 +566,7 @@ export function ElectronicPrescriptionSection({
           : "New revision draft created. You are now editing the new revision while the original is preserved."
       );
       await loadRevisions(visitId);
+      if (onSelectPrescriptionId) onSelectPrescriptionId(newDraft.id);
       if (onPrescriptionChanged) onPrescriptionChanged(newDraft);
     } catch (err: any) {
       setErrorMessage(err.message || (language === "ar" ? "فشل إنشاء مراجعة للوصفة" : "Failed to create revision"));
@@ -457,6 +612,11 @@ export function ElectronicPrescriptionSection({
         prescription_id: prescription?.id,
       });
 
+      currentFetchSeqRef.current++;
+      setSelectedRxId(saved.id);
+      selectedRxIdRef.current = saved.id;
+      updatePrescriptionUrl(saved.id);
+
       setPrescription(saved);
       const savedMapped = mapPrescriptionToFormItems(saved);
       setItems(savedMapped);
@@ -467,6 +627,7 @@ export function ElectronicPrescriptionSection({
       setIsDirty(false); // Clean dirty state after confirmed save
       setSuccessMessage(language === "ar" ? "تم حفظ مسودة الوصفة الطبية بنجاح" : "Prescription draft saved successfully");
       await loadRevisions(visitId);
+      if (onSelectPrescriptionId) onSelectPrescriptionId(saved.id);
       if (onPrescriptionChanged) onPrescriptionChanged(saved);
     } catch (err: any) {
       // Retain doctor's typed items in state and keep isDirty
@@ -572,6 +733,11 @@ export function ElectronicPrescriptionSection({
         prescription_id: prescription?.id,
       });
 
+      currentFetchSeqRef.current++;
+      setSelectedRxId(issued.id);
+      selectedRxIdRef.current = issued.id;
+      updatePrescriptionUrl(issued.id);
+
       setPrescription(issued);
       const mapped = mapPrescriptionToFormItems(issued);
       setItems(mapped);
@@ -586,6 +752,7 @@ export function ElectronicPrescriptionSection({
           : (language === "ar" ? "تم اعتماد وإصدار الوصفة الطبية بنجاح! أصبحت جاهزة للطباعة." : "Prescription issued successfully! Ready for printing.")
       );
       await loadRevisions(visitId);
+      if (onSelectPrescriptionId) onSelectPrescriptionId(issued.id);
       if (onPrescriptionChanged) onPrescriptionChanged(issued);
     } catch (err: any) {
       setErrorMessage(err.message || (language === "ar" ? "فشل إصدار الوصفة الطبية" : "Failed to issue prescription"));
@@ -615,10 +782,17 @@ export function ElectronicPrescriptionSection({
 
     try {
       const cancelled = await cancelPrescription(prescription.id, cancellationReason);
+      currentFetchSeqRef.current++;
+      setSelectedRxId(cancelled.id);
+      selectedRxIdRef.current = cancelled.id;
+      updatePrescriptionUrl(cancelled.id);
+
       setPrescription(cancelled);
       setIsCancelModalOpen(false);
       setIsDirty(false);
       setSuccessMessage(language === "ar" ? "تم إلغاء الوصفة الطبية بنجاح" : "Prescription cancelled successfully");
+      await loadRevisions(visitId);
+      if (onSelectPrescriptionId) onSelectPrescriptionId(cancelled.id);
       if (onPrescriptionChanged) onPrescriptionChanged(cancelled);
     } catch (err: any) {
       setErrorMessage(err.message || (language === "ar" ? "فشل إلغاء الوصفة الطبية" : "Failed to cancel prescription"));
