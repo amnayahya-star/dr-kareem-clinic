@@ -9,7 +9,7 @@ import { Input, Textarea } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import { DOSAGE_FORM_LABELS } from "@/lib/utils";
-import { DosageForm, Prescription, PrescriptionItem, PrescriptionStatus } from "@/types/database";
+import { DosageForm, CanonicalDosageForm, CANONICAL_DOSAGE_FORMS, Prescription, PrescriptionItem, PrescriptionStatus } from "@/types/database";
 import {
   savePrescriptionWithItems,
   cancelPrescription,
@@ -1161,11 +1161,16 @@ export function ElectronicPrescriptionSection({
                   onChange={(e) => handleUpdateItem(index, "dosage_form", e.target.value as DosageForm)}
                 >
                   <option value="">{language === "ar" ? "-- اختر الشكل الدوائي --" : "-- Select Dosage Form --"}</option>
-                  {Object.entries(DOSAGE_FORM_LABELS).map(([val, label]) => (
+                  {CANONICAL_DOSAGE_FORMS.map((val) => (
                     <option key={val} value={val}>
-                      {label}
+                      {DOSAGE_FORM_LABELS[val] || val}
                     </option>
                   ))}
+                  {item.dosage_form && !(CANONICAL_DOSAGE_FORMS as readonly string[]).includes(item.dosage_form) && (
+                    <option key={item.dosage_form} value={item.dosage_form}>
+                      {DOSAGE_FORM_LABELS[item.dosage_form as DosageForm] || item.dosage_form}
+                    </option>
+                  )}
                 </select>
               </div>
             </div>

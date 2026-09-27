@@ -150,15 +150,27 @@ export function getPatientFirstVisitDate(visits?: { date?: string; visit_date?: 
  * أسماء الأشكال الدوائية بالعربية
  */
 export const DOSAGE_FORM_LABELS: Record<DosageForm, string> = {
+  // Canonical database enum values (public.dosage_form_type)
   syrup: "شراب (Syrup)",
+  suspension: "معلق (Suspension)",
+  drops: "قطرات (Drops)",
+  tablet: "أقراص (Tablet)",
+  capsule: "كبسولات (Capsule)",
+  cream: "كريم (Cream)",
+  ointment: "مرهم (Ointment)",
+  injection: "حقن (Injection)",
+  spray: "بخاخ (Spray)",
+  inhaler: "استنشاق (Inhaler)",
+  suppository: "تحاميل (Suppository)",
+  sachet: "أكياس (Sachet)",
+  other: "غير ذلك",
+
+  // Legacy values for display backwards compatibility
   tablets: "أقراص (Tablets)",
   capsules: "كبسولات (Capsules)",
-  drops: "قطرات (Drops)",
   injections: "حقن (Injections)",
   ointment_cream: "مرهم / كريم (Cream/Ointment)",
-  suppository: "تحاميل (Suppository)",
   inhaler_spray: "بخاخ / استنشاق (Inhaler/Spray)",
-  other: "غير ذلك",
 };
 
 /**

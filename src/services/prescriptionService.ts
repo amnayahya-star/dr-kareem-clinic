@@ -1,6 +1,51 @@
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
-import { Prescription, PrescriptionItem, PrescriptionStatus, DosageForm } from "@/types/database";
+import {
+  Prescription,
+  PrescriptionItem,
+  PrescriptionStatus,
+  DosageForm,
+  CanonicalDosageForm,
+  CANONICAL_DOSAGE_FORMS,
+} from "@/types/database";
 import { MOCK_VISITS } from "@/lib/mock-data/patients";
+
+/**
+ * التحقق من صحة الشكل الدوائي ومواءمته مع قيم enum قاعدة البيانات الصارمة (public.dosage_form_type)
+ * يمنع تماماً إرسال أي قيمة غير صالحة مثل "ointment_cream" إلى PostgreSQL
+ */
+export function normalizeAndValidateDosageForm(rawForm?: string | null): CanonicalDosageForm {
+  if (!rawForm || typeof rawForm !== "string") return "other";
+  const trimmed = rawForm.trim().toLowerCase();
+
+  // Canonical exact match:
+  if ((CANONICAL_DOSAGE_FORMS as readonly string[]).includes(trimmed)) {
+    return trimmed as CanonicalDosageForm;
+  }
+
+  // Legacy mappings:
+  if (trimmed === "tablets") return "tablet";
+  if (trimmed === "capsules") return "capsule";
+  if (trimmed === "injections") return "injection";
+  if (trimmed === "ointment_cream") return "cream";
+  if (trimmed === "inhaler_spray") return "inhaler";
+  if (trimmed === "drop") return "drops";
+
+  // Keyword matching:
+  if (trimmed.includes("cream")) return "cream";
+  if (trimmed.includes("ointment")) return "ointment";
+  if (trimmed.includes("tablet")) return "tablet";
+  if (trimmed.includes("capsule")) return "capsule";
+  if (trimmed.includes("syrup")) return "syrup";
+  if (trimmed.includes("suspension")) return "suspension";
+  if (trimmed.includes("drop")) return "drops";
+  if (trimmed.includes("suppository")) return "suppository";
+  if (trimmed.includes("inject")) return "injection";
+  if (trimmed.includes("spray")) return "spray";
+  if (trimmed.includes("inhal")) return "inhaler";
+  if (trimmed.includes("sachet")) return "sachet";
+
+  return "other";
+}
 
 export interface PrescriptionItemInput {
   id?: string;
@@ -116,6 +161,26 @@ export function validatePrescriptionForIssuing(items: PrescriptionItemInput[]): 
   return { isValid: true };
 }
 
+/**
+ * التحقق من أن جميع الأشكال الدوائية في قائمة البنود صالحة ومتوافقة مع enum قاعدة البيانات
+ */
+export function validatePrescriptionDosageForms(items: PrescriptionItemInput[]): { isValid: boolean; error?: string } {
+  if (!items || items.length === 0) return { isValid: true };
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (item.dosage_form) {
+      const normalized = normalizeAndValidateDosageForm(item.dosage_form);
+      if (!(CANONICAL_DOSAGE_FORMS as readonly string[]).includes(normalized)) {
+        return {
+          isValid: false,
+          error: `البند رقم ${i + 1} (${item.medication_name || "بدون اسم"}): الشكل الدوائي "${item.dosage_form}" غير صالح لقاعدة البيانات`,
+        };
+      }
+    }
+  }
+  return { isValid: true };
+}
+
 // In-Memory Mock Store for Offline/Demo Mode
 const IN_MEMORY_PRESCRIPTIONS: Map<string, Prescription> = new Map();
 
@@ -205,7 +270,7 @@ export async function createPrescription(input: CreatePrescriptionInput): Promis
       medication_name: it.medication_name.trim(),
       active_ingredient: it.active_ingredient?.trim() || null,
       strength: it.strength?.trim() || null,
-      dosage_form: it.dosage_form || null as any,
+      dosage_form: it.dosage_form ? normalizeAndValidateDosageForm(it.dosage_form) : ("other" as any),
       dose: it.dose?.trim() || null,
       route: it.route?.trim() || null,
       frequency: it.frequency ? it.frequency.trim() : null as any,
@@ -249,7 +314,7 @@ export async function createPrescription(input: CreatePrescriptionInput): Promis
       medication_name: it.medication_name.trim(),
       active_ingredient: it.active_ingredient?.trim() || null,
       strength: it.strength?.trim() || null,
-      dosage_form: it.dosage_form || null,
+      dosage_form: it.dosage_form ? normalizeAndValidateDosageForm(it.dosage_form) : null,
       dose: it.dose?.trim() || null,
       route: it.route?.trim() || null,
       frequency: it.frequency ? it.frequency.trim() : null,
@@ -362,7 +427,7 @@ export async function addPrescriptionItem(input: AddPrescriptionItemInput): Prom
       medication_name: input.medication_name.trim(),
       active_ingredient: input.active_ingredient?.trim() || null,
       strength: input.strength?.trim() || null,
-      dosage_form: input.dosage_form || null as any,
+      dosage_form: input.dosage_form ? normalizeAndValidateDosageForm(input.dosage_form) : ("other" as any),
       dose: input.dose?.trim() || null,
       route: input.route?.trim() || null,
       frequency: input.frequency ? input.frequency.trim() : null as any,
@@ -388,7 +453,7 @@ export async function addPrescriptionItem(input: AddPrescriptionItemInput): Prom
       medication_name: input.medication_name.trim(),
       active_ingredient: input.active_ingredient?.trim() || null,
       strength: input.strength?.trim() || null,
-      dosage_form: input.dosage_form || null,
+      dosage_form: input.dosage_form ? normalizeAndValidateDosageForm(input.dosage_form) : null,
       dose: input.dose?.trim() || null,
       route: input.route?.trim() || null,
       frequency: input.frequency ? input.frequency.trim() : null,
@@ -450,7 +515,7 @@ export async function updatePrescriptionItem(
           medication_name: input.medication_name !== undefined ? input.medication_name.trim() : existing.medication_name,
           active_ingredient: input.active_ingredient !== undefined ? input.active_ingredient?.trim() || null : existing.active_ingredient,
           strength: input.strength !== undefined ? input.strength?.trim() || null : existing.strength,
-          dosage_form: input.dosage_form !== undefined ? input.dosage_form : existing.dosage_form,
+          dosage_form: input.dosage_form !== undefined ? (input.dosage_form ? normalizeAndValidateDosageForm(input.dosage_form) : ("other" as any)) : existing.dosage_form,
           dose: input.dose !== undefined ? input.dose?.trim() || null : existing.dose,
           route: input.route !== undefined ? input.route?.trim() || null : existing.route,
           frequency: input.frequency !== undefined ? input.frequency.trim() : existing.frequency,
@@ -476,7 +541,7 @@ export async function updatePrescriptionItem(
   if (input.medication_name !== undefined) updates.medication_name = input.medication_name.trim();
   if (input.active_ingredient !== undefined) updates.active_ingredient = input.active_ingredient?.trim() || null;
   if (input.strength !== undefined) updates.strength = input.strength?.trim() || null;
-  if (input.dosage_form !== undefined) updates.dosage_form = input.dosage_form;
+  if (input.dosage_form !== undefined) updates.dosage_form = input.dosage_form ? normalizeAndValidateDosageForm(input.dosage_form) : null;
   if (input.dose !== undefined) updates.dose = input.dose?.trim() || null;
   if (input.route !== undefined) updates.route = input.route?.trim() || null;
   if (input.frequency !== undefined) updates.frequency = input.frequency.trim();
@@ -974,6 +1039,12 @@ export async function savePrescriptionWithItems(input: SavePrescriptionWithItems
     }
   }
 
+  // Pre-RPC validation: ensure any provided dosage forms are valid and canonical
+  const formValidation = validatePrescriptionDosageForms(input.items);
+  if (!formValidation.isValid) {
+    throw new Error(formValidation.error);
+  }
+
   const supabase = createClient();
 
   if (!supabase || !isSupabaseConfigured()) {
@@ -1006,7 +1077,7 @@ export async function savePrescriptionWithItems(input: SavePrescriptionWithItems
       medication_name: it.medication_name.trim(),
       active_ingredient: it.active_ingredient?.trim() || null,
       strength: it.strength?.trim() || null,
-      dosage_form: it.dosage_form || null as any,
+      dosage_form: it.dosage_form ? normalizeAndValidateDosageForm(it.dosage_form) : ("other" as any),
       dose: it.dose?.trim() || null,
       route: it.route?.trim() || null,
       frequency: it.frequency ? it.frequency.trim() : null as any,
@@ -1069,7 +1140,7 @@ export async function savePrescriptionWithItems(input: SavePrescriptionWithItems
       medication_name: it.medication_name.trim(),
       active_ingredient: it.active_ingredient?.trim() || null,
       strength: it.strength?.trim() || null,
-      dosage_form: it.dosage_form || null,
+      dosage_form: it.dosage_form ? normalizeAndValidateDosageForm(it.dosage_form) : null,
       dose: it.dose?.trim() || null,
       route: it.route?.trim() || null,
       frequency: it.frequency ? it.frequency.trim() : null,

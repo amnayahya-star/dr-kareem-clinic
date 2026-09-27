@@ -4,7 +4,7 @@
  */
 
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
-import { DosageForm } from "@/types/database";
+import { DosageForm, CanonicalDosageForm } from "@/types/database";
 
 export interface DrugSearchResult {
   product_id: string;
@@ -26,23 +26,38 @@ export interface StrengthFormatInput {
 }
 
 /**
- * تحويل الشكل الدوائي من قاعدة البيانات إلى الأنواع المعتمدة في النظام DosageForm
+ * تحويل الشكل الدوائي من openFDA / DailyMed إلى القيم المعتمدة فعلياً في قاعدة البيانات (public.dosage_form_type)
  * 
- * - SYRUP أو SOLUTION أو SUSPENSION أو POWDER, FOR SUSPENSION → syrup
- * - TABLET بجميع أنواعها → tablets
- * - CAPSULE → capsules
- * - DROP → drops
- * - INJECTION أو INJECTABLE → injections
- * - CREAM أو OINTMENT أو GEL أو LOTION → ointment_cream
- * - SUPPOSITORY → suppository
- * - AEROSOL أو INHALER أو SPRAY → inhaler_spray
- * - غير ذلك → other
+ * - CREAM أو OINTMENT مفصولان تماماً ومطابقان لـ enum قاعدة البيانات
+ * - الأشكال المركبة (مثل CREAM/OINTMENT) تعتمد الشكل الأسبق في النص
+ * - لا يتم إرجاع ointment_cream نهائياً لأنها غير معرفة في enum قاعدة البيانات
+ * - TABLET → tablet (مفرد لمطابقة enum)
+ * - CAPSULE → capsule (مفرد لمطابقة enum)
+ * - INJECTION → injection (مفرد لمطابقة enum)
+ * - SYRUP / SUSPENSION → syrup
  */
-export function mapDosageFormToFormType(rawForm?: string | null): DosageForm {
+export function mapDosageFormToFormType(rawForm?: string | null): CanonicalDosageForm {
   if (!rawForm) return "other";
   const upper = rawForm.trim().toUpperCase();
 
-  // SYRUP أو SOLUTION أو SUSPENSION أو POWDER, FOR SUSPENSION → syrup
+  // 1. كريم ومرهم (فصل دقيق بين cream و ointment ومنع استخدام ointment_cream غير المعرفة في enum)
+  const hasCream = upper.includes("CREAM");
+  const hasOintment = upper.includes("OINTMENT");
+  if (hasCream && hasOintment) {
+    // الأشكال المركبة مثل CREAM/OINTMENT أو OINTMENT/CREAM: مطابقة الشكل الأسبق في النص
+    return upper.indexOf("CREAM") <= upper.indexOf("OINTMENT") ? "cream" : "ointment";
+  }
+  if (hasCream) {
+    return "cream";
+  }
+  if (hasOintment) {
+    return "ointment";
+  }
+  if ((upper.includes("GEL") && !upper.includes("GELATIN")) || upper.includes("LOTION")) {
+    return "cream";
+  }
+
+  // 2. شراب ومحاليل ومعلقات
   if (
     upper.includes("SYRUP") ||
     upper.includes("SOLUTION") ||
@@ -52,51 +67,45 @@ export function mapDosageFormToFormType(rawForm?: string | null): DosageForm {
     return "syrup";
   }
 
-  // TABLET بجميع أنواعها → tablets
+  // 3. أقراص (tablet مفرد لمطابقة enum قاعدة البيانات)
   if (upper.includes("TABLET")) {
-    return "tablets";
+    return "tablet";
   }
 
-  // CAPSULE → capsules
+  // 4. كبسولات (capsule مفرد لمطابقة enum قاعدة البيانات)
   if (upper.includes("CAPSULE")) {
-    return "capsules";
+    return "capsule";
   }
 
-  // DROP → drops
+  // 5. قطرات
   if (upper.includes("DROP")) {
     return "drops";
   }
 
-  // INJECTION أو INJECTABLE → injections
+  // 6. حقن (injection مفرد لمطابقة enum قاعدة البيانات)
   if (upper.includes("INJECTION") || upper.includes("INJECTABLE")) {
-    return "injections";
+    return "injection";
   }
 
-  // CREAM أو OINTMENT أو GEL أو LOTION → ointment_cream
-  if (
-    upper.includes("CREAM") ||
-    upper.includes("OINTMENT") ||
-    upper.includes("GEL") ||
-    upper.includes("LOTION")
-  ) {
-    return "ointment_cream";
-  }
-
-  // SUPPOSITORY → suppository
+  // 7. تحاميل
   if (upper.includes("SUPPOSITORY")) {
     return "suppository";
   }
 
-  // AEROSOL أو INHALER أو SPRAY → inhaler_spray
-  if (
-    upper.includes("AEROSOL") ||
-    upper.includes("INHALER") ||
-    upper.includes("SPRAY")
-  ) {
-    return "inhaler_spray";
+  // 8. بخاخ واستنشاق
+  if (upper.includes("INHAL")) {
+    return "inhaler";
+  }
+  if (upper.includes("SPRAY") || upper.includes("AEROSOL")) {
+    return "spray";
   }
 
-  // غير ذلك → other
+  // 9. أكياس
+  if (upper.includes("SACHET")) {
+    return "sachet";
+  }
+
+  // 10. غير ذلك
   return "other";
 }
 

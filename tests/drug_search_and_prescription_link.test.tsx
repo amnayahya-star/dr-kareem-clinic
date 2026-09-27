@@ -17,8 +17,11 @@ import {
   addPrescriptionItem,
   updatePrescriptionItem,
   fetchPrescriptionByVisitId,
+  normalizeAndValidateDosageForm,
+  validatePrescriptionDosageForms,
   PrescriptionItemInput,
 } from '../src/services/prescriptionService';
+import { CANONICAL_DOSAGE_FORMS } from '../src/types/database';
 import { MedicationAutocompleteInput } from '../src/components/prescriptions/MedicationAutocompleteInput';
 import { ElectronicPrescriptionSection } from '../src/components/prescriptions/ElectronicPrescriptionSection';
 import { LanguageProvider } from '../src/context/LanguageContext';
@@ -72,16 +75,16 @@ describe('Drug Search & Prescription Catalog Link (ربط قاعدة بيانا�
       expect(mapDosageFormToFormType('POWDER, FOR SUSPENSION')).toBe('syrup');
     });
 
-    it('maps all kinds of tablets to "tablets"', () => {
-      expect(mapDosageFormToFormType('TABLET')).toBe('tablets');
-      expect(mapDosageFormToFormType('FILM COATED TABLET')).toBe('tablets');
-      expect(mapDosageFormToFormType('Chewable Tablet')).toBe('tablets');
-      expect(mapDosageFormToFormType('EXTENDED RELEASE TABLET')).toBe('tablets');
+    it('maps all kinds of tablets to canonical "tablet"', () => {
+      expect(mapDosageFormToFormType('TABLET')).toBe('tablet');
+      expect(mapDosageFormToFormType('FILM COATED TABLET')).toBe('tablet');
+      expect(mapDosageFormToFormType('Chewable Tablet')).toBe('tablet');
+      expect(mapDosageFormToFormType('EXTENDED RELEASE TABLET')).toBe('tablet');
     });
 
-    it('maps capsules to "capsules"', () => {
-      expect(mapDosageFormToFormType('CAPSULE')).toBe('capsules');
-      expect(mapDosageFormToFormType('Hard Gelatin Capsule')).toBe('capsules');
+    it('maps capsules to canonical "capsule"', () => {
+      expect(mapDosageFormToFormType('CAPSULE')).toBe('capsule');
+      expect(mapDosageFormToFormType('Hard Gelatin Capsule')).toBe('capsule');
     });
 
     it('maps drops to "drops"', () => {
@@ -89,16 +92,22 @@ describe('Drug Search & Prescription Catalog Link (ربط قاعدة بيانا�
       expect(mapDosageFormToFormType('Oral Drops')).toBe('drops');
     });
 
-    it('maps injections and injectables to "injections"', () => {
-      expect(mapDosageFormToFormType('INJECTION')).toBe('injections');
-      expect(mapDosageFormToFormType('INJECTABLE')).toBe('injections');
+    it('maps injections and injectables to canonical "injection"', () => {
+      expect(mapDosageFormToFormType('INJECTION')).toBe('injection');
+      expect(mapDosageFormToFormType('INJECTABLE')).toBe('injection');
     });
 
-    it('maps creams, ointments, gels, and lotions to "ointment_cream"', () => {
-      expect(mapDosageFormToFormType('CREAM')).toBe('ointment_cream');
-      expect(mapDosageFormToFormType('OINTMENT')).toBe('ointment_cream');
-      expect(mapDosageFormToFormType('Topical Gel')).toBe('ointment_cream');
-      expect(mapDosageFormToFormType('Lotion')).toBe('ointment_cream');
+    it('separates cream and ointment strictly according to public.dosage_form_type', () => {
+      expect(mapDosageFormToFormType('CREAM')).toBe('cream');
+      expect(mapDosageFormToFormType('OINTMENT')).toBe('ointment');
+      expect(mapDosageFormToFormType('Topical Gel')).toBe('cream');
+      expect(mapDosageFormToFormType('Lotion')).toBe('cream');
+    });
+
+    it('handles compound forms like CREAM/OINTMENT without ointment_cream', () => {
+      expect(mapDosageFormToFormType('CREAM / OINTMENT')).toBe('cream');
+      expect(mapDosageFormToFormType('OINTMENT / CREAM')).toBe('ointment');
+      expect(mapDosageFormToFormType('CREAM, OINTMENT')).toBe('cream');
     });
 
     it('maps suppositories to "suppository"', () => {
@@ -106,10 +115,10 @@ describe('Drug Search & Prescription Catalog Link (ربط قاعدة بيانا�
       expect(mapDosageFormToFormType('Rectal Suppository')).toBe('suppository');
     });
 
-    it('maps aerosols, inhalers, and sprays to "inhaler_spray"', () => {
-      expect(mapDosageFormToFormType('AEROSOL')).toBe('inhaler_spray');
-      expect(mapDosageFormToFormType('INHALER')).toBe('inhaler_spray');
-      expect(mapDosageFormToFormType('Nasal Spray')).toBe('inhaler_spray');
+    it('maps aerosols, inhalers, and sprays to canonical "inhaler" and "spray"', () => {
+      expect(mapDosageFormToFormType('AEROSOL')).toBe('spray');
+      expect(mapDosageFormToFormType('INHALER')).toBe('inhaler');
+      expect(mapDosageFormToFormType('Nasal Spray')).toBe('spray');
     });
 
     it('maps unknown forms to "other"', () => {
@@ -1145,6 +1154,202 @@ describe('Drug Search & Prescription Catalog Link (ربط قاعدة بيانا�
 
       const allMedInputs = screen.getAllByTestId('medication-search-input');
       expect(allMedInputs).toHaveLength(2);
+    });
+  });
+
+  // ----------------------------------------------------------------------------
+  // 11. Canonical Dosage Form Verification and RPC Payload Safety (Production Bug Prevention)
+  // ----------------------------------------------------------------------------
+  describe('11. Canonical Dosage Form Verification & RPC Enum Safety', () => {
+    it('normalizeAndValidateDosageForm maps legacy and raw inputs to valid canonical forms', () => {
+      // Direct canonical forms:
+      for (const form of CANONICAL_DOSAGE_FORMS) {
+        expect(normalizeAndValidateDosageForm(form)).toBe(form);
+      }
+
+      // Legacy enum values MUST be normalized to canonical values, NEVER returning "ointment_cream"
+      expect(normalizeAndValidateDosageForm('ointment_cream')).toBe('cream');
+      expect(normalizeAndValidateDosageForm('tablets')).toBe('tablet');
+      expect(normalizeAndValidateDosageForm('capsules')).toBe('capsule');
+      expect(normalizeAndValidateDosageForm('injections')).toBe('injection');
+      expect(normalizeAndValidateDosageForm('inhaler_spray')).toBe('inhaler');
+
+      // Raw openFDA / clinical keywords:
+      expect(normalizeAndValidateDosageForm('Cream')).toBe('cream');
+      expect(normalizeAndValidateDosageForm('Ointment')).toBe('ointment');
+      expect(normalizeAndValidateDosageForm('Topical Cream 1%')).toBe('cream');
+      expect(normalizeAndValidateDosageForm('Eye Ointment')).toBe('ointment');
+      expect(normalizeAndValidateDosageForm('Syrup')).toBe('syrup');
+      expect(normalizeAndValidateDosageForm('Tablet')).toBe('tablet');
+      expect(normalizeAndValidateDosageForm('Capsule')).toBe('capsule');
+      expect(normalizeAndValidateDosageForm('Suspension')).toBe('suspension');
+      expect(normalizeAndValidateDosageForm('Suppository')).toBe('suppository');
+      expect(normalizeAndValidateDosageForm(null)).toBe('other');
+      expect(normalizeAndValidateDosageForm('')).toBe('other');
+      expect(normalizeAndValidateDosageForm('completely_unknown_xyz')).toBe('other');
+    });
+
+    it('validatePrescriptionDosageForms validates all items correctly', () => {
+      const validItems: PrescriptionItemInput[] = [
+        { medication_name: 'Med 1', dosage_form: 'cream' },
+        { medication_name: 'Med 2', dosage_form: 'ointment' },
+        { medication_name: 'Med 3', dosage_form: 'syrup' },
+        { medication_name: 'Med 4', dosage_form: 'tablet' },
+      ];
+      expect(validatePrescriptionDosageForms(validItems).isValid).toBe(true);
+
+      const itemsWithLegacy: PrescriptionItemInput[] = [
+        { medication_name: 'Med 1', dosage_form: 'ointment_cream' },
+        { medication_name: 'Med 2', dosage_form: 'tablets' },
+      ];
+      // Normalizes cleanly so it is valid
+      expect(validatePrescriptionDosageForms(itemsWithLegacy).isValid).toBe(true);
+    });
+
+    it('savePrescriptionWithItems normalizes ointment_cream to cream and guarantees only canonical forms in RPC payload', async () => {
+      mockRpc.mockResolvedValueOnce({ data: 'rx-rpc-123', error: null });
+
+      const fakeRow = {
+        id: 'rx-rpc-123',
+        visit_id: 'visit-form-test',
+        patient_id: 'patient-form-test',
+        diagnosis_id: null,
+        status: 'draft',
+        revision_number: 2,
+        original_prescription_id: 'rx-orig-1',
+        replaces_prescription_id: 'rx-orig-1',
+        revision_reason: 'تعديل دواء الجلدية',
+        general_instructions: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        profiles: { full_name: 'د. كريم' },
+        prescription_items: [
+          {
+            id: 'item-1',
+            prescription_id: 'rx-rpc-123',
+            catalog_product_id: 'prod-cream-1',
+            is_custom_medication: false,
+            medication_name: 'Hydrocortisone 1% Cream',
+            active_ingredient: 'Hydrocortisone',
+            strength: '1%',
+            dosage_form: 'cream',
+            dose: 'طبقة رقيقة',
+            route: 'topical',
+            frequency: 'مرتين يومياً',
+            duration: '5 أيام',
+            quantity: '1 أنبوب',
+            instructions: 'دهان موضعي',
+            display_order: 1,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+        ],
+      };
+
+      mockMaybeSingle.mockResolvedValueOnce({ data: fakeRow, error: null });
+
+      const result = await savePrescriptionWithItems({
+        visit_id: 'visit-form-test',
+        patient_id: 'patient-form-test',
+        prescription_id: 'rx-rpc-123', // preserves existing draft revision 2
+        items: [
+          {
+            catalog_product_id: 'prod-cream-1',
+            is_custom_medication: false,
+            medication_name: 'Hydrocortisone 1% Cream',
+            active_ingredient: 'Hydrocortisone',
+            strength: '1%',
+            dosage_form: 'ointment_cream' as any, // legacy/raw value that caused the 500 error!
+            dose: 'طبقة رقيقة',
+            route: 'topical',
+            frequency: 'مرتين يومياً',
+            duration: '5 أيام',
+            quantity: '1 أنبوب',
+            instructions: 'دهان موضعي',
+          },
+        ],
+        action: 'draft',
+      });
+
+      expect(mockRpc).toHaveBeenCalledWith(
+        'save_electronic_prescription',
+        expect.objectContaining({
+          p_visit_id: 'visit-form-test',
+          p_patient_id: 'patient-form-test',
+          p_prescription_id: 'rx-rpc-123',
+          p_action: 'draft',
+          p_items: expect.arrayContaining([
+            expect.objectContaining({
+              catalog_product_id: 'prod-cream-1',
+              is_custom_medication: false,
+              dosage_form: 'cream', // MUST be strictly 'cream', NEVER 'ointment_cream'
+            }),
+          ]),
+        })
+      );
+
+      // Verify no item in p_items has invalid enum values
+      const calledItems = mockRpc.mock.calls[0][1].p_items;
+      for (const item of calledItems) {
+        expect(item.dosage_form).not.toBe('ointment_cream');
+        expect(CANONICAL_DOSAGE_FORMS).toContain(item.dosage_form);
+      }
+
+      expect(result.id).toBe('rx-rpc-123');
+      expect(result.items?.[0].catalog_product_id).toBe('prod-cream-1');
+      expect(result.items?.[0].is_custom_medication).toBe(false);
+    });
+
+    it('selecting CREAM or OINTMENT in MedicationAutocomplete sets canonical cream or ointment and populates correctly', async () => {
+      vi.useFakeTimers();
+
+      const creamDrug: DrugSearchResult = {
+        product_id: 'prod-cream-999',
+        source_identifier: '0069-1111-01',
+        display_name: 'Fusidic Acid 2% Cream',
+        generic_name: 'Fusidic Acid',
+        brand_name: null,
+        dosage_form: 'CREAM',
+        route: 'TOPICAL',
+        active_ingredient: 'Fusidic Acid',
+        strength: '2%',
+      };
+
+      mockRpc.mockResolvedValueOnce({ data: [creamDrug], error: null });
+
+      render(
+        <LanguageProvider>
+          <ElectronicPrescriptionSection
+            visitId="v-cream-test"
+            patientId="p-cream-test"
+          />
+        </LanguageProvider>
+      );
+
+      const medInput = screen.getByTestId('medication-search-input');
+      fireEvent.change(medInput, { target: { value: 'Fusidic' } });
+
+      await act(async () => {
+        vi.advanceTimersByTime(300);
+      });
+
+      const option = screen.getByTestId('medication-search-result-item');
+      fireEvent.click(option);
+
+      // Verify dosage form dropdown received 'cream'
+      const dosageSelect = document.getElementById('medication-item-0-dosage_form') as HTMLSelectElement;
+      expect(dosageSelect).toBeTruthy();
+      expect(dosageSelect.value).toBe('cream');
+
+      // Verify route received 'topical'
+      const routeSelect = document.getElementById('medication-item-0-route') as HTMLSelectElement;
+      expect(routeSelect).toBeTruthy();
+      expect(routeSelect.value).toBe('topical');
+
+      // Verify catalog badge
+      expect(screen.getByText('كتالوج الأدوية')).toBeInTheDocument();
+
+      vi.useRealTimers();
     });
   });
 });

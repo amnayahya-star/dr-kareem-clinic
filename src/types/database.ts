@@ -2,16 +2,32 @@ export type UserRole = 'doctor' | 'secretary';
 export type Gender = 'male' | 'female';
 export type VisitStatus = 'draft' | 'waiting' | 'in_progress' | 'completed' | 'cancelled';
 
-export type DosageForm = 
-  | 'syrup'
+export const CANONICAL_DOSAGE_FORMS = [
+  'syrup',
+  'suspension',
+  'drops',
+  'tablet',
+  'capsule',
+  'cream',
+  'ointment',
+  'injection',
+  'inhaler',
+  'spray',
+  'suppository',
+  'sachet',
+  'other',
+] as const;
+
+export type CanonicalDosageForm = typeof CANONICAL_DOSAGE_FORMS[number];
+
+export type LegacyDosageForm =
   | 'tablets'
   | 'capsules'
-  | 'drops'
   | 'injections'
   | 'ointment_cream'
-  | 'suppository'
-  | 'inhaler_spray'
-  | 'other';
+  | 'inhaler_spray';
+
+export type DosageForm = CanonicalDosageForm | LegacyDosageForm;
 
 export type AttachmentType = 
   | 'lab_test'

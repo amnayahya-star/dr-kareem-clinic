@@ -1085,7 +1085,7 @@ describe('Prescription Revision & Amendment Workflow (نظام مراجعة وت
         items: [
           {
             medication_name: 'Test Med',
-            dosage_form: 'ointment_cream',
+            dosage_form: 'cream',
             frequency: 'once',
             duration: '1 day',
           },
