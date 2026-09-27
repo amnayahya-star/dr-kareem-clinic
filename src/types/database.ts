@@ -134,7 +134,7 @@ export interface Diagnosis {
   updated_at: string;
 }
 
-export type PrescriptionStatus = 'draft' | 'issued' | 'cancelled';
+export type PrescriptionStatus = 'draft' | 'issued' | 'cancelled' | 'superseded';
 
 export interface PrescriptionItem {
   id: string;
@@ -167,6 +167,12 @@ export interface Prescription {
   doctor_id?: string | null;
   prescribed_by?: string | null;
   status: PrescriptionStatus;
+  revision_number?: number;
+  original_prescription_id?: string | null;
+  replaces_prescription_id?: string | null;
+  superseded_at?: string | null;
+  superseded_by?: string | null;
+  revision_reason?: string | null;
   prescription_type?: 'digital' | 'scanned' | 'both'; // Legacy compatibility
   scanned_image_url?: string | null;
   is_approved?: boolean; // Legacy compatibility

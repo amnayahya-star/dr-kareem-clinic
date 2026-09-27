@@ -13,6 +13,8 @@ import {
   savePrescriptionWithItems,
   cancelPrescription,
   fetchPrescriptionByVisitId,
+  fetchPrescriptionRevisions,
+  createPrescriptionRevision,
   PrescriptionItemInput,
 } from "@/services/prescriptionService";
 import { MedicationAutocompleteInput } from "./MedicationAutocompleteInput";
@@ -36,6 +38,9 @@ import {
   FileText,
   Clock,
   ShieldAlert,
+  GitBranch,
+  History,
+  RotateCcw,
 } from "lucide-react";
 
 export interface ElectronicPrescriptionSectionProps {
@@ -148,10 +153,43 @@ export function ElectronicPrescriptionSection({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  // Revisions & Auditable Amendment States
+  const [revisions, setRevisions] = useState<Prescription[]>([]);
+  const [isRevisionModalOpen, setIsRevisionModalOpen] = useState(false);
+  const [revisionReason, setRevisionReason] = useState("");
+  const [isCreatingRevision, setIsCreatingRevision] = useState(false);
+  const [isConfirmIssueModalOpen, setIsConfirmIssueModalOpen] = useState(false);
+
   // Cancellation Modal State
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [cancellationReason, setCancellationReason] = useState("");
   const [isCancelling, setIsCancelling] = useState(false);
+
+  // Load all revisions for this visit
+  const loadRevisions = React.useCallback(async (targetVisitId: string) => {
+    try {
+      const list = await fetchPrescriptionRevisions(targetVisitId);
+      setRevisions(list);
+    } catch (err) {
+      console.warn("Could not fetch prescription revisions:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    let isCurrent = true;
+    if (visitId) {
+      fetchPrescriptionRevisions(visitId)
+        .then((list) => {
+          if (isCurrent) setRevisions(list);
+        })
+        .catch((err) => {
+          console.warn("Could not fetch prescription revisions:", err);
+        });
+    }
+    return () => {
+      isCurrent = false;
+    };
+  }, [visitId]);
 
   // Stable Hydration tracking
   const lastHydratedVisitIdRef = React.useRef<string | null>(null);
@@ -331,6 +369,57 @@ export function ElectronicPrescriptionSection({
     );
   };
 
+  // Switch active viewed revision
+  const handleSelectRevision = (selectedRx: Prescription) => {
+    setPrescription(selectedRx);
+    const mapped = mapPrescriptionToFormItems(selectedRx);
+    setItems(mapped);
+    setGeneralInstructions(selectedRx.general_instructions || "");
+    setIsDirty(false);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+  };
+
+  // Start new revision from issued prescription (Doctor only)
+  const handleStartRevision = async () => {
+    if (!prescription) return;
+    const cleanReason = revisionReason.trim();
+    if (cleanReason.length < 3) {
+      setErrorMessage(
+        language === "ar"
+          ? "سبب التعديل إلزامي ويجب ألا يقل عن 3 أحرف"
+          : "Revision reason is required (at least 3 characters)"
+      );
+      return;
+    }
+
+    setIsCreatingRevision(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    try {
+      const newDraft = await createPrescriptionRevision(prescription.id, cleanReason);
+      setPrescription(newDraft);
+      const mapped = mapPrescriptionToFormItems(newDraft);
+      setItems(mapped);
+      setGeneralInstructions(newDraft.general_instructions || "");
+      setIsDirty(false);
+      setIsRevisionModalOpen(false);
+      setRevisionReason("");
+      setSuccessMessage(
+        language === "ar"
+          ? "تم إنشاء مسودة مراجعة جديدة بنجاح. أنت الآن تعدل النسخة الجديدة وستبقى النسخة الأصلية محفوظة."
+          : "New revision draft created. You are now editing the new revision while the original is preserved."
+      );
+      await loadRevisions(visitId);
+      if (onPrescriptionChanged) onPrescriptionChanged(newDraft);
+    } catch (err: any) {
+      setErrorMessage(err.message || (language === "ar" ? "فشل إنشاء مراجعة للوصفة" : "Failed to create revision"));
+    } finally {
+      setIsCreatingRevision(false);
+    }
+  };
+
   // Save as Draft
   const handleSaveDraft = async () => {
     setErrorMessage(null);
@@ -365,6 +454,7 @@ export function ElectronicPrescriptionSection({
         general_instructions: generalInstructions.trim() || null,
         items: draftItems,
         action: "draft",
+        prescription_id: prescription?.id,
       });
 
       setPrescription(saved);
@@ -376,6 +466,7 @@ export function ElectronicPrescriptionSection({
       };
       setIsDirty(false); // Clean dirty state after confirmed save
       setSuccessMessage(language === "ar" ? "تم حفظ مسودة الوصفة الطبية بنجاح" : "Prescription draft saved successfully");
+      await loadRevisions(visitId);
       if (onPrescriptionChanged) onPrescriptionChanged(saved);
     } catch (err: any) {
       // Retain doctor's typed items in state and keep isDirty
@@ -385,13 +476,11 @@ export function ElectronicPrescriptionSection({
     }
   };
 
-  // Issue & Finalize Prescription
-  const handleIssuePrescription = async () => {
-    // Always clear old status messages before new validation
+  // Validation before Issuing
+  const validateBeforeIssue = (): PrescriptionItemInput[] | null => {
     setSuccessMessage(null);
     setErrorMessage(null);
 
-    // Strict Validation for Issuance
     const filledItems = items.filter((it) => it.medication_name && it.medication_name.trim() !== "");
     if (filledItems.length === 0) {
       setErrorMessage(
@@ -399,7 +488,7 @@ export function ElectronicPrescriptionSection({
           ? "لا يمكن إصدار وصفة طبية فارغة: يرجى إضافة دواء واحد على الأقل مع اسم الدواء وتفاصيله العلاجية."
           : "Cannot issue an empty prescription: Please add at least one medication with required details."
       );
-      return;
+      return null;
     }
 
     for (let i = 0; i < filledItems.length; i++) {
@@ -442,7 +531,6 @@ export function ElectronicPrescriptionSection({
             : `Cannot issue prescription: Please complete ${missingFieldsText} for medication #${i + 1}${medNameSuffix}.`
         );
 
-        // Focus or scroll to the first missing element
         const firstField = !it.dosage_form || it.dosage_form === ("" as any)
           ? "dosage_form"
           : !it.frequency?.trim()
@@ -458,13 +546,22 @@ export function ElectronicPrescriptionSection({
             (targetEl as HTMLElement).focus();
           }
         }
-        return; // Halt immediately, DO NOT call RPC
+        return null;
       }
     }
+
+    return filledItems;
+  };
+
+  // Execute Issue & Finalize Prescription
+  const handleExecuteIssue = async () => {
+    const filledItems = validateBeforeIssue();
+    if (!filledItems) return;
 
     setIsIssuing(true);
 
     try {
+      const isRev = prescription?.status === "draft" && Boolean(prescription?.replaces_prescription_id);
       const issued = await savePrescriptionWithItems({
         visit_id: visitId,
         patient_id: patientId,
@@ -472,6 +569,7 @@ export function ElectronicPrescriptionSection({
         general_instructions: generalInstructions.trim() || null,
         items: filledItems,
         action: "issue",
+        prescription_id: prescription?.id,
       });
 
       setPrescription(issued);
@@ -483,15 +581,29 @@ export function ElectronicPrescriptionSection({
       };
       setIsDirty(false); // Clean dirty state after issuance
       setSuccessMessage(
-        language === "ar"
-          ? "تم اعتماد وإصدار الوصفة الطبية بنجاح! أصبحت جاهزة للطباعة."
-          : "Prescription issued successfully! Ready for printing."
+        isRev
+          ? (language === "ar" ? "تم اعتماد النسخة المعدلة بنجاح! أصبحت جاهزة للطباعة." : "Revised prescription approved successfully! Ready for printing.")
+          : (language === "ar" ? "تم اعتماد وإصدار الوصفة الطبية بنجاح! أصبحت جاهزة للطباعة." : "Prescription issued successfully! Ready for printing.")
       );
+      await loadRevisions(visitId);
       if (onPrescriptionChanged) onPrescriptionChanged(issued);
     } catch (err: any) {
       setErrorMessage(err.message || (language === "ar" ? "فشل إصدار الوصفة الطبية" : "Failed to issue prescription"));
     } finally {
       setIsIssuing(false);
+    }
+  };
+
+  // Issue button click handler (triggers confirmation modal for revisions)
+  const handleIssuePrescription = () => {
+    const filledItems = validateBeforeIssue();
+    if (!filledItems) return;
+
+    const isRev = prescription?.status === "draft" && Boolean(prescription?.replaces_prescription_id);
+    if (isRev) {
+      setIsConfirmIssueModalOpen(true);
+    } else {
+      handleExecuteIssue();
     }
   };
 
@@ -517,7 +629,12 @@ export function ElectronicPrescriptionSection({
 
   const isIssued = prescription?.status === "issued";
   const isCancelled = prescription?.status === "cancelled";
-  const isLocked = isIssued || isCancelled || readOnly;
+  const isSuperseded = prescription?.status === "superseded";
+  const isDraft = !prescription || prescription.status === "draft";
+  const isRevisionDraft = isDraft && Boolean(prescription?.replaces_prescription_id);
+  const isLocked = isIssued || isCancelled || isSuperseded || readOnly;
+
+  const latestRevision = revisions.length > 0 ? (revisions.find((r) => r.status === "issued") || revisions[revisions.length - 1]) : null;
 
   // Real-time readiness calculation based strictly on local draft items
   const isDraftReadyToIssue = isPrescriptionDraftReady(items);
@@ -535,9 +652,24 @@ export function ElectronicPrescriptionSection({
               <h3 className="text-base font-black text-slate-900">
                 {language === "ar" ? "الوصفة الطبية الإلكترونية" : "Electronic Prescription (e-Rx)"}
               </h3>
+              {prescription?.revision_number && (
+                <Badge variant="outline" size="sm" className="font-bold border-slate-300 text-slate-700" data-testid="rx-revision-badge">
+                  {language === "ar" ? `نسخة ${prescription.revision_number}` : `Rev ${prescription.revision_number}`}
+                </Badge>
+              )}
               {isIssued && (
-                <Badge variant="success" size="sm" className="font-bold">
-                  {language === "ar" ? "وصفة صادرة ومعتمدة" : "Issued"}
+                <>
+                  <Badge variant="success" size="sm" className="font-bold">
+                    {language === "ar" ? "وصفة صادرة ومعتمدة" : "Issued"}
+                  </Badge>
+                  <Badge variant="success" size="sm" className="font-bold bg-emerald-100 text-emerald-800 border-emerald-300" data-testid="rx-active-issued-badge">
+                    {language === "ar" ? "النسخة المعتمدة الحالية" : "Active Issued"}
+                  </Badge>
+                </>
+              )}
+              {isSuperseded && (
+                <Badge variant="outline" size="sm" className="font-bold bg-amber-50 text-amber-900 border-amber-300" data-testid="rx-superseded-badge">
+                  {language === "ar" ? "نسخة قديمة مستبدلة" : "Superseded"}
                 </Badge>
               )}
               {isCancelled && (
@@ -545,12 +677,12 @@ export function ElectronicPrescriptionSection({
                   {language === "ar" ? "وصفة ملغاة" : "Cancelled"}
                 </Badge>
               )}
-              {!isIssued && !isCancelled && !isDraftReadyToIssue && (
+              {!isIssued && !isCancelled && !isSuperseded && !isDraftReadyToIssue && (
                 <Badge variant="warning" size="sm" className="font-bold" data-testid="rx-draft-incomplete-badge">
                   {language === "ar" ? "مسودة غير مكتملة" : "Draft (Incomplete)"}
                 </Badge>
               )}
-              {!isIssued && !isCancelled && isDraftReadyToIssue && (
+              {!isIssued && !isCancelled && !isSuperseded && isDraftReadyToIssue && (
                 <Badge variant="info" size="sm" className="font-bold" data-testid="rx-draft-ready-badge">
                   {language === "ar" ? "مسودة جاهزة للإصدار" : "Draft (Ready to Issue)"}
                 </Badge>
@@ -573,30 +705,175 @@ export function ElectronicPrescriptionSection({
           </div>
         </div>
 
-        {/* Action Buttons for Issued Prescription */}
-        {isIssued && (
-          <div className="flex items-center gap-2">
-            <Link href={`/secretary/prescriptions/${visitId}/print`}>
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Print button available for issued or superseded prescriptions */}
+          {(isIssued || isSuperseded) && (
+            <Link href={`/secretary/prescriptions/${visitId}/print${prescription?.id ? `?prescriptionId=${prescription.id}` : ""}`}>
               <Button variant="outline" size="sm" className="font-bold gap-1.5 border-clinic-300 text-clinic-800">
                 <Printer className="w-4 h-4 text-clinic-600" />
                 <span>{language === "ar" ? "طباعة الوصفة" : "Print Prescription"}</span>
               </Button>
             </Link>
+          )}
 
-            {!readOnly && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsCancelModalOpen(true)}
-                className="font-bold gap-1.5 border-rose-300 text-rose-700 hover:bg-rose-50"
-              >
-                <Ban className="w-4 h-4 text-rose-600" />
-                <span>{language === "ar" ? "إلغاء الوصفة" : "Cancel Prescription"}</span>
-              </Button>
+          {/* Revise Prescription (Amend) - Doctor only, when prescription is issued */}
+          {isIssued && !readOnly && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setRevisionReason("");
+                setIsRevisionModalOpen(true);
+              }}
+              data-testid="edit-prescription-btn"
+              className="font-bold gap-1.5 border-clinic-400 text-clinic-800 hover:bg-clinic-50"
+            >
+              <GitBranch className="w-4 h-4 text-clinic-600" />
+              <span>{language === "ar" ? "تعديل الوصفة" : "Revise Prescription"}</span>
+            </Button>
+          )}
+
+          {/* Cancel button - Doctor only, when issued */}
+          {isIssued && !readOnly && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsCancelModalOpen(true)}
+              className="font-bold gap-1.5 border-rose-300 text-rose-700 hover:bg-rose-50"
+            >
+              <Ban className="w-4 h-4 text-rose-600" />
+              <span>{language === "ar" ? "إلغاء الوصفة" : "Cancel Prescription"}</span>
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Revisions History Navigation Bar */}
+      {revisions.length > 1 && (
+        <div className="flex items-center gap-2 flex-wrap bg-slate-50 p-2.5 rounded-2xl border border-slate-200 text-xs">
+          <span className="font-bold text-slate-600 flex items-center gap-1.5">
+            <History className="w-3.5 h-3.5 text-slate-500" />
+            <span>{language === "ar" ? "سجل النسخ:" : "Revision History:"}</span>
+          </span>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {revisions.map((rev) => {
+              const isSelected = rev.id === prescription?.id;
+              const isRevIssued = rev.status === "issued";
+              const isRevSuperseded = rev.status === "superseded";
+              const isRevDraft = rev.status === "draft";
+              return (
+                <button
+                  key={rev.id}
+                  type="button"
+                  onClick={() => handleSelectRevision(rev)}
+                  data-testid={`rx-revision-tab-${rev.revision_number}`}
+                  className={`px-3 py-1 rounded-xl font-bold transition-all text-xs flex items-center gap-1.5 cursor-pointer ${
+                    isSelected
+                      ? "bg-clinic-600 text-white shadow-xs"
+                      : "bg-white text-slate-700 border border-slate-200 hover:border-clinic-400"
+                  }`}
+                >
+                  <span>{language === "ar" ? `نسخة ${rev.revision_number || 1}` : `Rev ${rev.revision_number || 1}`}</span>
+                  {isRevIssued && (
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded font-semibold ${isSelected ? "bg-clinic-800 text-clinic-100" : "bg-emerald-100 text-emerald-800"}`}>
+                      {language === "ar" ? "المعتمدة" : "Active"}
+                    </span>
+                  )}
+                  {isRevSuperseded && (
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded font-semibold ${isSelected ? "bg-clinic-800 text-clinic-100" : "bg-slate-200 text-slate-600"}`}>
+                      {language === "ar" ? "مستبدلة" : "Superseded"}
+                    </span>
+                  )}
+                  {isRevDraft && (
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded font-semibold ${isSelected ? "bg-clinic-800 text-clinic-100" : "bg-amber-100 text-amber-800"}`}>
+                      {language === "ar" ? "مسودة" : "Draft"}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Active Revision Draft Banner */}
+      {isRevisionDraft && (
+        <div
+          data-testid="rx-revision-draft-banner"
+          className="p-4 bg-sky-50 border-2 border-sky-300 text-sky-950 rounded-2xl text-xs font-bold flex items-start gap-2.5 shadow-sm animate-in fade-in"
+        >
+          <GitBranch className="w-5 h-5 text-sky-600 shrink-0 mt-0.5" />
+          <div className="flex-1 space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="font-black text-sm">
+                {language === "ar"
+                  ? `أنت تعدّل مسودة مراجعة جديدة (نسخة ${prescription?.revision_number || 2})`
+                  : `Editing Revision Draft (Rev ${prescription?.revision_number || 2})`}
+              </span>
+              <span className="bg-sky-200 text-sky-900 px-2 py-0.5 rounded-md text-[11px] font-bold">
+                {language === "ar" ? "مسودة قيد التعديل" : "Revision Draft"}
+              </span>
+            </div>
+            <p className="text-sky-800 font-medium">
+              {language === "ar"
+                ? "أنت تعدّل نسخة جديدة. ستبقى الوصفة الأصلية محفوظة."
+                : "You are editing a new revision. The original prescription remains preserved."}
+            </p>
+            {prescription?.revision_reason && (
+              <p className="text-sky-900 text-[11px] font-semibold">
+                <span className="font-bold">{language === "ar" ? "سبب التعديل: " : "Revision Reason: "}</span>
+                {prescription.revision_reason}
+              </p>
             )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* Superseded Warning Banner */}
+      {isSuperseded && (
+        <div
+          data-testid="rx-superseded-banner"
+          className="p-4 bg-amber-50 border-2 border-amber-400 text-amber-950 rounded-2xl text-xs font-bold flex items-start gap-2.5 shadow-sm animate-in fade-in"
+        >
+          <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="flex-1 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="font-black text-sm text-amber-950">
+                {language === "ar" ? "تم استبدال هذه الوصفة بنسخة أحدث" : "This prescription has been superseded by a newer revision"}
+              </span>
+              <span className="bg-amber-200 text-amber-900 px-2 py-0.5 rounded-md text-[11px] font-bold">
+                {language === "ar" ? `نسخة ${prescription?.revision_number || 1} (قديمة ومستبدلة)` : `Rev ${prescription?.revision_number || 1} (Superseded)`}
+              </span>
+            </div>
+            <p className="text-amber-800 font-medium">
+              {language === "ar"
+                ? "هذه النسخة أصبحت للأرشيف التاريخي فقط وغير معتمدة للصرف أو الاستخدام السريري الحالي."
+                : "This revision is archived for historical audit only and is no longer valid for dispensing."}
+            </p>
+            {latestRevision && latestRevision.id !== prescription?.id && (
+              <div className="pt-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleSelectRevision(latestRevision)}
+                  className="border-amber-400 text-amber-950 hover:bg-amber-100 font-black text-xs gap-1.5"
+                  data-testid="switch-to-latest-rx-btn"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>
+                    {language === "ar"
+                      ? `الانتقال إلى النسخة الأحدث المعتمدة (نسخة ${latestRevision.revision_number || 2})`
+                      : `Switch to latest revision (Rev ${latestRevision.revision_number || 2})`}
+                  </span>
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Alerts */}
       {errorMessage && (
@@ -841,6 +1118,7 @@ export function ElectronicPrescriptionSection({
             variant="outline"
             disabled={isSavingDraft || isIssuing}
             onClick={handleSaveDraft}
+            data-testid="save-draft-prescription-btn"
             className="w-full sm:w-auto font-bold gap-2 text-slate-700 hover:bg-slate-50 h-12 px-6"
           >
             <Save className="w-4 h-4 text-slate-500" />
@@ -852,13 +1130,135 @@ export function ElectronicPrescriptionSection({
             variant="primary"
             disabled={isSavingDraft || isIssuing}
             onClick={handleIssuePrescription}
+            data-testid="issue-prescription-btn"
             className="w-full sm:w-auto font-black gap-2 bg-clinic-600 hover:bg-clinic-700 h-12 px-8 shadow-sm text-sm"
           >
             <FileCheck className="w-5 h-5 ml-1" />
-            <span>{isIssuing ? (language === "ar" ? "جاري الاعتماد والإصدار..." : "Issuing...") : (language === "ar" ? "اعتماد وإصدار الوصفة" : "Approve & Issue Prescription")}</span>
+            <span>
+              {isIssuing
+                ? (language === "ar" ? "جاري الاعتماد والإصدار..." : "Issuing...")
+                : isRevisionDraft
+                ? (language === "ar" ? "اعتماد النسخة المعدلة" : "Approve Revised Prescription")
+                : (language === "ar" ? "اعتماد وإصدار الوصفة" : "Approve & Issue Prescription")}
+            </span>
           </Button>
         </div>
       )}
+
+      {/* Revision Creation Modal (Doctor only) */}
+      <Modal
+        isOpen={isRevisionModalOpen}
+        onClose={() => setIsRevisionModalOpen(false)}
+        title={language === "ar" ? "تعديل الوصفة الطبية الصادرة" : "Revise Issued Prescription"}
+        description={
+          language === "ar"
+            ? "سيتم إنشاء مسودة مراجعة جديدة مرتبطة بالوصفة الأصلية مع الحفاظ على النسخة الصادرة دون أي تغيير."
+            : "A new revision draft will be created linked to the original prescription."
+        }
+        maxWidth="md"
+      >
+        <div className="space-y-4">
+          <div className="p-4 bg-sky-50 border border-sky-200 rounded-2xl text-xs text-sky-950 space-y-1">
+            <div className="flex items-center gap-2 font-black text-sky-900">
+              <GitBranch className="w-4 h-4 text-sky-600" />
+              <span>{language === "ar" ? "إجراء آمن وخاضع للتدقيق" : "Auditable Clinical Revision"}</span>
+            </div>
+            <p>
+              {language === "ar"
+                ? "تبقى النسخة الأصلية محفوظة كما هي. سيتم نسخ جميع الأدوية الحالية لتتمكن من تعديلها أو إضافة أدوية جديدة ثم اعتماد النسخة المعدلة."
+                : "The original prescription will remain intact and all current medications will be copied into the revision draft."}
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-800 mb-1">
+              {language === "ar" ? "سبب التعديل (إلزامي) *" : "Revision Reason (Required) *"}
+            </label>
+            <Textarea
+              id="revision-reason-input"
+              data-testid="revision-reason-input"
+              placeholder={
+                language === "ar"
+                  ? "اكتب سبب التعديل بالتفصيل (مثال: تصحيح الجرعة، تغيير المضاد الحيوي، حساسية...)"
+                  : "Describe the clinical reason for revision..."
+              }
+              rows={3}
+              value={revisionReason}
+              onChange={(e) => setRevisionReason(e.target.value)}
+              className="text-xs font-medium"
+            />
+            {revisionReason.trim().length > 0 && revisionReason.trim().length < 3 && (
+              <p className="text-[11px] text-rose-600 font-bold mt-1">
+                {language === "ar" ? "يجب ألا يقل سبب التعديل عن 3 أحرف" : "Reason must be at least 3 characters"}
+              </p>
+            )}
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+            <Button type="button" variant="ghost" onClick={() => setIsRevisionModalOpen(false)}>
+              {language === "ar" ? "إلغاء" : "Cancel"}
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              disabled={isCreatingRevision || revisionReason.trim().length < 3}
+              onClick={handleStartRevision}
+              data-testid="confirm-create-revision-btn"
+              className="bg-clinic-600 hover:bg-clinic-700 text-white font-bold gap-1.5"
+            >
+              <GitBranch className="w-4 h-4" />
+              <span>{isCreatingRevision ? (language === "ar" ? "جاري إنشاء المسودة..." : "Creating...") : (language === "ar" ? "بدء تعديل مسودة جديدة" : "Start Revision Draft")}</span>
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Confirm Issue of Revision Modal */}
+      <Modal
+        isOpen={isConfirmIssueModalOpen}
+        onClose={() => setIsConfirmIssueModalOpen(false)}
+        title={language === "ar" ? "تأكيد اعتماد النسخة المعدلة" : "Confirm Approval of Revised Prescription"}
+        description={
+          language === "ar"
+            ? `هل أنت متأكد من اعتماد النسخة المعدلة (نسخة ${prescription?.revision_number || 2})؟`
+            : "Are you sure you want to approve and issue this revised prescription?"
+        }
+        maxWidth="md"
+      >
+        <div className="space-y-4">
+          <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-900 space-y-1">
+            <div className="flex items-center gap-2 font-black">
+              <AlertTriangle className="w-4 h-4 text-amber-600" />
+              <span>{language === "ar" ? "تنبيه استبدال الوصفة" : "Prescription Supersession Notice"}</span>
+            </div>
+            <p>
+              {language === "ar"
+                ? "بمجرد اعتماد هذه النسخة، سيتم تلقائياً تحويل النسخة الصادرة السابقة إلى «مستبدلة» وتصبح هذه النسخة هي المعتمدة رسمياً للصرف والطباعة."
+                : "Approving this revision will immediately mark the predecessor prescription as superseded."}
+            </p>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+            <Button type="button" variant="ghost" onClick={() => setIsConfirmIssueModalOpen(false)}>
+              {language === "ar" ? "تراجع" : "Cancel"}
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              disabled={isIssuing}
+              onClick={() => {
+                setIsConfirmIssueModalOpen(false);
+                handleExecuteIssue();
+              }}
+              data-testid="confirm-issue-revision-btn"
+              className="bg-clinic-600 hover:bg-clinic-700 text-white font-bold gap-1.5"
+            >
+              <FileCheck className="w-4 h-4" />
+              <span>{isIssuing ? (language === "ar" ? "جاري الاعتماد..." : "Issuing...") : (language === "ar" ? "تأكيد الاعتماد والإصدار" : "Confirm & Approve")}</span>
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Cancellation Confirmation Modal */}
       <Modal

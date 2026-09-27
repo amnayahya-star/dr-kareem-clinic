@@ -66,6 +66,7 @@ export interface UpdatePrescriptionItemInput {
 }
 
 export interface SavePrescriptionWithItemsInput {
+  prescription_id?: string;
   visit_id: string;
   patient_id: string;
   diagnosis_id?: string | null;
@@ -126,6 +127,19 @@ if (MOCK_VISITS[0]?.prescription) {
   });
 }
 
+/**
+ * Resets in-memory prescriptions store for testing purposes
+ */
+export function _resetInMemoryPrescriptions(): void {
+  IN_MEMORY_PRESCRIPTIONS.clear();
+  if (MOCK_VISITS[0]?.prescription) {
+    IN_MEMORY_PRESCRIPTIONS.set(MOCK_VISITS[0].prescription.id, {
+      ...MOCK_VISITS[0].prescription,
+      status: (MOCK_VISITS[0].prescription.status as PrescriptionStatus) || "issued",
+    });
+  }
+}
+
 function mapSupabasePrescriptionRow(row: any): Prescription {
   const items: PrescriptionItem[] = (row.prescription_items || [])
     .map((item: any) => ({
@@ -159,6 +173,12 @@ function mapSupabasePrescriptionRow(row: any): Prescription {
     diagnosis_id: row.diagnosis_id || null,
     prescribed_by: row.prescribed_by || row.doctor_id || null,
     status: (row.status as PrescriptionStatus) || (row.is_approved ? "issued" : "draft"),
+    revision_number: row.revision_number ? Number(row.revision_number) : 1,
+    original_prescription_id: row.original_prescription_id || null,
+    replaces_prescription_id: row.replaces_prescription_id || null,
+    superseded_at: row.superseded_at || null,
+    superseded_by: row.superseded_by || null,
+    revision_reason: row.revision_reason || null,
     general_instructions: row.general_instructions || null,
     issued_at: row.issued_at || row.approved_at || null,
     cancellation_reason: row.cancellation_reason || null,
@@ -526,27 +546,165 @@ export async function removePrescriptionItem(itemId: string): Promise<void> {
   }
 }
 
+export interface FetchPrescriptionOptions {
+  prescriptionId?: string;
+  forSecretary?: boolean;
+}
+
 /**
- * 6. Fetch prescription by visit ID
+ * 6. Fetch prescription by visit ID (supports role-aware resolution)
+ * - For doctor workstation: prioritizes active draft (for ongoing editing), then active issued, then latest revision.
+ * - For secretary print page: prioritizes active issued prescription; NEVER returns a draft.
  */
-export async function fetchPrescriptionByVisitId(visitId: string): Promise<Prescription | null> {
+export async function fetchPrescriptionByVisitId(
+  visitId: string,
+  prescriptionIdOrOptions?: string | FetchPrescriptionOptions
+): Promise<Prescription | null> {
+  const options: FetchPrescriptionOptions =
+    typeof prescriptionIdOrOptions === "string"
+      ? { prescriptionId: prescriptionIdOrOptions }
+      : prescriptionIdOrOptions || {};
+
+  const { prescriptionId, forSecretary } = options;
+
+  if (prescriptionId) {
+    const rx = await fetchPrescriptionById(prescriptionId);
+    if (forSecretary && rx?.status === "draft") {
+      return null; // Secretary is strictly forbidden from viewing draft prescriptions
+    }
+    return rx;
+  }
+
   const supabase = createClient();
 
   if (!supabase || !isSupabaseConfigured()) {
     const allRx = Array.from(IN_MEMORY_PRESCRIPTIONS.values());
-    for (const rx of allRx) {
-      if (rx.visit_id === visitId) {
-        return rx;
+    const matched = allRx.filter((rx) => rx.visit_id === visitId);
+    if (matched.length > 0) {
+      if (forSecretary) {
+        // Secretary must only see the active issued prescription (or superseded if historical)
+        const activeIssued = matched.find((r) => r.status === "issued");
+        if (activeIssued) return activeIssued;
+        const superseded = matched
+          .filter((r) => r.status === "superseded")
+          .sort((a, b) => (b.revision_number || 1) - (a.revision_number || 1))[0];
+        return superseded || null;
       }
+
+      // Prioritize active draft (for doctor editing), then active issued, then latest revision
+      const activeDraft = matched.find((r) => r.status === "draft");
+      if (activeDraft) return activeDraft;
+      const activeIssued = matched.find((r) => r.status === "issued");
+      if (activeIssued) return activeIssued;
+      return matched.sort((a, b) => (b.revision_number || 1) - (a.revision_number || 1))[0];
     }
     const mockVisit = MOCK_VISITS.find((v) => v.id === visitId);
     if (mockVisit?.prescription) {
+      const mockStatus = (mockVisit.prescription.status as PrescriptionStatus) || "issued";
+      if (forSecretary && mockStatus === "draft") {
+        return null;
+      }
       return {
         ...mockVisit.prescription,
-        status: (mockVisit.prescription.status as PrescriptionStatus) || "issued",
+        status: mockStatus,
       };
     }
     return null;
+  }
+
+  let query: any = supabase
+    .from("prescriptions")
+    .select(`
+      *,
+      profiles:prescribed_by (full_name),
+      prescription_items (*)
+    `)
+    .eq("visit_id", visitId);
+
+  if (typeof query.order === "function") {
+    query = query.order("revision_number", { ascending: false });
+  }
+
+  let result: any;
+  if (typeof query.maybeSingle === "function" && typeof query.order !== "function") {
+    result = await query.maybeSingle();
+  } else {
+    result = await query;
+  }
+
+  const { data, error } = result || {};
+
+  if (error) {
+    throw new Error(`فشل جلب الوصفة الطبية: ${error.message}`);
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  const rows = Array.isArray(data) ? data : [data];
+  if (rows.length === 0) return null;
+
+  if (forSecretary) {
+    // Secretary only accesses issued prescription (or historical superseded)
+    const activeIssued = rows.find((r: any) => r.status === "issued");
+    if (activeIssued) return mapSupabasePrescriptionRow(activeIssued);
+
+    const superseded = rows.find((r: any) => r.status === "superseded");
+    if (superseded) return mapSupabasePrescriptionRow(superseded);
+
+    return null;
+  }
+
+  // Doctor workstation: prioritize active draft, then issued, then latest row
+  const activeDraft = rows.find((r: any) => r.status === "draft");
+  if (activeDraft) return mapSupabasePrescriptionRow(activeDraft);
+
+  const activeIssued = rows.find((r: any) => r.status === "issued");
+  if (activeIssued) return mapSupabasePrescriptionRow(activeIssued);
+
+  return mapSupabasePrescriptionRow(rows[0]);
+}
+
+/**
+ * 6.1 Fetch prescription by prescription ID
+ */
+export async function fetchPrescriptionById(prescriptionId: string): Promise<Prescription | null> {
+  const supabase = createClient();
+
+  if (!supabase || !isSupabaseConfigured()) {
+    const rx = IN_MEMORY_PRESCRIPTIONS.get(prescriptionId);
+    return rx || null;
+  }
+
+  const { data, error } = await supabase
+    .from("prescriptions")
+    .select(`
+      *,
+      profiles:prescribed_by (full_name),
+      prescription_items (*)
+    `)
+    .eq("id", prescriptionId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`فشل جلب الوصفة الطبية: ${error.message}`);
+  }
+
+  if (!data) return null;
+  return mapSupabasePrescriptionRow(data);
+}
+
+/**
+ * 6.2 Fetch all revisions for a specific visit
+ */
+export async function fetchPrescriptionRevisions(visitId: string): Promise<Prescription[]> {
+  const supabase = createClient();
+
+  if (!supabase || !isSupabaseConfigured()) {
+    const allRx = Array.from(IN_MEMORY_PRESCRIPTIONS.values());
+    const matched = allRx.filter((rx) => rx.visit_id === visitId);
+    return matched.sort((a, b) => (a.revision_number || 1) - (b.revision_number || 1));
   }
 
   const { data, error } = await supabase
@@ -557,17 +715,92 @@ export async function fetchPrescriptionByVisitId(visitId: string): Promise<Presc
       prescription_items (*)
     `)
     .eq("visit_id", visitId)
-    .maybeSingle();
+    .order("revision_number", { ascending: true });
 
   if (error) {
-    throw new Error(`فشل جلب الوصفة الطبية: ${error.message}`);
+    throw new Error(`فشل جلب سجل نسخ الوصفة: ${error.message}`);
   }
 
-  if (!data) {
-    return null;
+  if (!data) return [];
+  return data.map(mapSupabasePrescriptionRow);
+}
+
+/**
+ * 6.3 Create a new prescription revision from an issued prescription
+ */
+export async function createPrescriptionRevision(prescriptionId: string, reason: string): Promise<Prescription> {
+  const cleanReason = reason?.trim() || "";
+  if (cleanReason.length < 3) {
+    throw new Error("سبب التعديل إلزامي ويجب ألا يقل عن 3 أحرف");
   }
 
-  return mapSupabasePrescriptionRow(data);
+  const supabase = createClient();
+
+  if (!supabase || !isSupabaseConfigured()) {
+    const existing = IN_MEMORY_PRESCRIPTIONS.get(prescriptionId);
+    if (!existing) {
+      throw new Error("لم يتم العثور على الوصفة الطبية الأصلية");
+    }
+    if (existing.status !== "issued") {
+      throw new Error("لا يمكن تعديل إلا وصفة طبية صادرة ومعتمدة");
+    }
+
+    const allRx = Array.from(IN_MEMORY_PRESCRIPTIONS.values());
+    const existingDraft = allRx.find((rx) => rx.visit_id === existing.visit_id && rx.status === "draft");
+    if (existingDraft) {
+      throw new Error("توجد مسودة مراجعة نشطة بالفعل لهذه الوصفة. يرجى إكمالها أو حذفها قبل بدء مراجعة جديدة");
+    }
+
+    const nextRev = (existing.revision_number || 1) + 1;
+    const newRxId = `rx-rev-${Date.now()}`;
+    const copiedItems: PrescriptionItem[] = (existing.items || []).map((it, idx) => ({
+      ...it,
+      id: `rxi-rev-${Date.now()}-${idx}`,
+      prescription_id: newRxId,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }));
+
+    const newRevision: Prescription = {
+      ...existing,
+      id: newRxId,
+      status: "draft",
+      revision_number: nextRev,
+      original_prescription_id: existing.original_prescription_id || existing.id,
+      replaces_prescription_id: existing.id,
+      revision_reason: cleanReason,
+      superseded_at: null,
+      superseded_by: null,
+      issued_at: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      items: copiedItems,
+    };
+
+    IN_MEMORY_PRESCRIPTIONS.set(newRxId, newRevision);
+    return newRevision;
+  }
+
+  const { data: authData, error: authErr } = await supabase.auth.getUser();
+  if (authErr || !authData?.user?.id) {
+    throw new Error("غير مصرح: يجب تسجيل الدخول لإنشاء مراجعة للوصفة الطبية");
+  }
+
+  const { data: newRxId, error: rpcErr } = await supabase.rpc("create_prescription_revision", {
+    p_prescription_id: prescriptionId,
+    p_reason: cleanReason,
+  });
+
+  if (rpcErr || !newRxId) {
+    throw new Error(rpcErr?.message || "فشل إنشاء مراجعة للوصفة الطبية");
+  }
+
+  const created = await fetchPrescriptionById(newRxId);
+  if (!created) {
+    throw new Error("حدث خطأ أثناء جلب مسودة المراجعة الجديدة");
+  }
+
+  return created;
 }
 
 /**
@@ -740,10 +973,21 @@ export async function savePrescriptionWithItems(input: SavePrescriptionWithItems
   if (!supabase || !isSupabaseConfigured()) {
     let targetRx: Prescription | undefined;
     const allRx = Array.from(IN_MEMORY_PRESCRIPTIONS.values());
-    for (const rx of allRx) {
-      if (rx.visit_id === input.visit_id) {
-        targetRx = rx;
-        break;
+
+    if (input.prescription_id) {
+      targetRx = IN_MEMORY_PRESCRIPTIONS.get(input.prescription_id);
+      if (targetRx && (targetRx.status === "issued" || targetRx.status === "superseded" || targetRx.status === "cancelled")) {
+        throw new Error(`لا يمكن حفظ أو تعديل وصفة طبية في حالتها الحالية (الحالة: ${targetRx.status})`);
+      }
+    } else {
+      // Find active draft for visit
+      targetRx = allRx.find((rx) => rx.visit_id === input.visit_id && rx.status === "draft");
+      if (!targetRx) {
+        // If no draft exists, check if an issued prescription already exists for this visit
+        const hasIssued = allRx.some((rx) => rx.visit_id === input.visit_id && rx.status === "issued");
+        if (hasIssued) {
+          throw new Error("توجد وصفة طبية معتمدة مسبقاً لهذه الزيارة. لتعديلها يرجى استخدام خيار تعديل الوصفة لإنشاء مراجعة جديدة");
+        }
       }
     }
 
@@ -768,12 +1012,30 @@ export async function savePrescriptionWithItems(input: SavePrescriptionWithItems
       updated_at: new Date().toISOString(),
     }));
 
+    if (input.action === "issue" && targetRx?.replaces_prescription_id) {
+      // Mark predecessor as superseded in mock store
+      const pred = IN_MEMORY_PRESCRIPTIONS.get(targetRx.replaces_prescription_id);
+      if (pred) {
+        pred.status = "superseded";
+        pred.superseded_at = new Date().toISOString();
+        pred.superseded_by = rxId;
+        pred.updated_at = new Date().toISOString();
+        IN_MEMORY_PRESCRIPTIONS.set(pred.id, pred);
+      }
+    }
+
     const savedRx: Prescription = {
       id: rxId,
       visit_id: input.visit_id,
       patient_id: input.patient_id,
       diagnosis_id: input.diagnosis_id || null,
       status: input.action === "issue" ? "issued" : "draft",
+      revision_number: targetRx?.revision_number || 1,
+      original_prescription_id: targetRx?.original_prescription_id || null,
+      replaces_prescription_id: targetRx?.replaces_prescription_id || null,
+      revision_reason: targetRx?.revision_reason || null,
+      superseded_at: null,
+      superseded_by: null,
       issued_at: input.action === "issue" ? new Date().toISOString() : null,
       general_instructions: input.general_instructions?.trim() || null,
       created_at: targetRx?.created_at || new Date().toISOString(),
@@ -811,13 +1073,14 @@ export async function savePrescriptionWithItems(input: SavePrescriptionWithItems
       display_order: it.display_order ?? idx + 1,
     })),
     p_action: input.action,
+    p_prescription_id: input.prescription_id || null,
   });
 
   if (rpcErr || !rpcRxId) {
     throw new Error(rpcErr?.message || "فشل حفظ الوصفة الطبية في قاعدة البيانات");
   }
 
-  const refreshed = await fetchPrescriptionByVisitId(input.visit_id);
+  const refreshed = await fetchPrescriptionByVisitId(input.visit_id, rpcRxId);
   if (!refreshed) {
     throw new Error("حدث خطأ أثناء جلب الوصفة الطبية بعد الحفظ");
   }

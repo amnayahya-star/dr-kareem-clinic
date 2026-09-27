@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { fetchPrescriptionByVisitId } from "@/services/prescriptionService";
@@ -11,12 +11,14 @@ import { PatientFile, VisitRecord } from "@/lib/mock-data/patients";
 import { Prescription } from "@/types/database";
 import { calculateArabicAge, formatArabicDate, DOSAGE_FORM_LABELS } from "@/lib/utils";
 import { getRouteLabel } from "@/services/drugSearchService";
-import { Printer, ArrowRight, Ban, Stethoscope } from "lucide-react";
+import { Printer, ArrowRight, Ban, Stethoscope, AlertTriangle } from "lucide-react";
 
-export default function PrescriptionPrintPage() {
+function PrescriptionPrintContent() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const visitId = params.visitId as string;
+  const prescriptionId = searchParams.get("prescriptionId") || undefined;
 
   const [prescription, setPrescription] = useState<Prescription | null>(null);
   const [patient, setPatient] = useState<PatientFile | null>(null);
@@ -31,10 +33,11 @@ export default function PrescriptionPrintPage() {
       setIsLoading(true);
       setErrorMessage(null);
       try {
-        // 1. Fetch prescription for this visit (RLS blocks drafts from secretary)
-        const rx = await fetchPrescriptionByVisitId(visitId);
+        // 1. Fetch prescription for this visit / specific prescriptionId
+        // Allowed printable statuses: issued or superseded (drafts are never returned)
+        const rx = await fetchPrescriptionByVisitId(visitId, { prescriptionId, forSecretary: true });
 
-        if (!rx || rx.status !== "issued") {
+        if (!rx || (rx.status !== "issued" && rx.status !== "superseded")) {
           if (isMounted) {
             setPrescription(null);
             setErrorMessage("هذه الوصفة غير متاحة للطباعة");
@@ -85,7 +88,7 @@ export default function PrescriptionPrintPage() {
     if (visitId) {
       loadPrescriptionData();
     }
-  }, [visitId]);
+  }, [visitId, prescriptionId]);
 
   const handlePrint = () => {
     window.print();
@@ -100,8 +103,8 @@ export default function PrescriptionPrintPage() {
     );
   }
 
-  // Fail-closed gate: if no issued prescription or missing patient, NEVER render clinical details
-  if (errorMessage || !prescription || prescription.status !== "issued" || !patient) {
+  // Fail-closed gate: if no printable prescription (issued or superseded) or missing patient, NEVER render clinical details
+  if (errorMessage || !prescription || (prescription.status !== "issued" && prescription.status !== "superseded") || !patient) {
     return (
       <div className="p-8 text-center space-y-4 max-w-lg mx-auto">
         <div className="p-6 bg-slate-50 border border-slate-200 rounded-3xl text-slate-900 space-y-2 shadow-xs">
@@ -121,6 +124,8 @@ export default function PrescriptionPrintPage() {
       </div>
     );
   }
+
+  const isSuperseded = prescription.status === "superseded";
 
   return (
     <div className="space-y-6">
@@ -148,6 +153,23 @@ export default function PrescriptionPrintPage() {
 
       {/* Official Medical Prescription Print Document (A5 styled) */}
       <div className="print-area bg-white max-w-2xl mx-auto border-2 border-slate-300 rounded-3xl p-8 shadow-md text-slate-900 font-sans print:border-none print:shadow-none print:p-0 print:m-0">
+
+        {/* Prominent Superseded Prescription Warning Banner (High visibility on screen & paper) */}
+        {isSuperseded && (
+          <div
+            data-testid="print-superseded-warning"
+            className="mb-5 p-4 rounded-2xl bg-amber-50 border-2 border-amber-500 text-amber-950 font-bold text-center space-y-1 print:border-2 print:border-red-600 print:text-red-700 print:bg-white"
+          >
+            <div className="flex items-center justify-center gap-2 text-sm sm:text-base font-black text-amber-900 print:text-red-700">
+              <AlertTriangle className="w-5 h-5 text-amber-600 print:text-red-600" />
+              <span>نسخة قديمة مستبدلة — غير معتمدة للاستخدام الحالي</span>
+            </div>
+            <p className="text-xs text-amber-800 print:text-red-600 font-medium">
+              تم استبدال هذه الوصفة الطبية بنسخة أحدث من قِبل الطبيب المعالج. هذه النسخة للأرشيف التاريخي فقط ولا يجوز صرفها أو اعتمادها كعلاج حالي.
+            </p>
+          </div>
+        )}
+
         {/* Header with Doctor branding */}
         <div className="flex items-center justify-between pb-6 border-b-2 border-slate-800">
           <div className="text-right space-y-1">
@@ -169,7 +191,7 @@ export default function PrescriptionPrintPage() {
         </div>
 
         {/* Patient & Visit Metadata Info */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 py-4 border-b border-slate-200 text-xs">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 py-4 border-b border-slate-200 text-xs">
           <div>
             <span className="font-bold text-slate-500 block text-[10px]">اسم الطفل:</span>
             <span className="font-black text-slate-900 text-sm">{patient.fullName}</span>
@@ -182,6 +204,15 @@ export default function PrescriptionPrintPage() {
             <span className="font-bold text-slate-500 block text-[10px]">العمر / الجنس:</span>
             <span className="font-bold text-slate-800">
               {calculateArabicAge(patient.dateOfBirth)} ({patient.gender === "male" ? "ذكر" : "أنثى"})
+            </span>
+          </div>
+          <div>
+            <span className="font-bold text-slate-500 block text-[10px]">رقم النسخة:</span>
+            <span className="font-bold text-slate-900">
+              نسخة {prescription.revision_number || 1}
+              {isSuperseded && (
+                <span className="text-[10px] text-amber-700 mr-1 font-semibold">(مستبدلة)</span>
+              )}
             </span>
           </div>
           <div className="text-left">
@@ -305,7 +336,7 @@ export default function PrescriptionPrintPage() {
             </p>
             {prescription.issued_at && (
               <p className="text-[10px] font-mono text-slate-400">
-                تاريخ الاعتماد: {new Date(prescription.issued_at).toLocaleString("ar-IQ")}
+                تاريخ الإصدار: {new Date(prescription.issued_at).toLocaleString("ar-IQ")}
               </p>
             )}
           </div>
@@ -320,5 +351,20 @@ export default function PrescriptionPrintPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function PrescriptionPrintPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-[400px] flex flex-col items-center justify-center space-y-3">
+          <div className="w-10 h-10 border-4 border-clinic-600 border-t-transparent rounded-full animate-spin" />
+          <p className="text-xs font-bold text-slate-600">جاري تجهيز الوصفة الطبية...</p>
+        </div>
+      }
+    >
+      <PrescriptionPrintContent />
+    </Suspense>
   );
 }
