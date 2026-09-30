@@ -20,6 +20,7 @@ import {
   createPrescriptionRevision,
   PrescriptionItemInput,
 } from "@/services/prescriptionService";
+import { DrugLabelViewerModal } from "./DrugLabelViewerModal";
 import { MedicationAutocompleteInput } from "./MedicationAutocompleteInput";
 import {
   DrugSearchResult,
@@ -200,6 +201,9 @@ export function ElectronicPrescriptionSection({
   // Revision Draft Cancellation Modal State (for draft revisions with revision_number > 1)
   const [isCancelRevisionModalOpen, setIsCancelRevisionModalOpen] = useState(false);
   const [isCancellingRevision, setIsCancellingRevision] = useState(false);
+
+  // Official openFDA Drug Label Viewer Modal State
+  const [viewingLabelProduct, setViewingLabelProduct] = useState<{ id: string; name: string } | null>(null);
 
   // Synchronize URL with active prescription without creating history loops or page jumps
   const updatePrescriptionUrl = useCallback(
@@ -1228,7 +1232,7 @@ export function ElectronicPrescriptionSection({
             }`}
           >
             <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-200/60">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs font-black bg-clinic-600 text-white px-2.5 py-0.5 rounded-lg">
                   {language === "ar" ? `دواء #${index + 1}` : `Medication #${index + 1}`}
                 </span>
@@ -1236,6 +1240,22 @@ export function ElectronicPrescriptionSection({
                   <span className="text-[11px] text-slate-500 font-semibold font-mono">
                     ({item.active_ingredient})
                   </span>
+                )}
+                {item.catalog_product_id && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setViewingLabelProduct({
+                        id: item.catalog_product_id!,
+                        name: item.medication_name,
+                      })
+                    }
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-clinic-700 bg-clinic-50 border border-clinic-200 hover:bg-clinic-100 px-2 py-0.5 rounded-lg transition-colors cursor-pointer"
+                    title={language === "ar" ? "عرض النشرة الرسمية الصادرة من openFDA" : "View official openFDA drug label"}
+                  >
+                    <FileText className="w-3 h-3 text-clinic-600" />
+                    <span>{language === "ar" ? "نشرة الدواء (openFDA)" : "Label (openFDA)"}</span>
+                  </button>
                 )}
               </div>
 
@@ -1712,6 +1732,15 @@ export function ElectronicPrescriptionSection({
           </div>
         </div>
       </Modal>
+
+      {/* Official openFDA Drug Labeling Viewer Modal (Read-Only) */}
+      <DrugLabelViewerModal
+        isOpen={Boolean(viewingLabelProduct)}
+        onClose={() => setViewingLabelProduct(null)}
+        productId={viewingLabelProduct?.id || null}
+        medicationName={viewingLabelProduct?.name}
+        language={language}
+      />
     </Card>
   );
 }

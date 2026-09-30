@@ -10,7 +10,9 @@
     "type-check": "tsc --noEmit",
     "test": "vitest run",
     "sync:openfda": "npx tsx scripts/syncOpenFdaDrugs.ts",
-    "sync:openfda:dry-run": "npx tsx scripts/syncOpenFdaDrugs.ts --dry-run"
+    "sync:openfda:dry-run": "npx tsx scripts/syncOpenFdaDrugs.ts --dry-run",
+    "sync:openfda-labels": "npx tsx --env-file=.env.local scripts/syncOpenFdaDrugLabels.ts",
+    "sync:openfda-labels:dry-run": "npx tsx --env-file=.env.local scripts/syncOpenFdaDrugLabels.ts --dry-run"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.5",

@@ -83,15 +83,35 @@ export interface DrugAlias {
 export interface DrugLabel {
   id: string;
   product_id: string;
-  dailymed_set_id: string;
+  dailymed_set_id?: string | null;
+  spl_set_id?: string | null;
+  spl_id?: string | null;
   label_version?: string | null;
+  effective_time?: string | null;
+  application_number?: string | null;
+  marketing_category?: string | null;
   label_url?: string | null;
+  dosage_and_administration?: string | null;
+  pediatric_use?: string | null;
+  indications_and_usage?: string | null;
+  contraindications?: string | null;
+  warnings_and_cautions?: string | null;
+  boxed_warning?: string | null;
+  drug_interactions?: string | null;
+  use_in_specific_populations?: string | null;
   source_system: string;
   source_identifier?: string | null;
   retrieved_at: string;
   payload_hash?: string | null;
   published_at?: string | null;
   last_synced_at: string;
+  source_payload?: Record<string, unknown> | null;
+  review_status?: 'pending_review' | 'approved' | 'rejected' | 'needs_re_review';
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  previous_review_status?: string | null;
+  previous_reviewed_at?: string | null;
+  previous_reviewed_by?: string | null;
 }
 
 export interface ClinicDrugCatalog {
@@ -153,3 +173,4 @@ export interface DrugSearchResultItem {
 }
 
 export * from './openfda';
+export * from './openfdaLabel';

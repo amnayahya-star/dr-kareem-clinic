@@ -6,6 +6,7 @@ import {
   DosageForm,
   CanonicalDosageForm,
   CANONICAL_DOSAGE_FORMS,
+  DrugLabel,
 } from "@/types/database";
 import { MOCK_VISITS } from "@/lib/mock-data/patients";
 
@@ -1292,6 +1293,28 @@ export async function createPrescriptionDraft(visitId: string, patientId: string
 }
 
 export const fetchPrescriptionsByPatientId = fetchPatientPrescriptions;
+
+/**
+ * Fetches the official openFDA Drug Label for a given product ID (read-only for doctors).
+ */
+export async function fetchDrugLabelByProductId(productId: string): Promise<DrugLabel | null> {
+  if (!productId || typeof productId !== 'string') return null;
+  const supabase = createClient();
+  if (!supabase || !isSupabaseConfigured()) {
+    return null;
+  }
+  const { data, error } = await supabase
+    .from('drug_labels')
+    .select('*')
+    .eq('product_id', productId)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Error fetching drug label by product ID:', error.message);
+    return null;
+  }
+  return data as DrugLabel | null;
+}
 
 
 
