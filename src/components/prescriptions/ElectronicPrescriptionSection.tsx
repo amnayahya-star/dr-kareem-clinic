@@ -13,7 +13,9 @@ import { DosageForm, CanonicalDosageForm, CANONICAL_DOSAGE_FORMS, Prescription, 
 import {
   savePrescriptionWithItems,
   cancelPrescription,
+  cancelPrescriptionRevision,
   fetchPrescriptionByVisitId,
+  fetchPrescriptionById,
   fetchPrescriptionRevisions,
   createPrescriptionRevision,
   PrescriptionItemInput,
@@ -190,10 +192,14 @@ export function ElectronicPrescriptionSection({
   const [isCreatingRevision, setIsCreatingRevision] = useState(false);
   const [isConfirmIssueModalOpen, setIsConfirmIssueModalOpen] = useState(false);
 
-  // Cancellation Modal State
+  // Cancellation Modal State (for issued prescriptions)
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [cancellationReason, setCancellationReason] = useState("");
   const [isCancelling, setIsCancelling] = useState(false);
+
+  // Revision Draft Cancellation Modal State (for draft revisions with revision_number > 1)
+  const [isCancelRevisionModalOpen, setIsCancelRevisionModalOpen] = useState(false);
+  const [isCancellingRevision, setIsCancellingRevision] = useState(false);
 
   // Synchronize URL with active prescription without creating history loops or page jumps
   const updatePrescriptionUrl = useCallback(
@@ -801,14 +807,73 @@ export function ElectronicPrescriptionSection({
     }
   };
 
+  // Cancel active revision draft (Doctor only)
+  const handleConfirmCancelRevision = async () => {
+    if (!prescription || prescription.status !== "draft" || (prescription.revision_number || 1) <= 1) {
+      return;
+    }
+
+    setIsCancellingRevision(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    try {
+      const result = await cancelPrescriptionRevision(prescription.id);
+      setIsCancelRevisionModalOpen(false);
+      setIsDirty(false);
+      setSuccessMessage(
+        language === "ar"
+          ? "تم إلغاء مسودة المراجعة بنجاح والعودة إلى الوصفة الأصلية المعتمدة."
+          : "Revision draft cancelled successfully. Returned to approved prescription."
+      );
+
+      // Refresh revisions list
+      await loadRevisions(visitId);
+
+      // Navigate automatically to fallback prescription (active approved version)
+      const targetFallbackId = result.fallback_prescription_id;
+      if (targetFallbackId) {
+        currentFetchSeqRef.current++;
+        const fallbackRx = await fetchPrescriptionById(targetFallbackId);
+        if (fallbackRx) {
+          setSelectedRxId(fallbackRx.id);
+          selectedRxIdRef.current = fallbackRx.id;
+          setPrescription(fallbackRx);
+          setItems(mapPrescriptionToFormItems(fallbackRx));
+          setGeneralInstructions(fallbackRx.general_instructions || "");
+          updatePrescriptionUrl(fallbackRx.id);
+          if (onSelectPrescriptionId) onSelectPrescriptionId(fallbackRx.id);
+          if (onPrescriptionChanged) onPrescriptionChanged(fallbackRx);
+        }
+      }
+    } catch (err: any) {
+      // On failure, keep version 2 draft open and display clear error
+      setErrorMessage(
+        err.message ||
+          (language === "ar"
+            ? "فشل إلغاء مسودة المراجعة"
+            : "Failed to cancel revision draft")
+      );
+    } finally {
+      setIsCancellingRevision(false);
+    }
+  };
+
   const isIssued = prescription?.status === "issued";
   const isCancelled = prescription?.status === "cancelled";
   const isSuperseded = prescription?.status === "superseded";
   const isDraft = !prescription || prescription.status === "draft";
   const isRevisionDraft = isDraft && Boolean(prescription?.replaces_prescription_id);
+  const canCancelRevisionDraft = !readOnly && Boolean(prescription && prescription.status === "draft" && (prescription.revision_number || 1) > 1);
   const isLocked = isIssued || isCancelled || isSuperseded || readOnly;
 
-  const latestRevision = revisions.length > 0 ? (revisions.find((r) => r.status === "issued") || revisions[revisions.length - 1]) : null;
+  const latestRevision =
+    revisions.length > 0
+      ? revisions.find((r) => r.status === "issued") ||
+        revisions.find((r) => r.status === "draft") ||
+        revisions.filter((r) => r.status !== "cancelled")[revisions.length - 1] ||
+        revisions[revisions.length - 1]
+      : null;
 
   // Real-time readiness calculation based strictly on local draft items
   const isDraftReadyToIssue = isPrescriptionDraftReady(items);
@@ -921,6 +986,22 @@ export function ElectronicPrescriptionSection({
               <span>{language === "ar" ? "إلغاء الوصفة" : "Cancel Prescription"}</span>
             </Button>
           )}
+
+          {/* Cancel Revision Draft button - Doctor only, when draft revision */}
+          {canCancelRevisionDraft && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={isSavingDraft || isIssuing || isCancellingRevision}
+              onClick={() => setIsCancelRevisionModalOpen(true)}
+              data-testid="cancel-revision-draft-btn"
+              className="font-bold gap-1.5 border-rose-300 text-rose-700 hover:bg-rose-50"
+            >
+              <Ban className="w-4 h-4 text-rose-600" />
+              <span>{language === "ar" ? "إلغاء مسودة المراجعة" : "Cancel Revision Draft"}</span>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -937,6 +1018,7 @@ export function ElectronicPrescriptionSection({
               const isRevIssued = rev.status === "issued";
               const isRevSuperseded = rev.status === "superseded";
               const isRevDraft = rev.status === "draft";
+              const isRevCancelled = rev.status === "cancelled";
               return (
                 <button
                   key={rev.id}
@@ -963,6 +1045,11 @@ export function ElectronicPrescriptionSection({
                   {isRevDraft && (
                     <span className={`text-[10px] px-1.5 py-0.2 rounded font-semibold ${isSelected ? "bg-clinic-800 text-clinic-100" : "bg-amber-100 text-amber-800"}`}>
                       {language === "ar" ? "مسودة" : "Draft"}
+                    </span>
+                  )}
+                  {isRevCancelled && (
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded font-semibold ${isSelected ? "bg-rose-900 text-rose-100" : "bg-rose-100 text-rose-800"}`} data-testid={`rx-revision-badge-cancelled-${rev.revision_number}`}>
+                      {language === "ar" ? "ملغاة" : "Cancelled"}
                     </span>
                   )}
                 </button>
@@ -1072,10 +1159,59 @@ export function ElectronicPrescriptionSection({
         </div>
       )}
 
-      {isCancelled && prescription?.cancellation_reason && (
-        <div className="p-3 bg-slate-100 rounded-2xl text-xs text-slate-700 border border-slate-200">
-          <span className="font-bold text-slate-900">{language === "ar" ? "سبب الإلغاء: " : "Cancellation Reason: "}</span>
-          <span>{prescription.cancellation_reason}</span>
+      {/* Cancelled Prescription Notice Banner */}
+      {isCancelled && (
+        <div
+          data-testid="rx-cancelled-banner"
+          className="p-4 bg-rose-50 border-2 border-rose-300 text-rose-950 rounded-2xl text-xs font-bold flex items-start gap-2.5 shadow-sm animate-in fade-in"
+        >
+          <Ban className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+          <div className="flex-1 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="font-black text-sm text-rose-950">
+                {language === "ar"
+                  ? (prescription?.revision_number && prescription.revision_number > 1
+                      ? `مسودة مراجعة ملغاة (نسخة ${prescription.revision_number})`
+                      : "الوصفة الطبية ملغاة")
+                  : (prescription?.revision_number && prescription.revision_number > 1
+                      ? `Revision Draft Cancelled (Rev ${prescription.revision_number})`
+                      : "Prescription Cancelled")}
+              </span>
+              <span className="bg-rose-200 text-rose-900 px-2 py-0.5 rounded-md text-[11px] font-bold" data-testid="rx-cancelled-readonly-badge">
+                {language === "ar" ? "ملغاة - للقراءة فقط" : "Cancelled - Read-Only"}
+              </span>
+            </div>
+            <p className="text-rose-800 font-medium">
+              {language === "ar"
+                ? "هذه النسخة ملغاة ومحفوظة في السجل الطبي لأغراض التدقيق فقط، ولا يمكن تعديلها أو اعتمادها."
+                : "This revision has been cancelled and retained for audit purposes only. It is strictly read-only."}
+            </p>
+            {prescription?.cancellation_reason && (
+              <p className="text-rose-900 text-[11px] font-semibold">
+                <span className="font-bold">{language === "ar" ? "سبب الإلغاء: " : "Cancellation Reason: "}</span>
+                {prescription.cancellation_reason}
+              </p>
+            )}
+            {latestRevision && latestRevision.id !== prescription?.id && (
+              <div className="pt-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleSelectRevision(latestRevision)}
+                  className="border-rose-300 text-rose-900 hover:bg-rose-100 font-black text-xs gap-1.5"
+                  data-testid="switch-from-cancelled-to-latest-btn"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>
+                    {language === "ar"
+                      ? `الانتقال إلى النسخة المعتمدة (نسخة ${latestRevision.revision_number || 1})`
+                      : `Switch to approved revision (Rev ${latestRevision.revision_number || 1})`}
+                  </span>
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -1291,36 +1427,54 @@ export function ElectronicPrescriptionSection({
 
       {/* Bottom Action Buttons (for Doctor when not locked) */}
       {!isLocked && (
-        <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-4 border-t border-slate-100">
-          <Button
-            type="button"
-            variant="outline"
-            disabled={isSavingDraft || isIssuing}
-            onClick={handleSaveDraft}
-            data-testid="save-draft-prescription-btn"
-            className="w-full sm:w-auto font-bold gap-2 text-slate-700 hover:bg-slate-50 h-12 px-6"
-          >
-            <Save className="w-4 h-4 text-slate-500" />
-            <span>{isSavingDraft ? (language === "ar" ? "جاري الحفظ..." : "Saving Draft...") : (language === "ar" ? "حفظ كمسودة" : "Save as Draft")}</span>
-          </Button>
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-slate-100">
+          <div>
+            {canCancelRevisionDraft && (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isSavingDraft || isIssuing || isCancellingRevision}
+                onClick={() => setIsCancelRevisionModalOpen(true)}
+                data-testid="bottom-cancel-revision-draft-btn"
+                className="w-full sm:w-auto font-bold gap-2 text-rose-700 border-rose-300 hover:bg-rose-50 hover:border-rose-400 h-12 px-5"
+              >
+                <Ban className="w-4 h-4 text-rose-600" />
+                <span>{language === "ar" ? "إلغاء مسودة المراجعة" : "Cancel Revision Draft"}</span>
+              </Button>
+            )}
+          </div>
 
-          <Button
-            type="button"
-            variant="primary"
-            disabled={isSavingDraft || isIssuing}
-            onClick={handleIssuePrescription}
-            data-testid="issue-prescription-btn"
-            className="w-full sm:w-auto font-black gap-2 bg-clinic-600 hover:bg-clinic-700 h-12 px-8 shadow-sm text-sm"
-          >
-            <FileCheck className="w-5 h-5 ml-1" />
-            <span>
-              {isIssuing
-                ? (language === "ar" ? "جاري الاعتماد والإصدار..." : "Issuing...")
-                : isRevisionDraft
-                ? (language === "ar" ? "اعتماد النسخة المعدلة" : "Approve Revised Prescription")
-                : (language === "ar" ? "اعتماد وإصدار الوصفة" : "Approve & Issue Prescription")}
-            </span>
-          </Button>
+          <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isSavingDraft || isIssuing || isCancellingRevision}
+              onClick={handleSaveDraft}
+              data-testid="save-draft-prescription-btn"
+              className="w-full sm:w-auto font-bold gap-2 text-slate-700 hover:bg-slate-50 h-12 px-6"
+            >
+              <Save className="w-4 h-4 text-slate-500" />
+              <span>{isSavingDraft ? (language === "ar" ? "جاري الحفظ..." : "Saving Draft...") : (language === "ar" ? "حفظ كمسودة" : "Save as Draft")}</span>
+            </Button>
+
+            <Button
+              type="button"
+              variant="primary"
+              disabled={isSavingDraft || isIssuing || isCancellingRevision}
+              onClick={handleIssuePrescription}
+              data-testid="issue-prescription-btn"
+              className="w-full sm:w-auto font-black gap-2 bg-clinic-600 hover:bg-clinic-700 h-12 px-8 shadow-sm text-sm"
+            >
+              <FileCheck className="w-5 h-5 ml-1" />
+              <span>
+                {isIssuing
+                  ? (language === "ar" ? "جاري الاعتماد والإصدار..." : "Issuing...")
+                  : isRevisionDraft
+                  ? (language === "ar" ? "اعتماد النسخة المعدلة" : "Approve Revised Prescription")
+                  : (language === "ar" ? "اعتماد وإصدار الوصفة" : "Approve & Issue Prescription")}
+              </span>
+            </Button>
+          </div>
         </div>
       )}
 
@@ -1484,6 +1638,76 @@ export function ElectronicPrescriptionSection({
               className="bg-rose-600 hover:bg-rose-700 text-white font-bold"
             >
               {isCancelling ? (language === "ar" ? "جاري الإلغاء..." : "Cancelling...") : (language === "ar" ? "تأكيد الإلغاء" : "Confirm Cancellation")}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Revision Draft Cancellation Confirmation Modal */}
+      <Modal
+        isOpen={isCancelRevisionModalOpen}
+        onClose={() => {
+          if (!isCancellingRevision) setIsCancelRevisionModalOpen(false);
+        }}
+        title={language === "ar" ? "إلغاء مسودة المراجعة" : "Cancel Revision Draft"}
+        description={
+          language === "ar"
+            ? "سيتم إلغاء مسودة المراجعة مع الاحتفاظ بها في السجل، ولن تتغير الوصفة الأصلية المعتمدة."
+            : "The revision draft will be cancelled while preserved in the audit log, and the approved original prescription will remain unchanged."
+        }
+        maxWidth="md"
+      >
+        <div className="space-y-4">
+          <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-950 space-y-1.5">
+            <div className="flex items-center gap-2 font-black text-amber-900">
+              <AlertTriangle className="w-4 h-4 text-amber-600" />
+              <span>{language === "ar" ? "تأكيد إلغاء المسودة" : "Confirm Draft Cancellation"}</span>
+            </div>
+            <p className="leading-relaxed">
+              {language === "ar"
+                ? "سيتم إلغاء مسودة المراجعة مع الاحتفاظ بها في السجل، ولن تتغير الوصفة الأصلية المعتمدة."
+                : "The revision draft will be cancelled while preserved in the audit log, and the approved original prescription will remain unchanged."}
+            </p>
+          </div>
+
+          {isDirty && (
+            <div
+              className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 font-semibold flex items-center gap-2"
+              data-testid="unsaved-changes-cancel-warning"
+            >
+              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>
+                {language === "ar"
+                  ? "تنبيه: توجد تعديلات غير محفوظة في هذه المسودة، وسيتم تجاهلها ولن تُعتمد."
+                  : "Notice: There are unsaved modifications in this draft which will be discarded and not approved."}
+              </span>
+            </div>
+          )}
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={isCancellingRevision}
+              onClick={() => setIsCancelRevisionModalOpen(false)}
+              data-testid="cancel-revision-back-btn"
+            >
+              {language === "ar" ? "رجوع" : "Back"}
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              disabled={isCancellingRevision}
+              onClick={handleConfirmCancelRevision}
+              data-testid="confirm-cancel-revision-draft-btn"
+              className="bg-rose-600 hover:bg-rose-700 text-white font-bold gap-1.5"
+            >
+              <Ban className="w-4 h-4" />
+              <span>
+                {isCancellingRevision
+                  ? (language === "ar" ? "جاري الإلغاء..." : "Cancelling...")
+                  : (language === "ar" ? "تأكيد إلغاء المسودة" : "Confirm Draft Cancellation")}
+              </span>
             </Button>
           </div>
         </div>

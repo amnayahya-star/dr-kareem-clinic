@@ -667,6 +667,10 @@ export async function fetchPrescriptionByVisitId(
       if (activeDraft) return activeDraft;
       const activeIssued = matched.find((r) => r.status === "issued");
       if (activeIssued) return activeIssued;
+      const nonCancelled = matched.filter((r) => r.status !== "cancelled");
+      if (nonCancelled.length > 0) {
+        return nonCancelled.sort((a, b) => (b.revision_number || 1) - (a.revision_number || 1))[0];
+      }
       return matched.sort((a, b) => (b.revision_number || 1) - (a.revision_number || 1))[0];
     }
     const mockVisit = MOCK_VISITS.find((v) => v.id === visitId);
@@ -727,12 +731,17 @@ export async function fetchPrescriptionByVisitId(
     return null;
   }
 
-  // Doctor workstation: prioritize active draft, then issued, then latest row
+  // Doctor workstation: prioritize active draft, then issued, then latest non-cancelled row
   const activeDraft = rows.find((r: any) => r.status === "draft");
   if (activeDraft) return mapSupabasePrescriptionRow(activeDraft);
 
   const activeIssued = rows.find((r: any) => r.status === "issued");
   if (activeIssued) return mapSupabasePrescriptionRow(activeIssued);
+
+  const nonCancelled = rows.filter((r: any) => r.status !== "cancelled");
+  if (nonCancelled.length > 0) {
+    return mapSupabasePrescriptionRow(nonCancelled[0]);
+  }
 
   return mapSupabasePrescriptionRow(rows[0]);
 }
@@ -872,6 +881,110 @@ export async function createPrescriptionRevision(prescriptionId: string, reason:
   }
 
   return created;
+}
+
+export interface CancelPrescriptionRevisionResult {
+  cancelled_prescription_id: string;
+  fallback_prescription_id: string | null;
+  visit_id: string;
+  status: "cancelled";
+}
+
+/**
+ * 6.4 Cancel a prescription revision draft (Doctor only)
+ * Safely cancels a draft revision (revision_number > 1) without deleting medical records or altering the original approved prescription.
+ */
+export async function cancelPrescriptionRevision(
+  prescriptionId: string
+): Promise<CancelPrescriptionRevisionResult> {
+  if (!prescriptionId || !prescriptionId.trim()) {
+    throw new Error("معرف الوصفة الطبية إلزامي لإلغاء مسودة المراجعة");
+  }
+
+  const cleanRxId = prescriptionId.trim();
+  const supabase = createClient();
+
+  if (!supabase || !isSupabaseConfigured()) {
+    const rx = IN_MEMORY_PRESCRIPTIONS.get(cleanRxId);
+    if (!rx) {
+      throw new Error("لم يتم العثور على الوصفة الطبية المحددة");
+    }
+
+    if (rx.status !== "draft") {
+      if (rx.status === "cancelled") {
+        throw new Error("الوصفة الطبية ملغاة بالفعل ولا يمكن إلغاؤها مرة أخرى");
+      }
+      if (rx.status === "issued") {
+        throw new Error("لا يمكن إلغاء وصفة طبية معتمدة وصادرة عبر هذا الإجراء؛ هذا الإجراء مخصص لإلغاء مسودات المراجعة فقط");
+      }
+      if (rx.status === "superseded") {
+        throw new Error("لا يمكن إلغاء وصفة طبية مستبدلة؛ سجل المراجعات التاريخي مقفل نهائياً");
+      }
+      throw new Error(`لا يمكن إلغاء الوصفة الطبية في حالتها الحالية (الحالة: ${rx.status})`);
+    }
+
+    if ((rx.revision_number || 1) <= 1) {
+      throw new Error("لا يمكن إلغاء النسخة الأصلية للوصفة الطبية؛ هذا الإجراء مخصص لمسودات المراجعة فقط");
+    }
+
+    if (!rx.replaces_prescription_id && !rx.original_prescription_id) {
+      throw new Error("لا يمكن إلغاء مسودة غير مرتبطة بوصفة سابقة معتمدة");
+    }
+
+    // Determine fallback prescription ID (the active issued prescription for the visit)
+    let fallbackId: string | null = null;
+    const allRx = Array.from(IN_MEMORY_PRESCRIPTIONS.values());
+
+    if (rx.replaces_prescription_id) {
+      const predecessor = IN_MEMORY_PRESCRIPTIONS.get(rx.replaces_prescription_id);
+      if (predecessor && predecessor.status === "issued") {
+        fallbackId = predecessor.id;
+      }
+    }
+
+    if (!fallbackId) {
+      const issuedRx = allRx.find((r) => r.visit_id === rx.visit_id && r.status === "issued");
+      if (issuedRx) {
+        fallbackId = issuedRx.id;
+      }
+    }
+
+    if (!fallbackId) {
+      fallbackId = rx.replaces_prescription_id || rx.original_prescription_id || null;
+    }
+
+    // Update draft to cancelled status without deleting items
+    rx.status = "cancelled";
+    rx.cancellation_reason = rx.cancellation_reason || "إلغاء مسودة المراجعة من قبل الطبيب";
+    rx.updated_at = new Date().toISOString();
+    IN_MEMORY_PRESCRIPTIONS.set(cleanRxId, rx);
+
+    return {
+      cancelled_prescription_id: rx.id,
+      fallback_prescription_id: fallbackId,
+      visit_id: rx.visit_id,
+      status: "cancelled",
+    };
+  }
+
+  const { data: authData, error: authErr } = await supabase.auth.getUser();
+  if (authErr || !authData?.user?.id) {
+    throw new Error("غير مصرح: يجب تسجيل الدخول لإلغاء مسودة المراجعة");
+  }
+
+  const { data, error: rpcErr } = await supabase.rpc("cancel_prescription_revision", {
+    p_prescription_id: cleanRxId,
+  });
+
+  if (rpcErr) {
+    throw new Error(rpcErr.message || "فشل إلغاء مسودة المراجعة في قاعدة البيانات");
+  }
+
+  if (!data) {
+    throw new Error("لم يتم استلام استجابة صالحة بعد إلغاء مسودة المراجعة");
+  }
+
+  return data as CancelPrescriptionRevisionResult;
 }
 
 /**
