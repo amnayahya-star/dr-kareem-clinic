@@ -49,8 +49,13 @@ export interface PediatricDosageRule {
   // Joined presentation data
   product_display_name?: string;
   product_brand_name?: string;
+  product_ndc?: string;
   label_dosage_and_administration?: string;
   label_pediatric_use?: string;
+  label_source_identifier?: string;
+  label_review_status?: string;
+  current_label_payload_hash?: string;
+  is_hash_matching?: boolean;
 }
 
 export type AllergyMatchType = 'none' | 'direct_drug_allergy' | 'suspected_history_mention';
@@ -59,7 +64,7 @@ export interface PediatricPatientContext {
   patientId: string;
   visitId: string;
   patientName: string;
-  dateOfBirth: string;
+  dateOfBirth: string | null;
   visitDate: string;
   ageInMonths: number;
   ageDays?: number;
@@ -156,4 +161,6 @@ export interface ProductPediatricEligibilityResult {
   numeratorMg?: number;
   denominatorMl?: number;
   activeIngredient?: string;
+  ruleStatus?: DosageRuleReviewStatus | 'none';
+  rule?: PediatricDosageRule | null;
 }

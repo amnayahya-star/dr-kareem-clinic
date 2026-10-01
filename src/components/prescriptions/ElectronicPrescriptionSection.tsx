@@ -48,6 +48,7 @@ import {
   Calculator,
 } from "lucide-react";
 import { PediatricDosageCalculatorModal } from "./PediatricDosageCalculatorModal";
+import { PediatricRuleReviewModal } from "./PediatricRuleReviewModal";
 import {
   fetchPediatricDosageRuleForProduct,
   getPediatricPatientContext,
@@ -58,6 +59,7 @@ import {
   PediatricPatientContext,
   ProductPediatricEligibilityResult,
 } from "@/types/pediatricDosage";
+import { UserRole } from "@/types/database";
 
 export interface ElectronicPrescriptionSectionProps {
   visitId: string;
@@ -66,6 +68,7 @@ export interface ElectronicPrescriptionSectionProps {
   initialPrescription?: Prescription | null;
   selectedPrescriptionId?: string | null;
   readOnly?: boolean;
+  currentUserRole?: UserRole | string | null;
   onPrescriptionChanged?: (rx: Prescription) => void;
   onSelectPrescriptionId?: (id: string | null) => void;
 }
@@ -166,8 +169,7 @@ export function isItemEligibleForPediatricAmoxicillin(it: PrescriptionItemInput)
     name.includes("كلاف") ||
     ing.includes("clav") ||
     ing.includes("كلاف") ||
-    name.includes("+") ||
-    name.includes("/");
+    name.includes("+");
 
   if (hasClav) return false;
 
@@ -203,6 +205,7 @@ export function ElectronicPrescriptionSection({
   initialPrescription,
   selectedPrescriptionId: propSelectedPrescriptionId,
   readOnly = false,
+  currentUserRole,
   onPrescriptionChanged,
   onSelectPrescriptionId,
 }: ElectronicPrescriptionSectionProps) {
@@ -267,6 +270,7 @@ export function ElectronicPrescriptionSection({
 
   // Pediatric Dosage Calculator State
   const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
+  const [isRuleReviewModalOpen, setIsRuleReviewModalOpen] = useState(false);
   const [calculatorItemIndex, setCalculatorItemIndex] = useState<number | null>(null);
   const [calculatorPatientContext, setCalculatorPatientContext] = useState<PediatricPatientContext | null>(null);
   const [calculatorRule, setCalculatorRule] = useState<PediatricDosageRule | null>(null);
@@ -585,6 +589,7 @@ export function ElectronicPrescriptionSection({
 
   // Open Pediatric Dosage Calculator for a specific prescription item
   const handleOpenPediatricCalculator = async (itemIndex: number) => {
+    setErrorMessage(null);
     const targetItem = items[itemIndex];
     if (!targetItem) return;
 
@@ -603,19 +608,9 @@ export function ElectronicPrescriptionSection({
     try {
       // 1. Fail-closed database verification of product eligibility & structured concentration
       const eligibility = await verifyPediatricProductEligibility(targetItem.catalog_product_id);
-      if (!eligibility.isEligible) {
-        setErrorMessage(
-          eligibility.reason ||
-            (language === "ar"
-              ? "هذا المستحضر غير مؤهل لحاسبة جرعات الأطفال"
-              : "Product is not eligible for pediatric dosage calculator")
-        );
-        setIsLoadingCalculator(false);
-        return;
-      }
       setCalculatorEligibility(eligibility);
 
-      // 2. Fetch patient clinical context (weight, age, allergies)
+      // 2. Fetch patient clinical context (weight, age, allergies) ahead of time
       let ctx: PediatricPatientContext | null = null;
       if (patientId && visitId) {
         try {
@@ -626,9 +621,38 @@ export function ElectronicPrescriptionSection({
       }
       setCalculatorPatientContext(ctx);
 
-      // 3. Fetch clinical dosage rule from openFDA label link
-      let rule: PediatricDosageRule | null = null;
-      if (targetItem.catalog_product_id) {
+      // 3. Dispatch based on pediatric dosage rule review status
+      if (eligibility.ruleStatus === "pending_review" || eligibility.ruleStatus === "needs_re_review") {
+        setCalculatorRule(eligibility.rule || null);
+        setIsRuleReviewModalOpen(true);
+        setIsLoadingCalculator(false);
+        return;
+      }
+
+      if (eligibility.ruleStatus === "rejected") {
+        setErrorMessage(
+          language === "ar"
+            ? "تم رفض قاعدة الجرعات السريرية لهذا المنتج؛ ولا يمكن استخدام الحاسبة."
+            : "Pediatric dosage rule for this product is rejected and cannot be used."
+        );
+        setIsLoadingCalculator(false);
+        return;
+      }
+
+      if (!eligibility.isEligible) {
+        setErrorMessage(
+          eligibility.reason ||
+            (language === "ar"
+              ? "هذا المستحضر غير مؤهل لحاسبة جرعات الأطفال أو لا تتوفر قاعدة معتمدة"
+              : "Product is not eligible for pediatric dosage calculator or no approved rule available")
+        );
+        setIsLoadingCalculator(false);
+        return;
+      }
+
+      // 4. Approved rule -> open calculator directly
+      let rule: PediatricDosageRule | null = eligibility.rule || null;
+      if (!rule && targetItem.catalog_product_id) {
         try {
           rule = await fetchPediatricDosageRuleForProduct(targetItem.catalog_product_id);
         } catch (err) {
@@ -647,6 +671,35 @@ export function ElectronicPrescriptionSection({
     } finally {
       setIsLoadingCalculator(false);
     }
+  };
+
+  // Handle rule approval from PediatricRuleReviewModal: seamless transition to calculator
+  const handleRuleApproved = async (approvedRule: PediatricDosageRule) => {
+    setCalculatorRule(approvedRule);
+    setIsRuleReviewModalOpen(false);
+
+    if (calculatorItemIndex !== null && items[calculatorItemIndex]?.catalog_product_id) {
+      try {
+        const updatedEligibility = await verifyPediatricProductEligibility(
+          items[calculatorItemIndex].catalog_product_id!
+        );
+        setCalculatorEligibility(updatedEligibility);
+      } catch (err) {
+        console.warn("Could not re-verify product eligibility after rule approval:", err);
+      }
+    }
+
+    if (patientId && visitId && !calculatorPatientContext) {
+      try {
+        const ctx = await getPediatricPatientContext(visitId, patientId);
+        setCalculatorPatientContext(ctx);
+      } catch (err) {
+        console.warn("Could not load pediatric patient context:", err);
+      }
+    }
+
+    // Automatically open the dosage calculator for the same medication without the doctor clicking again
+    setIsCalculatorOpen(true);
   };
 
   // Transfer calculated pediatric dosage result to draft prescription item
@@ -1963,6 +2016,26 @@ export function ElectronicPrescriptionSection({
           productEligibility={calculatorEligibility}
           onRuleUpdated={(updated) => setCalculatorRule(updated)}
           onApplyResult={handleApplyCalculatorResult}
+        />
+      )}
+
+      {/* Pediatric Rule Review & Approval Modal */}
+      {isRuleReviewModalOpen && calculatorRule && (
+        <PediatricRuleReviewModal
+          isOpen={isRuleReviewModalOpen}
+          onClose={() => setIsRuleReviewModalOpen(false)}
+          rule={calculatorRule}
+          currentUserRole={currentUserRole ?? (readOnly ? "receptionist" : "doctor")}
+          onRuleUpdated={(updated) => setCalculatorRule(updated)}
+          onRuleApproved={handleRuleApproved}
+          onViewDrugLabel={() => {
+            if (calculatorItemIndex !== null && items[calculatorItemIndex]?.catalog_product_id) {
+              setViewingLabelProduct({
+                id: items[calculatorItemIndex].catalog_product_id!,
+                name: items[calculatorItemIndex].medication_name,
+              });
+            }
+          }}
         />
       )}
     </Card>

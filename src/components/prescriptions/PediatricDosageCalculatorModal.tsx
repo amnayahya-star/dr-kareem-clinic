@@ -125,10 +125,19 @@ export function PediatricDosageCalculatorModal({
     );
   }, [rule, targetMgPerKgDay]);
 
+  const hasDob = Boolean(
+    patientContext?.dateOfBirth &&
+    patientContext.dateOfBirth.trim() &&
+    patientContext.ageFormatted !== 'تاريخ غير صالح'
+  );
+  const hasWeight = Boolean(patientContext?.weightKg && patientContext.weightKg > 0);
+
   // Dynamic Calculation Result with clinical rounding analysis
   const calculationResult: PediatricCalculationResult | null = useMemo(() => {
     if (
       !patientContext ||
+      !hasDob ||
+      !hasWeight ||
       !patientContext.weightKg ||
       patientContext.weightKg <= 0 ||
       !eligibility.isEligible ||
@@ -152,17 +161,17 @@ export function PediatricDosageCalculatorModal({
     } catch {
       return null;
     }
-  }, [patientContext, targetMgPerKgDay, dosesPerDay, concentrationDetails, isTargetWithinBounds, eligibility, rule]);
+  }, [patientContext, hasDob, hasWeight, targetMgPerKgDay, dosesPerDay, concentrationDetails, isTargetWithinBounds, eligibility, rule]);
 
   if (!isOpen) return null;
 
   const isRuleApproved = rule?.review_status === 'approved';
-  const hasWeight = Boolean(patientContext?.weightKg && patientContext.weightKg > 0);
   const hasAllergy = Boolean(patientContext?.hasPenicillinOrAmoxicillinAllergy);
 
   // Can apply only when rule is approved, eligible, math valid, allergy acknowledged
   const canApply =
     isRuleApproved &&
+    hasDob &&
     hasWeight &&
     eligibility.isEligible &&
     isTargetWithinBounds &&
@@ -223,7 +232,7 @@ export function PediatricDosageCalculatorModal({
         description="أداة حساب رياضي مساعدة للطبيب تعتمد على وزن وعمر الطفل والتركيز المنظم لنشرة FDA المعتمدة."
         maxWidth="xl"
       >
-        <div className="space-y-4 text-xs text-slate-700">
+        <div className="space-y-4 text-xs text-slate-700" data-testid="pediatric-dosage-calculator-modal">
           {/* 1. Patient Clinical Vitals & Drug Concentration Context */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {/* Patient Context Card */}
@@ -373,8 +382,40 @@ export function PediatricDosageCalculatorModal({
             </div>
           )}
 
+          {/* Missing DOB Banner */}
+          {isRuleApproved && !hasDob && (
+            <div
+              className="p-3.5 bg-amber-50 border border-amber-300 rounded-2xl text-xs text-amber-950 font-bold flex items-start gap-2.5"
+              data-testid="missing-dob-banner"
+            >
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <span className="block font-black text-amber-900">تاريخ ميلاد الطفل غير متوفر:</span>
+                <p className="font-normal text-[11px] leading-relaxed">
+                  لا يمكن التحقق من أهلية الطفل أو حساب الجرعة لعدم توفر تاريخ الميلاد في ملف المريض. يرجى إدخال تاريخ الميلاد أولاً في الملف الشخصي.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Missing Weight Banner */}
+          {isRuleApproved && !hasWeight && (
+            <div
+              className="p-3.5 bg-rose-50 border border-rose-300 rounded-2xl text-xs text-rose-950 font-bold flex items-start gap-2.5"
+              data-testid="missing-weight-banner"
+            >
+              <Scale className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <span className="block font-black text-rose-900">وزن الطفل مطلوب:</span>
+                <p className="font-normal text-[11px] leading-relaxed">
+                  لا يمكن تشغيل الحاسبة بدون قياس وتسجيل وزن الطفل بالكيلوغرام في الزيارة الحالية. لا يتم استخدام أوزان افتراضية.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* 3. Age Eligibility Halt Banner (<= 3 months) */}
-          {isRuleApproved && eligibility.ageBlocked && (
+          {isRuleApproved && hasDob && eligibility.ageBlocked && (
             <div
               className="p-3.5 bg-amber-50 border border-amber-300 rounded-2xl text-xs text-amber-950 font-bold flex items-start gap-2.5"
               data-testid="age-unsupported-banner"
@@ -391,7 +432,7 @@ export function PediatricDosageCalculatorModal({
           )}
 
           {/* 4. Weight Eligibility Halt Banner (>= 40 kg or missing) */}
-          {isRuleApproved && !eligibility.ageBlocked && eligibility.weightBlocked && (
+          {isRuleApproved && hasWeight && !eligibility.ageBlocked && eligibility.weightBlocked && (
             <div
               className="p-3.5 bg-rose-50 border border-rose-300 rounded-2xl text-xs text-rose-950 font-bold flex items-start gap-2.5"
               data-testid="weight-blocked-banner"

@@ -107,6 +107,11 @@ export async function fetchPediatricDosageRuleForProduct(
         updated_at: new Date().toISOString(),
         product_display_name: 'Amoxicillin 250 MG / 5 ML Oral Suspension',
         product_brand_name: 'Amoxil',
+        product_ndc: '50090-6351',
+        label_source_identifier: '50090-6351',
+        label_review_status: 'pending_review',
+        current_label_payload_hash: 'eb31b635601ab0574bc6a91dc27e3255568cc94cb2ba223de6352de7d13e46c0',
+        is_hash_matching: true,
       };
     }
 
@@ -119,9 +124,13 @@ export async function fetchPediatricDosageRuleForProduct(
       *,
       drug_products:product_id (
         display_name,
-        brand_name
+        brand_name,
+        source_system,
+        source_identifier
       ),
       drug_labels:drug_label_id (
+        id,
+        source_identifier,
         dosage_and_administration,
         pediatric_use,
         payload_hash,
@@ -143,8 +152,18 @@ export async function fetchPediatricDosageRuleForProduct(
     ...data,
     product_display_name: data.drug_products?.display_name,
     product_brand_name: data.drug_products?.brand_name,
+    product_ndc: data.drug_products?.source_identifier,
     label_dosage_and_administration: data.drug_labels?.dosage_and_administration,
     label_pediatric_use: data.drug_labels?.pediatric_use,
+    label_source_identifier: data.drug_labels?.source_identifier,
+    label_effective_time: data.drug_labels?.effective_time || data.label_effective_time,
+    label_review_status: data.drug_labels?.review_status,
+    current_label_payload_hash: data.drug_labels?.payload_hash,
+    is_hash_matching: Boolean(
+      data.label_payload_hash &&
+      data.drug_labels?.payload_hash &&
+      data.label_payload_hash === data.drug_labels?.payload_hash
+    ),
   };
 }
 
@@ -517,7 +536,32 @@ export async function verifyPediatricProductEligibility(
       product_id,
       drug_label_id,
       review_status,
-      label_payload_hash
+      label_payload_hash,
+      active_ingredient,
+      dosage_form,
+      route,
+      min_age_value,
+      min_age_unit,
+      min_age_inclusive,
+      max_age_value,
+      max_age_unit,
+      max_age_inclusive,
+      min_weight_kg,
+      min_weight_inclusive,
+      max_weight_kg,
+      max_weight_inclusive,
+      min_dose_mg_per_kg_day,
+      max_dose_mg_per_kg_day,
+      allowed_frequencies,
+      source_reference,
+      source_excerpt,
+      label_effective_time,
+      reviewed_by,
+      reviewed_at,
+      review_notes,
+      approved_snapshot,
+      created_at,
+      updated_at
     `)
     .eq('product_id', cleanId);
 
@@ -528,15 +572,15 @@ export async function verifyPediatricProductEligibility(
     };
   }
 
-  const rule = (rules || []).find((r: any) => r.product_id === prod.id) || null;
+  const rawRule = (rules || []).find((r: any) => r.product_id === prod.id) || null;
 
   // 5. استعلام نشرة openFDA المرتبطة بالقاعدة للتأكد من مطابقة الهاش الرقمي
-  let label: { id: string; product_id: string; payload_hash: string } | null = null;
-  if (rule && rule.drug_label_id) {
+  let label: any = null;
+  if (rawRule && rawRule.drug_label_id) {
     const { data: labelData, error: labelError } = await supabase
       .from('drug_labels')
-      .select('id, product_id, payload_hash')
-      .eq('id', rule.drug_label_id)
+      .select('id, product_id, payload_hash, source_identifier, effective_time, review_status, dosage_and_administration, pediatric_use')
+      .eq('id', rawRule.drug_label_id)
       .maybeSingle();
 
     if (labelError) {
@@ -547,6 +591,25 @@ export async function verifyPediatricProductEligibility(
     }
     label = labelData || null;
   }
+
+  const enrichedRule: PediatricDosageRule | null = rawRule
+    ? {
+        ...rawRule,
+        product_display_name: prod.display_name,
+        product_ndc: prod.source_identifier,
+        label_source_identifier: label?.source_identifier,
+        label_dosage_and_administration: label?.dosage_and_administration,
+        label_pediatric_use: label?.pediatric_use,
+        label_effective_time: label?.effective_time || rawRule.label_effective_time,
+        label_review_status: label?.review_status,
+        current_label_payload_hash: label?.payload_hash,
+        is_hash_matching: Boolean(
+          rawRule.label_payload_hash &&
+          label?.payload_hash &&
+          rawRule.label_payload_hash === label?.payload_hash
+        ),
+      }
+    : null;
 
   // 6. التحقق السريري الحاسم Fail-Closed
   return verifyProductPediatricEligibilityPure({
@@ -563,7 +626,7 @@ export async function verifyPediatricProductEligibility(
         strength_denominator_unit: primaryRel.strength_denominator_unit,
       },
     ],
-    rule,
+    rule: enrichedRule,
     label,
   });
 }

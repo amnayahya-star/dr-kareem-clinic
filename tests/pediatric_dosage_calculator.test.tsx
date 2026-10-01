@@ -1,5 +1,5 @@
 import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import fs from 'fs';
 import path from 'path';
@@ -22,6 +22,7 @@ import {
   getPediatricPatientContext,
   _setInMemoryPediatricRule,
   _setInMemoryProduct,
+  _resetInMemoryPediatricRules,
   verifyPediatricProductEligibility,
 } from '../src/services/pediatricDosageService';
 
@@ -29,6 +30,8 @@ import {
   ElectronicPrescriptionSection,
   isItemEligibleForPediatricAmoxicillin,
 } from '../src/components/prescriptions/ElectronicPrescriptionSection';
+import * as prescriptionService from '../src/services/prescriptionService';
+import { _resetInMemoryPrescriptions } from '../src/services/prescriptionService';
 
 import { PediatricDosageCalculatorModal } from '../src/components/prescriptions/PediatricDosageCalculatorModal';
 import { PediatricRuleReviewModal } from '../src/components/prescriptions/PediatricRuleReviewModal';
@@ -581,6 +584,7 @@ describe('Safe Pediatric Dosage Calculator - Phase 1 (حاسبة جرعات ال
             isOpen={true}
             onClose={vi.fn()}
             rule={pendingRule}
+            currentUserRole="doctor"
             onRuleSaved={handleRuleSaved}
           />
         </LanguageProvider>
@@ -596,9 +600,13 @@ describe('Safe Pediatric Dosage Calculator - Phase 1 (حاسبة جرعات ال
         target: { value: 'تمت المراجعة والاعتماد سريريًا لحالات التهاب الأذن الوسطى والجهاز التنفسي.' },
       });
 
-      // Click Approve
+      // Click Approve - opens confirmation modal
       const approveBtn = screen.getByTestId('approve-rule-btn');
       fireEvent.click(approveBtn);
+
+      // Confirm approval in confirmation modal
+      const confirmApproveBtn = screen.getByTestId('confirm-approve-rule-btn');
+      fireEvent.click(confirmApproveBtn);
 
       await waitFor(() => {
         expect(handleRuleSaved).toHaveBeenCalledWith(
@@ -1595,13 +1603,566 @@ describe('Safe Pediatric Dosage Calculator - Phase 1 (حاسبة جرعات ال
       // Verify that age displays invalid / uncalculated
       expect(screen.getByText(/تاريخ غير صالح/)).toBeDefined();
 
-      // Verify that age halt banner appears
-      expect(screen.getByTestId('age-unsupported-banner')).toBeDefined();
-      expect(screen.getByText(/حدود الفئة العمرية المدعومة/)).toBeDefined();
+      // Verify that missing DOB banner and missing weight banner appear
+      expect(screen.getByTestId('missing-dob-banner')).toBeDefined();
+      expect(screen.getByText(/تاريخ ميلاد الطفل غير متوفر/)).toBeDefined();
+      expect(screen.getByTestId('missing-weight-banner')).toBeDefined();
+      expect(screen.getByText(/وزن الطفل مطلوب/)).toBeDefined();
 
       // Verify database error message is NOT present
       expect(screen.queryByText(/column.*does not exist/i)).toBeNull();
       expect(screen.queryByText(/فشل استعلام قاعدة البيانات/)).toBeNull();
+    });
+  });
+
+  // ============================================================================
+  // 8. Clinical Review Workflow & Rule Approval Dispatching (مسار مراجعة واعتماد القواعد السريرية)
+  // ============================================================================
+  describe('8. Clinical Review Workflow & Rule Approval Dispatching (مسار مراجعة واعتماد القواعد السريرية)', () => {
+    const validProductId = '00000000-0000-0000-0000-000000000102';
+    const validProduct = {
+      id: validProductId,
+      source_system: 'FDA_NDC',
+      source_identifier: '50090-6351',
+      display_name: 'Amoxicillin 250 MG / 5 ML Oral Suspension',
+      brand_name: 'Amoxicillin',
+      dosage_form: 'suspension',
+      route: 'oral',
+    };
+    const validIngredients = [
+      {
+        product_id: validProductId,
+        ingredient_id: '00000000-0000-0000-0000-000000000001',
+        strength_numerator_value: 250,
+        strength_numerator_unit: 'mg',
+        strength_denominator_value: 5,
+        strength_denominator_unit: 'ml',
+        display_order: 1,
+        active_ingredient: 'Amoxicillin',
+      },
+    ];
+    const baseLabel = {
+      id: '00000000-0000-0000-0000-000000000201',
+      product_id: validProductId,
+      source_identifier: '50090-6351',
+      payload_hash: 'hash-amox-label-v1',
+      dosage_and_administration: 'Pediatric Patients: 20 to 40 mg/kg/day in divided doses every 8 to 12 hours.',
+      pediatric_use: 'Pediatric Patients: Safety and effectiveness of amoxicillin in pediatric patients...',
+      effective_time: '20240430',
+      review_status: 'approved',
+    };
+
+    const makeRule = (status: 'pending_review' | 'needs_re_review' | 'approved' | 'rejected', hashMismatch = false): PediatricDosageRule => ({
+      id: `00000000-0000-0000-0000-00000000030${status === 'approved' ? '1' : status === 'pending_review' ? '2' : status === 'needs_re_review' ? '3' : '4'}`,
+      product_id: validProductId,
+      drug_label_id: baseLabel.id,
+      active_ingredient: 'Amoxicillin',
+      dosage_form: 'suspension',
+      route: 'oral',
+      min_age_value: 3.0,
+      min_age_unit: 'months',
+      min_age_inclusive: false,
+      max_weight_kg: 40.0,
+      max_weight_inclusive: false,
+      min_dose_mg_per_kg_day: 20,
+      max_dose_mg_per_kg_day: 45,
+      allowed_frequencies: ['every 12 hours', 'every 8 hours'],
+      source_reference: 'openFDA 50090-6351',
+      source_excerpt: 'Pediatric Patients: 20 to 40 mg/kg/day in divided doses every 8 to 12 hours.',
+      label_payload_hash: hashMismatch ? 'hash-mismatch-xxx' : 'hash-amox-label-v1',
+      review_status: status,
+      product_display_name: 'Amoxicillin 250 MG / 5 ML Oral Suspension',
+      product_ndc: '50090-6351',
+      label_source_identifier: '50090-6351',
+      label_effective_time: '20240430',
+      label_review_status: 'approved',
+      current_label_payload_hash: 'hash-amox-label-v1',
+      is_hash_matching: !hashMismatch,
+      label_dosage_and_administration: 'Pediatric Patients: 20 to 40 mg/kg/day in divided doses every 8 to 12 hours.',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+
+    const standardInitialPrescription = {
+      id: 'rx-ped-review-test-1',
+      visit_id: 'visit-pediatric-calc-test',
+      patient_id: 'patient-sarah-1',
+      status: 'draft' as const,
+      revision_number: 1,
+      items: [
+        {
+          id: 'item-1',
+          prescription_id: 'rx-ped-review-test-1',
+          catalog_product_id: validProductId,
+          is_custom_medication: false,
+          medication_name: 'Amoxicillin 250 MG / 5 ML Oral Suspension',
+          active_ingredient: 'Amoxicillin',
+          strength: '250 mg / 5 mL',
+          dosage_form: 'suspension' as any,
+          dose: '',
+          route: 'oral',
+          frequency: 'every 12 hours',
+          duration: '7 days',
+          quantity: '1 bottle',
+          instructions: '',
+          display_order: 1,
+        },
+      ],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    let fetchRxSpy: any;
+
+    beforeEach(() => {
+      _resetInMemoryPediatricRules();
+      _resetInMemoryPrescriptions();
+      fetchRxSpy = vi.spyOn(prescriptionService, 'fetchPrescriptionByVisitId').mockResolvedValue(standardInitialPrescription as any);
+    });
+
+    afterEach(() => {
+      fetchRxSpy?.mockRestore();
+    });
+
+    it('1. Clicking calculate on item with pending_review rule opens PediatricRuleReviewModal (not calculator, no red error banner)', async () => {
+      const pendingRule = makeRule('pending_review');
+      _setInMemoryProduct(validProduct, validIngredients, pendingRule, baseLabel);
+
+      render(
+        <LanguageProvider>
+          <ElectronicPrescriptionSection
+            visitId="visit-pediatric-calc-test"
+            patientId="patient-sarah-1"
+            initialPrescription={standardInitialPrescription}
+            currentUserRole="doctor"
+          />
+        </LanguageProvider>
+      );
+
+      const calcBtn = screen.getByTestId('pediatric-calculator-btn-0');
+      fireEvent.click(calcBtn);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('pediatric-rule-review-modal')).toBeDefined();
+      });
+
+      // Verify calculator is NOT opened
+      expect(screen.queryByTestId('pediatric-dosage-calculator-modal')).toBeNull();
+
+      // Verify error banner is NOT displayed
+      expect(screen.queryByText(/قاعدة الجرعات غير معتمدة/)).toBeNull();
+    });
+
+    it('2. Clicking calculate on item with needs_re_review rule opens PediatricRuleReviewModal', async () => {
+      const needsReviewRule = makeRule('needs_re_review');
+      _setInMemoryProduct(validProduct, validIngredients, needsReviewRule, baseLabel);
+
+      render(
+        <LanguageProvider>
+          <ElectronicPrescriptionSection
+            visitId="visit-pediatric-calc-test"
+            patientId="patient-sarah-1"
+            initialPrescription={standardInitialPrescription}
+            currentUserRole="doctor"
+          />
+        </LanguageProvider>
+      );
+
+      const calcBtn = screen.getByTestId('pediatric-calculator-btn-0');
+      fireEvent.click(calcBtn);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('pediatric-rule-review-modal')).toBeDefined();
+      });
+
+      expect(screen.queryByTestId('pediatric-dosage-calculator-modal')).toBeNull();
+    });
+
+    it('3. Clicking calculate on item with approved rule opens PediatricDosageCalculatorModal directly', async () => {
+      const approvedRule = makeRule('approved');
+      _setInMemoryProduct(validProduct, validIngredients, approvedRule, baseLabel);
+
+      render(
+        <LanguageProvider>
+          <ElectronicPrescriptionSection
+            visitId="visit-pediatric-calc-test"
+            patientId="patient-sarah-1"
+            initialPrescription={standardInitialPrescription}
+            currentUserRole="doctor"
+          />
+        </LanguageProvider>
+      );
+
+      const calcBtn = screen.getByTestId('pediatric-calculator-btn-0');
+      fireEvent.click(calcBtn);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('pediatric-dosage-calculator-modal')).toBeDefined();
+      });
+
+      expect(screen.queryByTestId('pediatric-rule-review-modal')).toBeNull();
+    });
+
+    it('4. Clicking calculate on item with rejected rule blocks calculator and shows clear rejection message', async () => {
+      const rejectedRule = makeRule('rejected');
+      _setInMemoryProduct(validProduct, validIngredients, rejectedRule, baseLabel);
+
+      render(
+        <LanguageProvider>
+          <ElectronicPrescriptionSection
+            visitId="visit-pediatric-calc-test"
+            patientId="patient-sarah-1"
+            initialPrescription={standardInitialPrescription}
+            currentUserRole="doctor"
+          />
+        </LanguageProvider>
+      );
+
+      const calcBtn = screen.getByTestId('pediatric-calculator-btn-0');
+      fireEvent.click(calcBtn);
+
+      await waitFor(() => {
+        expect(screen.getByText(/تم رفض قاعدة الجرعات السريرية لهذا المنتج؛ ولا يمكن استخدام الحاسبة/)).toBeDefined();
+      });
+
+      expect(screen.queryByTestId('pediatric-rule-review-modal')).toBeNull();
+      expect(screen.queryByTestId('pediatric-dosage-calculator-modal')).toBeNull();
+    });
+
+    it('5. Clicking calculate on item with no rule blocks calculator and shows clear message', async () => {
+      _setInMemoryProduct(validProduct, validIngredients, null, baseLabel);
+
+      render(
+        <LanguageProvider>
+          <ElectronicPrescriptionSection
+            visitId="visit-pediatric-calc-test"
+            patientId="patient-sarah-1"
+            initialPrescription={standardInitialPrescription}
+            currentUserRole="doctor"
+          />
+        </LanguageProvider>
+      );
+
+      const calcBtn = screen.getByTestId('pediatric-calculator-btn-0');
+      fireEvent.click(calcBtn);
+
+      await waitFor(() => {
+        expect(screen.getByText(/لا توجد قاعدة جرعات مسجلة لهذا المنتج/)).toBeDefined();
+      });
+
+      expect(screen.queryByTestId('pediatric-rule-review-modal')).toBeNull();
+      expect(screen.queryByTestId('pediatric-dosage-calculator-modal')).toBeNull();
+    });
+
+    it('6. PediatricRuleReviewModal: strictly renders all required DB fields', () => {
+      const rule = makeRule('pending_review');
+
+      render(
+        <LanguageProvider>
+          <PediatricRuleReviewModal
+            isOpen={true}
+            onClose={vi.fn()}
+            rule={rule}
+            currentUserRole="doctor"
+            onViewDrugLabel={vi.fn()}
+          />
+        </LanguageProvider>
+      );
+
+      // Product identity
+      expect(screen.getByTestId('rule-product-name')).toBeDefined();
+      expect(screen.getByTestId('rule-product-ndc')).toBeDefined();
+      expect(screen.getByText(/NDC: 50090-6351/)).toBeDefined();
+      expect(screen.getByTestId('rule-active-ingredient')).toBeDefined();
+      expect(screen.getByTestId('rule-dosage-form')).toBeDefined();
+      expect(screen.getByTestId('rule-route')).toBeDefined();
+
+      // Clinical boundaries
+      expect(screen.getByTestId('min-age-input')).toBeDefined();
+      expect(screen.getByTestId('min-age-inclusive-note')).toBeDefined();
+      expect(screen.getByText(/عمر > 3 أشهر/)).toBeDefined();
+      expect(screen.getByTestId('max-weight-input')).toBeDefined();
+      expect(screen.getByTestId('max-weight-inclusive-note')).toBeDefined();
+      expect(screen.getByText(/وزن < 40 كغم/)).toBeDefined();
+      expect(screen.getByTestId('min-dose-input')).toBeDefined();
+      expect(screen.getByTestId('max-dose-input')).toBeDefined();
+
+      // Frequencies
+      expect(screen.getByTestId('rule-frequencies')).toBeDefined();
+      expect(screen.getByText(/every 12 hours/)).toBeDefined();
+
+      // openFDA label provenance
+      expect(screen.getByTestId('rule-label-id')).toBeDefined();
+      expect(screen.getByTestId('rule-effective-time')).toBeDefined();
+      expect(screen.getByTestId('rule-label-status')).toBeDefined();
+      expect(screen.getByTestId('hash-match-badge')).toBeDefined();
+      expect(screen.getByTestId('view-openfda-label-btn')).toBeDefined();
+    });
+
+    it('7. Doctor Role Enforcement: non-doctor (receptionist, admin) cannot approve rule', () => {
+      const rule = makeRule('pending_review');
+
+      // Test with receptionist
+      const { rerender } = render(
+        <LanguageProvider>
+          <PediatricRuleReviewModal
+            isOpen={true}
+            onClose={vi.fn()}
+            rule={rule}
+            currentUserRole="receptionist"
+          />
+        </LanguageProvider>
+      );
+
+      const approveBtn = screen.getByTestId('approve-rule-btn') as HTMLButtonElement;
+      expect(approveBtn.disabled).toBe(true);
+      expect(screen.getByTestId('non-doctor-warning')).toBeDefined();
+
+      // Test with admin
+      rerender(
+        <LanguageProvider>
+          <PediatricRuleReviewModal
+            isOpen={true}
+            onClose={vi.fn()}
+            rule={rule}
+            currentUserRole="admin"
+          />
+        </LanguageProvider>
+      );
+      const approveBtnAdmin = screen.getByTestId('approve-rule-btn') as HTMLButtonElement;
+      expect(approveBtnAdmin.disabled).toBe(true);
+      expect(screen.getByTestId('non-doctor-warning')).toBeDefined();
+    });
+
+    it('8. Hash Integrity Enforcement: hash mismatch blocks rule approval with warning', () => {
+      const mismatchRule = makeRule('pending_review', true);
+
+      render(
+        <LanguageProvider>
+          <PediatricRuleReviewModal
+            isOpen={true}
+            onClose={vi.fn()}
+            rule={mismatchRule}
+            currentUserRole="doctor"
+          />
+        </LanguageProvider>
+      );
+
+      expect(screen.getByTestId('hash-mismatch-badge')).toBeDefined();
+      expect(screen.getByTestId('hash-mismatch-warning')).toBeDefined();
+      const approveBtn = screen.getByTestId('approve-rule-btn') as HTMLButtonElement;
+      expect(approveBtn.disabled).toBe(true);
+    });
+
+    it('9. Confirmation Modal: approval requires explicit confirmation before calling service', async () => {
+      const rule = makeRule('pending_review');
+      const handleApproved = vi.fn();
+
+      render(
+        <LanguageProvider>
+          <PediatricRuleReviewModal
+            isOpen={true}
+            onClose={vi.fn()}
+            rule={rule}
+            currentUserRole="doctor"
+            onRuleApproved={handleApproved}
+          />
+        </LanguageProvider>
+      );
+
+      // Fill review notes
+      const notesInput = screen.getByTestId('rule-review-notes-input');
+      fireEvent.change(notesInput, { target: { value: 'ملاحظات اعتماد الطبيب' } });
+
+      // Click Approve button
+      const approveBtn = screen.getByTestId('approve-rule-btn');
+      fireEvent.click(approveBtn);
+
+      // Confirmation modal is open
+      expect(screen.getByTestId('confirm-approve-rule-modal')).toBeDefined();
+      expect(screen.getByTestId('confirm-approve-rule-btn')).toBeDefined();
+      expect(handleApproved).not.toHaveBeenCalled();
+
+      // Click cancel in confirmation modal
+      const cancelBtn = screen.getByTestId('cancel-approve-rule-btn');
+      fireEvent.click(cancelBtn);
+
+      expect(screen.queryByTestId('confirm-approve-rule-modal')).toBeNull();
+      expect(handleApproved).not.toHaveBeenCalled();
+    });
+
+    it('10. Seamless Transition: doctor approval updates rule, closes review modal, and automatically opens calculator without re-clicking', async () => {
+      const pendingRule = makeRule('pending_review');
+      _setInMemoryProduct(validProduct, validIngredients, pendingRule, baseLabel);
+
+      render(
+        <LanguageProvider>
+          <ElectronicPrescriptionSection
+            visitId="visit-pediatric-calc-test"
+            patientId="patient-sarah-1"
+            initialPrescription={standardInitialPrescription}
+            currentUserRole="doctor"
+          />
+        </LanguageProvider>
+      );
+
+      // Doctor clicks calculate on the item
+      const calcBtn = screen.getByTestId('pediatric-calculator-btn-0');
+      fireEvent.click(calcBtn);
+
+      // Review modal opens
+      await waitFor(() => {
+        expect(screen.getByTestId('pediatric-rule-review-modal')).toBeDefined();
+      });
+
+      // Doctor enters notes and clicks approve
+      const notesInput = screen.getByTestId('rule-review-notes-input');
+      fireEvent.change(notesInput, { target: { value: 'تم الاعتماد السريري الكامل' } });
+
+      const approveBtn = screen.getByTestId('approve-rule-btn');
+      fireEvent.click(approveBtn);
+
+      // Doctor confirms approval
+      const confirmApproveBtn = screen.getByTestId('confirm-approve-rule-btn');
+      fireEvent.click(confirmApproveBtn);
+
+      // Review modal closes AND calculator modal automatically opens!
+      await waitFor(() => {
+        expect(screen.queryByTestId('pediatric-rule-review-modal')).toBeNull();
+        expect(screen.getByTestId('pediatric-dosage-calculator-modal')).toBeDefined();
+      });
+    });
+
+    it('11. Clinical Safety: missing date of birth displays missing-dob-banner, never defaults to 0 months, and blocks calculation', () => {
+      const approvedRule = makeRule('approved');
+      const missingDobContext: PediatricPatientContext = {
+        patientId: 'p-no-dob',
+        visitId: 'v-no-dob',
+        patientName: 'سارة خالد',
+        dateOfBirth: null,
+        visitDate: '2026-10-01',
+        ageInMonths: 0,
+        ageDays: 0,
+        ageFormatted: 'تاريخ غير صالح',
+        isAgeSupportedByCalculator: false,
+        weightKg: 12.0,
+        weightSource: 'current_visit',
+        weightDate: '2026-10-01',
+        weightWarning: null,
+        hasPenicillinOrAmoxicillinAllergy: false,
+        allergyMatchType: 'none',
+        rawAllergiesText: null,
+      };
+
+      render(
+        <LanguageProvider>
+          <PediatricDosageCalculatorModal
+            isOpen={true}
+            onClose={vi.fn()}
+            patientContext={missingDobContext}
+            rule={approvedRule}
+            productDisplayName="Amoxicillin 250 MG / 5 ML Oral Suspension"
+            rawStrengthText="250 mg / 5 mL"
+            onRuleUpdated={vi.fn()}
+            onApplyResult={vi.fn()}
+          />
+        </LanguageProvider>
+      );
+
+      expect(screen.getByTestId('missing-dob-banner')).toBeDefined();
+      expect(screen.getByText(/تاريخ ميلاد الطفل غير متوفر/)).toBeDefined();
+
+      // Calculation should be blocked
+      const applyBtn = screen.getByTestId('apply-pediatric-dose-btn') as HTMLButtonElement;
+      expect(applyBtn.disabled).toBe(true);
+    });
+
+    it('12. Clinical Safety: missing weight displays missing-weight-banner, never defaults to 0 kg, and blocks calculation', () => {
+      const approvedRule = makeRule('approved');
+      const missingWeightContext: PediatricPatientContext = {
+        patientId: 'p-no-wt',
+        visitId: 'v-no-wt',
+        patientName: 'سارة خالد',
+        dateOfBirth: '2024-04-01',
+        visitDate: '2026-10-01',
+        ageInMonths: 30,
+        ageDays: 0,
+        ageFormatted: '30 شهر',
+        isAgeSupportedByCalculator: true,
+        weightKg: null,
+        weightSource: 'none',
+        weightDate: undefined,
+        weightWarning: 'لا يوجد وزن مسجل',
+        hasPenicillinOrAmoxicillinAllergy: false,
+        allergyMatchType: 'none',
+        rawAllergiesText: null,
+      };
+
+      render(
+        <LanguageProvider>
+          <PediatricDosageCalculatorModal
+            isOpen={true}
+            onClose={vi.fn()}
+            patientContext={missingWeightContext}
+            rule={approvedRule}
+            productDisplayName="Amoxicillin 250 MG / 5 ML Oral Suspension"
+            rawStrengthText="250 mg / 5 mL"
+            onRuleUpdated={vi.fn()}
+            onApplyResult={vi.fn()}
+          />
+        </LanguageProvider>
+      );
+
+      expect(screen.getByTestId('missing-weight-banner')).toBeDefined();
+      expect(screen.getByText(/وزن الطفل مطلوب/)).toBeDefined();
+
+      // Calculation should be blocked
+      const applyBtn = screen.getByTestId('apply-pediatric-dose-btn') as HTMLButtonElement;
+      expect(applyBtn.disabled).toBe(true);
+    });
+
+    it('13. Prescription Safety: approving a rule does NOT auto-save or auto-issue prescription, preserving unsaved draft state', async () => {
+      const pendingRule = makeRule('pending_review');
+      _setInMemoryProduct(validProduct, validIngredients, pendingRule, baseLabel);
+
+      const handlePrescriptionChanged = vi.fn();
+
+      render(
+        <LanguageProvider>
+          <ElectronicPrescriptionSection
+            visitId="visit-pediatric-calc-test"
+            patientId="patient-sarah-1"
+            initialPrescription={standardInitialPrescription}
+            currentUserRole="doctor"
+            onPrescriptionChanged={handlePrescriptionChanged}
+          />
+        </LanguageProvider>
+      );
+
+      // Open review modal and approve rule
+      fireEvent.click(screen.getByTestId('pediatric-calculator-btn-0'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('pediatric-rule-review-modal')).toBeDefined();
+      });
+
+      const notesInput = screen.getByTestId('rule-review-notes-input');
+      fireEvent.change(notesInput, { target: { value: 'ملاحظات اعتماد الطبيب' } });
+
+      fireEvent.click(screen.getByTestId('approve-rule-btn'));
+      fireEvent.click(screen.getByTestId('confirm-approve-rule-btn'));
+
+      // Calculator opens
+      await waitFor(() => {
+        expect(screen.getByTestId('pediatric-dosage-calculator-modal')).toBeDefined();
+      });
+
+      // Verify prescription is still draft and NOT issued
+      expect(screen.getByTestId('rx-revision-badge')).toBeDefined();
+      expect(screen.queryByTestId('rx-active-issued-badge')).toBeNull();
+
+      // onPrescriptionChanged was NOT called with issued status
+      expect(handlePrescriptionChanged).not.toHaveBeenCalled();
     });
   });
 });

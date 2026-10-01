@@ -646,6 +646,8 @@ export function verifyProductPediatricEligibilityPure(
   if (!rule || !rule.id) {
     return {
       isEligible: false,
+      ruleStatus: 'none',
+      rule: null,
       reason: 'لا توجد قاعدة جرعات مسجلة لهذا المنتج',
     };
   }
@@ -653,17 +655,23 @@ export function verifyProductPediatricEligibilityPure(
   if (rule.product_id !== product.id) {
     return {
       isEligible: false,
+      ruleStatus: 'none',
+      rule: null,
       reason: 'قاعدة الجرعات تخص منتجاً آخر ولا تطابق معرف المنتج المختار',
     };
   }
 
-  // 10. التحقق من حالة مراجعة القاعدة (يجب أن تكون approved حصراً)
+  // 10. التحقق من حالة مراجعة القاعدة (يجب أن تكون approved حصراً للحساب)
   if (rule.review_status !== 'approved') {
     return {
       isEligible: false,
+      ruleStatus: rule.review_status as any,
+      rule: rule as any,
       reason:
         rule.review_status === 'needs_re_review'
           ? 'قاعدة الجرعات تتطلب إعادة مراجعة واعتماد من الطبيب لتحديث النشرة الرسمية'
+          : rule.review_status === 'rejected'
+          ? 'تم رفض قاعدة الجرعات السريرية لهذا المنتج؛ ولا يمكن استخدام الحاسبة.'
           : `قاعدة الجرعات غير معتمدة (حالتها الحالية: ${rule.review_status})`,
     };
   }
@@ -673,12 +681,16 @@ export function verifyProductPediatricEligibilityPure(
     if (label.product_id !== product.id || label.id !== rule.drug_label_id) {
       return {
         isEligible: false,
+        ruleStatus: 'needs_re_review',
+        rule: rule as any,
         reason: 'عدم تطابق أمني بين سجل النشرة الرسمية وقاعدة الجرعات',
       };
     }
     if (label.payload_hash !== rule.label_payload_hash) {
       return {
         isEligible: false,
+        ruleStatus: 'needs_re_review',
+        rule: rule as any,
         reason: 'تم تعديل نشرة الدواء الرسمية المنبع وتغير الهاش؛ القاعدة تتطلب إعادة اعتماد',
       };
     }
@@ -688,9 +700,11 @@ export function verifyProductPediatricEligibilityPure(
 
   return {
     isEligible: true,
+    ruleStatus: 'approved',
+    rule: rule as any,
     concentrationMgPerMl: conc,
     numeratorMg: numVal,
     denominatorMl: denVal,
-    activeIngredient: ing.active_ingredient || 'Amoxicillin',
+    activeIngredient: activeIngName || 'Amoxicillin',
   };
 }
