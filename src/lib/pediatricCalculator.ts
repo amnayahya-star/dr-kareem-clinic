@@ -578,13 +578,19 @@ export function verifyProductPediatricEligibilityPure(
   }
 
   const ing = ingredients[0];
-  const activeIng = (ing.active_ingredient || '').toLowerCase().trim();
+  const activeIngName = (
+    ing.normalized_name ||
+    ing.preferred_name ||
+    ing.active_ingredient ||
+    ''
+  ).trim();
+  const activeIng = activeIngName.toLowerCase();
 
   // 6. التحقق من أن المادة الفعالة هي Amoxicillin
   if (!activeIng.includes('amoxicillin') && !activeIng.includes('أموكسيسيلين')) {
     return {
       isEligible: false,
-      reason: `المادة الفعالة (${ing.active_ingredient}) ليست Amoxicillin`,
+      reason: `المادة الفعالة (${activeIngName || 'غير محددة'}) ليست Amoxicillin`,
     };
   }
 

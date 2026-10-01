@@ -1144,4 +1144,464 @@ describe('Safe Pediatric Dosage Calculator - Phase 1 (حاسبة جرعات ال
       expect(res.activeIngredient).toBe('Amoxicillin');
     });
   });
+
+  // ============================================================================
+  // 7. Schema & Multi-Step Ingredient Query Regression Tests (Fix column active_ingredient does not exist)
+  // ============================================================================
+  describe('7. Schema & Multi-Step Ingredient Query Regression Tests (No column active_ingredient)', () => {
+    const validProdId = '00000000-0000-0000-0000-000000000102';
+    const validIngredientId = '11111111-2222-3333-4444-555555555555';
+    const validRuleId = '22222222-3333-4444-5555-666666666666';
+    const validLabelId = '33333333-4444-5555-6666-777777777777';
+
+    const dbProduct = {
+      id: validProdId,
+      source_system: 'FDA_NDC',
+      source_identifier: '50090-6351',
+      dosage_form: 'suspension',
+      route: 'oral',
+      display_name: 'Amoxicillin 250 MG / 5 ML Oral Suspension',
+    };
+
+    const dbProductIngredients = [
+      {
+        id: 'rel-1',
+        product_id: validProdId,
+        ingredient_id: validIngredientId,
+        strength_numerator_value: 250,
+        strength_numerator_unit: 'mg',
+        strength_denominator_value: 5,
+        strength_denominator_unit: 'mL',
+        display_order: 1,
+      },
+    ];
+
+    const dbIngredient = {
+      id: validIngredientId,
+      preferred_name: 'Amoxicillin',
+      normalized_name: 'amoxicillin',
+    };
+
+    const dbRules = [
+      {
+        id: validRuleId,
+        product_id: validProdId,
+        drug_label_id: validLabelId,
+        review_status: 'approved',
+        label_payload_hash: 'eb31b635601ab0574bc6a91dc27e3255568cc94cb2ba223de6352de7d13e46c0',
+      },
+    ];
+
+    const dbLabel = {
+      id: validLabelId,
+      product_id: validProdId,
+      payload_hash: 'eb31b635601ab0574bc6a91dc27e3255568cc94cb2ba223de6352de7d13e46c0',
+    };
+
+    function setupSupabaseMock(overrides?: {
+      prodData?: any;
+      prodError?: any;
+      dpiData?: any;
+      dpiError?: any;
+      ingData?: any;
+      ingError?: any;
+      rulesData?: any;
+      rulesError?: any;
+      labelData?: any;
+      labelError?: any;
+    }) {
+      mockIsSupabaseConfigured.mockReturnValue(true);
+
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'drug_products') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: overrides?.prodData !== undefined ? overrides.prodData : dbProduct,
+                  error: overrides?.prodError || null,
+                }),
+              }),
+            }),
+          };
+        }
+
+        if (table === 'drug_product_ingredients') {
+          return {
+            select: vi.fn().mockImplementation((cols: string) => ({
+              eq: vi.fn().mockReturnValue({
+                order: vi.fn().mockResolvedValue({
+                  data: overrides?.dpiData !== undefined ? overrides.dpiData : dbProductIngredients,
+                  error: overrides?.dpiError || null,
+                }),
+              }),
+            })),
+          };
+        }
+
+        if (table === 'drug_ingredients') {
+          return {
+            select: vi.fn().mockImplementation((cols: string) => ({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: overrides?.ingData !== undefined ? overrides.ingData : dbIngredient,
+                  error: overrides?.ingError || null,
+                }),
+              }),
+            })),
+          };
+        }
+
+        if (table === 'pediatric_dosage_rules') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockResolvedValue({
+                data: overrides?.rulesData !== undefined ? overrides.rulesData : dbRules,
+                error: overrides?.rulesError || null,
+              }),
+            }),
+          };
+        }
+
+        if (table === 'drug_labels') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: overrides?.labelData !== undefined ? overrides.labelData : dbLabel,
+                  error: overrides?.labelError || null,
+                }),
+              }),
+            }),
+          };
+        }
+
+        return {
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+        };
+      });
+    }
+
+    it('1. Does NOT request active_ingredient from drug_product_ingredients and includes required columns', async () => {
+      let requestedDpiColumns = '';
+      mockIsSupabaseConfigured.mockReturnValue(true);
+
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'drug_products') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({ data: dbProduct, error: null }),
+              }),
+            }),
+          };
+        }
+        if (table === 'drug_product_ingredients') {
+          return {
+            select: vi.fn().mockImplementation((cols: string) => {
+              requestedDpiColumns = cols;
+              return {
+                eq: vi.fn().mockReturnValue({
+                  order: vi.fn().mockResolvedValue({ data: dbProductIngredients, error: null }),
+                }),
+              };
+            }),
+          };
+        }
+        if (table === 'drug_ingredients') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({ data: dbIngredient, error: null }),
+              }),
+            }),
+          };
+        }
+        if (table === 'pediatric_dosage_rules') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockResolvedValue({ data: dbRules, error: null }),
+            }),
+          };
+        }
+        if (table === 'drug_labels') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({ data: dbLabel, error: null }),
+              }),
+            }),
+          };
+        }
+        return { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis() };
+      });
+
+      const res = await verifyPediatricProductEligibility(validProdId);
+      expect(res.isEligible).toBe(true);
+
+      // Verify that active_ingredient column was NOT requested from drug_product_ingredients
+      expect(requestedDpiColumns).not.toContain('active_ingredient');
+
+      // Verify that all required columns are requested from drug_product_ingredients
+      expect(requestedDpiColumns).toContain('product_id');
+      expect(requestedDpiColumns).toContain('ingredient_id');
+      expect(requestedDpiColumns).toContain('strength_numerator_value');
+      expect(requestedDpiColumns).toContain('strength_numerator_unit');
+      expect(requestedDpiColumns).toContain('strength_denominator_value');
+      expect(requestedDpiColumns).toContain('strength_denominator_unit');
+      expect(requestedDpiColumns).toContain('display_order');
+    });
+
+    it('2. Reads ingredient identity from drug_ingredients table using ingredient_id', async () => {
+      let requestedIngredientId = '';
+      let requestedIngredientCols = '';
+      mockIsSupabaseConfigured.mockReturnValue(true);
+
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'drug_products') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({ data: dbProduct, error: null }),
+              }),
+            }),
+          };
+        }
+        if (table === 'drug_product_ingredients') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                order: vi.fn().mockResolvedValue({ data: dbProductIngredients, error: null }),
+              }),
+            }),
+          };
+        }
+        if (table === 'drug_ingredients') {
+          return {
+            select: vi.fn().mockImplementation((cols: string) => {
+              requestedIngredientCols = cols;
+              return {
+                eq: vi.fn().mockImplementation((col: string, val: string) => {
+                  if (col === 'id') requestedIngredientId = val;
+                  return {
+                    maybeSingle: vi.fn().mockResolvedValue({ data: dbIngredient, error: null }),
+                  };
+                }),
+              };
+            }),
+          };
+        }
+        if (table === 'pediatric_dosage_rules') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockResolvedValue({ data: dbRules, error: null }),
+            }),
+          };
+        }
+        if (table === 'drug_labels') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({ data: dbLabel, error: null }),
+              }),
+            }),
+          };
+        }
+        return { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis() };
+      });
+
+      await verifyPediatricProductEligibility(validProdId);
+
+      // Verify that drug_ingredients was queried with the correct ingredient_id
+      expect(requestedIngredientId).toBe(validIngredientId);
+      expect(requestedIngredientCols).toContain('preferred_name');
+      expect(requestedIngredientCols).toContain('normalized_name');
+    });
+
+    it('3. Successfully verifies real single-ingredient product conforming to exact real schema', async () => {
+      setupSupabaseMock();
+
+      const res = await verifyPediatricProductEligibility(validProdId);
+      expect(res.isEligible).toBe(true);
+      expect(res.activeIngredient).toBe('amoxicillin');
+      expect(res.numeratorMg).toBe(250);
+      expect(res.denominatorMl).toBe(5);
+      expect(res.concentrationMgPerMl).toBe(50);
+    });
+
+    it('4. Rejects multi-ingredient product fail-closed', async () => {
+      setupSupabaseMock({
+        dpiData: [
+          {
+            id: 'rel-1',
+            product_id: validProdId,
+            ingredient_id: validIngredientId,
+            strength_numerator_value: 250,
+            strength_numerator_unit: 'mg',
+            strength_denominator_value: 5,
+            strength_denominator_unit: 'mL',
+            display_order: 1,
+          },
+          {
+            id: 'rel-2',
+            product_id: validProdId,
+            ingredient_id: 'another-ingredient-id',
+            strength_numerator_value: 62.5,
+            strength_numerator_unit: 'mg',
+            strength_denominator_value: 5,
+            strength_denominator_unit: 'mL',
+            display_order: 2,
+          },
+        ],
+      });
+
+      const res = await verifyPediatricProductEligibility(validProdId);
+      expect(res.isEligible).toBe(false);
+      expect(res.reason).toContain('مواد فعالة');
+    });
+
+    it('5. Rejects when ingredient_id does not exist in drug_ingredients', async () => {
+      setupSupabaseMock({
+        ingData: null,
+      });
+
+      const res = await verifyPediatricProductEligibility(validProdId);
+      expect(res.isEligible).toBe(false);
+      expect(res.reason).toContain('سجل المادة الفعالة غير موجود في جدول drug_ingredients');
+    });
+
+    it('6. Rejects invalid units or non-positive concentration in drug_product_ingredients', async () => {
+      // Zero denominator
+      setupSupabaseMock({
+        dpiData: [
+          {
+            id: 'rel-1',
+            product_id: validProdId,
+            ingredient_id: validIngredientId,
+            strength_numerator_value: 250,
+            strength_numerator_unit: 'mg',
+            strength_denominator_value: 0,
+            strength_denominator_unit: 'mL',
+            display_order: 1,
+          },
+        ],
+      });
+
+      const resZeroDen = await verifyPediatricProductEligibility(validProdId);
+      expect(resZeroDen.isEligible).toBe(false);
+
+      // Wrong denominator unit (tablet instead of mL)
+      setupSupabaseMock({
+        dpiData: [
+          {
+            id: 'rel-1',
+            product_id: validProdId,
+            ingredient_id: validIngredientId,
+            strength_numerator_value: 500,
+            strength_numerator_unit: 'mg',
+            strength_denominator_value: 1,
+            strength_denominator_unit: 'tablet',
+            display_order: 1,
+          },
+        ],
+      });
+
+      const resWrongUnit = await verifyPediatricProductEligibility(validProdId);
+      expect(resWrongUnit.isEligible).toBe(false);
+    });
+
+    it('7. Supabase query error produces Fail-Closed response', async () => {
+      setupSupabaseMock({
+        dpiError: { message: 'column drug_product_ingredients_1.active_ingredient does not exist' },
+      });
+
+      const res = await verifyPediatricProductEligibility(validProdId);
+      expect(res.isEligible).toBe(false);
+      expect(res.reason).toContain('فشل استعلام مكونات المنتج من قاعدة البيانات');
+    });
+
+    it('8. Does not rely on free-text prescription item name or strength', () => {
+      const spoofedPrescriptionItem = {
+        medication_name: 'Custom Amoxil Suspension 1000mg/5mL',
+        strength: '1000 mg / 5 mL',
+        catalog_product_id: null,
+        is_custom_medication: true,
+      };
+
+      // Ineligible because it's not linked to official catalog product
+      expect(isItemEligibleForPediatricAmoxicillin(spoofedPrescriptionItem as any)).toBe(false);
+    });
+
+    it('9. Displays appropriate age and weight messages in modal when patient lacks date of birth or weight', () => {
+      const patientWithoutDobAndWeight: PediatricPatientContext = {
+        patientId: 'pat-no-vitals',
+        visitId: 'vis-no-vitals',
+        patientName: 'سارة خالد',
+        dateOfBirth: '',
+        visitDate: '2026-10-01',
+        ageInMonths: 0,
+        ageDays: 0,
+        ageFormatted: 'تاريخ غير صالح',
+        isAgeSupportedByCalculator: false,
+        weightKg: null,
+        weightSource: 'none',
+        hasPenicillinOrAmoxicillinAllergy: false,
+        allergyMatchType: 'none',
+      };
+
+      const approvedRule: PediatricDosageRule = {
+        id: validRuleId,
+        product_id: validProdId,
+        drug_label_id: validLabelId,
+        active_ingredient: 'Amoxicillin',
+        dosage_form: 'suspension',
+        route: 'oral',
+        min_age_value: 3.0,
+        min_age_unit: 'months',
+        min_age_inclusive: false,
+        max_weight_kg: 40.0,
+        max_weight_inclusive: false,
+        min_dose_mg_per_kg_day: 20,
+        max_dose_mg_per_kg_day: 45,
+        allowed_frequencies: ['every 12 hours', 'every 8 hours'],
+        source_reference: 'openFDA 50090-6351',
+        source_excerpt: 'Pediatric Patients: 20 to 45 mg/kg/day',
+        label_payload_hash: 'hash-v1',
+        review_status: 'approved',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      render(
+        <LanguageProvider>
+          <PediatricDosageCalculatorModal
+            isOpen={true}
+            onClose={vi.fn()}
+            patientContext={patientWithoutDobAndWeight}
+            rule={approvedRule}
+            productDisplayName="Amoxicillin 250 MG / 5 ML Oral Suspension"
+            rawStrengthText="250 mg / 5 mL"
+            onRuleUpdated={vi.fn()}
+            onApplyResult={vi.fn()}
+          />
+        </LanguageProvider>
+      );
+
+      // Verify that missing weight shows the clear danger badge
+      expect(screen.getByText('لا يوجد وزن مسجل')).toBeDefined();
+
+      // Verify that age displays invalid / uncalculated
+      expect(screen.getByText(/تاريخ غير صالح/)).toBeDefined();
+
+      // Verify that age halt banner appears
+      expect(screen.getByTestId('age-unsupported-banner')).toBeDefined();
+      expect(screen.getByText(/حدود الفئة العمرية المدعومة/)).toBeDefined();
+
+      // Verify database error message is NOT present
+      expect(screen.queryByText(/column.*does not exist/i)).toBeNull();
+      expect(screen.queryByText(/فشل استعلام قاعدة البيانات/)).toBeNull();
+    });
+  });
 });

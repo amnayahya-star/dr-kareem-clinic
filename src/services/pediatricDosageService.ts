@@ -411,7 +411,8 @@ export async function verifyPediatricProductEligibility(
     };
   }
 
-  const { data: prod, error } = await supabase
+  // 1. استعلام سجل المنتج الدوائي من جدول drug_products
+  const { data: prod, error: prodError } = await supabase
     .from('drug_products')
     .select(`
       id,
@@ -419,34 +420,15 @@ export async function verifyPediatricProductEligibility(
       source_identifier,
       dosage_form,
       route,
-      display_name,
-      drug_product_ingredients (
-        active_ingredient,
-        strength_numerator_value,
-        strength_numerator_unit,
-        strength_denominator_value,
-        strength_denominator_unit
-      ),
-      pediatric_dosage_rules (
-        id,
-        product_id,
-        drug_label_id,
-        review_status,
-        label_payload_hash
-      ),
-      drug_labels (
-        id,
-        product_id,
-        payload_hash
-      )
+      display_name
     `)
     .eq('id', cleanId)
     .maybeSingle();
 
-  if (error) {
+  if (prodError) {
     return {
       isEligible: false,
-      reason: `فشل استعلام قاعدة البيانات للتحقق من أهلية المنتج: ${error.message}`,
+      reason: `فشل استعلام قاعدة البيانات للتحقق من أهلية المنتج: ${prodError.message}`,
     };
   }
 
@@ -457,16 +439,130 @@ export async function verifyPediatricProductEligibility(
     };
   }
 
-  const ingredients = (prod.drug_product_ingredients as any[]) || [];
-  const rules = (prod.pediatric_dosage_rules as any[]) || [];
-  const rule = rules.find((r) => r.product_id === prod.id) || null;
-  const labels = (prod.drug_labels as any[]) || [];
-  const label = rule ? labels.find((l) => l.id === rule.drug_label_id) || null : null;
+  // 2. استعلام روابط المواد الفعالة والتركيز البنيوي من drug_product_ingredients
+  const { data: rawIngredients, error: dpiError } = await supabase
+    .from('drug_product_ingredients')
+    .select(`
+      id,
+      product_id,
+      ingredient_id,
+      strength_numerator_value,
+      strength_numerator_unit,
+      strength_denominator_value,
+      strength_denominator_unit,
+      display_order
+    `)
+    .eq('product_id', cleanId)
+    .order('display_order', { ascending: true });
 
+  if (dpiError) {
+    return {
+      isEligible: false,
+      reason: `فشل استعلام مكونات المنتج من قاعدة البيانات: ${dpiError.message}`,
+    };
+  }
+
+  if (!rawIngredients || rawIngredients.length === 0) {
+    return {
+      isEligible: false,
+      reason: 'لا توجد مواد فعالة مسجلة للمنتج في drug_product_ingredients',
+    };
+  }
+
+  if (rawIngredients.length > 1) {
+    return {
+      isEligible: false,
+      reason: `المنتج يحتوي على ${rawIngredients.length} مواد فعالة؛ الحاسبة تشترط مستحضراً أحادي المادة الفعالة فقط`,
+    };
+  }
+
+  const primaryRel = rawIngredients[0];
+  if (!primaryRel.ingredient_id) {
+    return {
+      isEligible: false,
+      reason: 'معرف المادة الفعالة (ingredient_id) مفقود في رابط المنتج',
+    };
+  }
+
+  // 3. استعلام اسم المادة الفعالة القياسي والمنظم من drug_ingredients
+  const { data: ingredientRecord, error: ingError } = await supabase
+    .from('drug_ingredients')
+    .select(`
+      id,
+      preferred_name,
+      normalized_name
+    `)
+    .eq('id', primaryRel.ingredient_id)
+    .maybeSingle();
+
+  if (ingError) {
+    return {
+      isEligible: false,
+      reason: `فشل استعلام تفاصيل المادة الفعالة من قاعدة البيانات: ${ingError.message}`,
+    };
+  }
+
+  if (!ingredientRecord) {
+    return {
+      isEligible: false,
+      reason: 'سجل المادة الفعالة غير موجود في جدول drug_ingredients',
+    };
+  }
+
+  // 4. استعلام قاعدة الجرعات المنظمة لهذا المنتج
+  const { data: rules, error: rulesError } = await supabase
+    .from('pediatric_dosage_rules')
+    .select(`
+      id,
+      product_id,
+      drug_label_id,
+      review_status,
+      label_payload_hash
+    `)
+    .eq('product_id', cleanId);
+
+  if (rulesError) {
+    return {
+      isEligible: false,
+      reason: `فشل استعلام قواعد الجرعات للأطفال: ${rulesError.message}`,
+    };
+  }
+
+  const rule = (rules || []).find((r: any) => r.product_id === prod.id) || null;
+
+  // 5. استعلام نشرة openFDA المرتبطة بالقاعدة للتأكد من مطابقة الهاش الرقمي
+  let label: { id: string; product_id: string; payload_hash: string } | null = null;
+  if (rule && rule.drug_label_id) {
+    const { data: labelData, error: labelError } = await supabase
+      .from('drug_labels')
+      .select('id, product_id, payload_hash')
+      .eq('id', rule.drug_label_id)
+      .maybeSingle();
+
+    if (labelError) {
+      return {
+        isEligible: false,
+        reason: `فشل استعلام نشرة الدواء من قاعدة البيانات: ${labelError.message}`,
+      };
+    }
+    label = labelData || null;
+  }
+
+  // 6. التحقق السريري الحاسم Fail-Closed
   return verifyProductPediatricEligibilityPure({
     catalogProductId: cleanId,
     product: prod,
-    ingredients,
+    ingredients: [
+      {
+        active_ingredient: ingredientRecord.normalized_name || ingredientRecord.preferred_name,
+        normalized_name: ingredientRecord.normalized_name,
+        preferred_name: ingredientRecord.preferred_name,
+        strength_numerator_value: primaryRel.strength_numerator_value,
+        strength_numerator_unit: primaryRel.strength_numerator_unit,
+        strength_denominator_value: primaryRel.strength_denominator_value,
+        strength_denominator_unit: primaryRel.strength_denominator_unit,
+      },
+    ],
     rule,
     label,
   });

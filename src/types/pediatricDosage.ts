@@ -128,6 +128,8 @@ export interface ProductPediatricEligibilityInput {
   } | null;
   ingredients?: Array<{
     active_ingredient?: string | null;
+    normalized_name?: string | null;
+    preferred_name?: string | null;
     strength_numerator_value?: number | null;
     strength_numerator_unit?: string | null;
     strength_denominator_value?: number | null;
