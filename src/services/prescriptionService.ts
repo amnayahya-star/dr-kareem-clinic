@@ -832,8 +832,10 @@ export async function createPrescriptionRevision(prescriptionId: string, reason:
       throw new Error("توجد مسودة مراجعة نشطة بالفعل لهذه الوصفة. يرجى إكمالها أو حذفها قبل بدء مراجعة جديدة");
     }
 
-    const nextRev = (existing.revision_number || 1) + 1;
-    const newRxId = `rx-rev-${Date.now()}`;
+    const visitRx = allRx.filter((rx) => rx.visit_id === existing.visit_id);
+    const maxRev = visitRx.reduce((max, rx) => Math.max(max, rx.revision_number || 1), 0);
+    const nextRev = maxRev + 1;
+    const newRxId = `rx-rev-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const copiedItems: PrescriptionItem[] = (existing.items || []).map((it, idx) => ({
       ...it,
       id: `rxi-rev-${Date.now()}-${idx}`,
