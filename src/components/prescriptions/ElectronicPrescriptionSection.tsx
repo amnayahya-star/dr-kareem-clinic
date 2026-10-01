@@ -45,7 +45,19 @@ import {
   GitBranch,
   History,
   RotateCcw,
+  Calculator,
 } from "lucide-react";
+import { PediatricDosageCalculatorModal } from "./PediatricDosageCalculatorModal";
+import {
+  fetchPediatricDosageRuleForProduct,
+  getPediatricPatientContext,
+  verifyPediatricProductEligibility,
+} from "@/services/pediatricDosageService";
+import {
+  PediatricDosageRule,
+  PediatricPatientContext,
+  ProductPediatricEligibilityResult,
+} from "@/types/pediatricDosage";
 
 export interface ElectronicPrescriptionSectionProps {
   visitId: string;
@@ -127,6 +139,54 @@ export function isPrescriptionItemTouched(it: PrescriptionItemInput): boolean {
 }
 
 /**
+ * Check if a prescription item is eligible for the pediatric dosage calculator
+ * Phase 1 Scope: Amoxicillin single active ingredient in oral liquid form (suspension/syrup)
+ */
+export function isItemEligibleForPediatricAmoxicillin(it: PrescriptionItemInput): boolean {
+  // الأهلية تشترط دواء مرتبطاً بكتالوج الأدوية وليس دواء يدوياً أو مخصصاً
+  if (!it.catalog_product_id || it.is_custom_medication) {
+    return false;
+  }
+
+  const name = (it.medication_name || "").toLowerCase();
+  const ing = (it.active_ingredient || "").toLowerCase();
+  const form = (String(it.dosage_form) || "").toLowerCase();
+
+  const isAmox =
+    name.includes("amox") ||
+    name.includes("أموكس") ||
+    ing.includes("amox") ||
+    ing.includes("أموكس");
+
+  if (!isAmox) return false;
+
+  // Exclude combination products like clavulanate / clavulanic acid
+  const hasClav =
+    name.includes("clav") ||
+    name.includes("كلاف") ||
+    ing.includes("clav") ||
+    ing.includes("كلاف") ||
+    name.includes("+") ||
+    name.includes("/");
+
+  if (hasClav) return false;
+
+  // Oral liquid dosage form
+  const isLiquid =
+    form.includes("suspension") ||
+    form.includes("syrup") ||
+    form.includes("معلق") ||
+    form.includes("شراب") ||
+    form.includes("liquid") ||
+    name.includes("suspension") ||
+    name.includes("syrup") ||
+    name.includes("معلق") ||
+    name.includes("شراب");
+
+  return isLiquid;
+}
+
+/**
  * Calculate readiness of prescription draft items in real time based on current local state
  */
 export function isPrescriptionDraftReady(items: PrescriptionItemInput[]): boolean {
@@ -204,6 +264,14 @@ export function ElectronicPrescriptionSection({
 
   // Official openFDA Drug Label Viewer Modal State
   const [viewingLabelProduct, setViewingLabelProduct] = useState<{ id: string; name: string } | null>(null);
+
+  // Pediatric Dosage Calculator State
+  const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
+  const [calculatorItemIndex, setCalculatorItemIndex] = useState<number | null>(null);
+  const [calculatorPatientContext, setCalculatorPatientContext] = useState<PediatricPatientContext | null>(null);
+  const [calculatorRule, setCalculatorRule] = useState<PediatricDosageRule | null>(null);
+  const [calculatorEligibility, setCalculatorEligibility] = useState<ProductPediatricEligibilityResult | null>(null);
+  const [isLoadingCalculator, setIsLoadingCalculator] = useState(false);
 
   // Synchronize URL with active prescription without creating history loops or page jumps
   const updatePrescriptionUrl = useCallback(
@@ -512,6 +580,106 @@ export function ElectronicPrescriptionSection({
           route: convertedRoute || it.route,
         };
       })
+    );
+  };
+
+  // Open Pediatric Dosage Calculator for a specific prescription item
+  const handleOpenPediatricCalculator = async (itemIndex: number) => {
+    const targetItem = items[itemIndex];
+    if (!targetItem) return;
+
+    if (!targetItem.catalog_product_id || targetItem.is_custom_medication) {
+      setErrorMessage(
+        language === "ar"
+          ? "لا يمكن تشغيل الحاسبة: الدواء المختار غير مسجل في دليل الأدوية الرسمي (catalog_product_id مفقود)"
+          : "Cannot open calculator: medication is not linked to official catalog product"
+      );
+      return;
+    }
+
+    setCalculatorItemIndex(itemIndex);
+    setIsLoadingCalculator(true);
+
+    try {
+      // 1. Fail-closed database verification of product eligibility & structured concentration
+      const eligibility = await verifyPediatricProductEligibility(targetItem.catalog_product_id);
+      if (!eligibility.isEligible) {
+        setErrorMessage(
+          eligibility.reason ||
+            (language === "ar"
+              ? "هذا المستحضر غير مؤهل لحاسبة جرعات الأطفال"
+              : "Product is not eligible for pediatric dosage calculator")
+        );
+        setIsLoadingCalculator(false);
+        return;
+      }
+      setCalculatorEligibility(eligibility);
+
+      // 2. Fetch patient clinical context (weight, age, allergies)
+      let ctx: PediatricPatientContext | null = null;
+      if (patientId && visitId) {
+        try {
+          ctx = await getPediatricPatientContext(visitId, patientId);
+        } catch (err) {
+          console.warn("Could not load pediatric patient context:", err);
+        }
+      }
+      setCalculatorPatientContext(ctx);
+
+      // 3. Fetch clinical dosage rule from openFDA label link
+      let rule: PediatricDosageRule | null = null;
+      if (targetItem.catalog_product_id) {
+        try {
+          rule = await fetchPediatricDosageRuleForProduct(targetItem.catalog_product_id);
+        } catch (err) {
+          console.warn("Could not load pediatric dosage rule:", err);
+        }
+      }
+      setCalculatorRule(rule);
+      setIsCalculatorOpen(true);
+    } catch (err: any) {
+      setErrorMessage(
+        err?.message ||
+          (language === "ar"
+            ? "فشل فتح حاسبة جرعات الأطفال"
+            : "Failed to open pediatric calculator")
+      );
+    } finally {
+      setIsLoadingCalculator(false);
+    }
+  };
+
+  // Transfer calculated pediatric dosage result to draft prescription item
+  const handleApplyCalculatorResult = (result: {
+    dose: string;
+    instructions: string;
+    frequency: string;
+  }) => {
+    if (calculatorItemIndex === null) return;
+
+    setItems((prev) =>
+      prev.map((it, idx) => {
+        if (idx !== calculatorItemIndex) return it;
+        // Preserves any existing instructions entered previously by the doctor
+        const existingInstructions = (it.instructions || "").trim();
+        const finalInstructions = existingInstructions
+          ? `${result.instructions}. ${existingInstructions}`
+          : result.instructions;
+
+        return {
+          ...it,
+          dose: result.dose,
+          frequency: result.frequency || it.frequency,
+          instructions: finalInstructions,
+        };
+      })
+    );
+    setIsDirty(true);
+    setIsCalculatorOpen(false);
+    setSuccessMessage(
+      language === "ar"
+        ? "تم نقل الجرعة المحسوبة بنجاح إلى مسودة الوصفة. يُرجى مراجعتها وتأكيدها ثم الضغط على حفظ."
+        : "Calculated pediatric dose applied to draft. Please review, confirm, and save."
     );
   };
 
@@ -1257,6 +1425,20 @@ export function ElectronicPrescriptionSection({
                     <span>{language === "ar" ? "نشرة الدواء (openFDA)" : "Label (openFDA)"}</span>
                   </button>
                 )}
+
+                {isItemEligibleForPediatricAmoxicillin(item) && !isLocked && (
+                  <button
+                    type="button"
+                    onClick={() => handleOpenPediatricCalculator(index)}
+                    disabled={isLoadingCalculator}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-800 bg-teal-50 border border-teal-300 hover:bg-teal-100 px-2 py-0.5 rounded-lg transition-colors cursor-pointer shadow-2xs"
+                    title={language === "ar" ? "فتح حاسبة جرعات الأطفال الآمنة" : "Open safe pediatric dosage calculator"}
+                    data-testid={`pediatric-calculator-btn-${index}`}
+                  >
+                    <Calculator className="w-3.5 h-3.5 text-teal-700" />
+                    <span>{language === "ar" ? "حاسبة جرعة الطفل" : "Pediatric Calculator"}</span>
+                  </button>
+                )}
               </div>
 
               {!isLocked && items.length > 1 && (
@@ -1333,14 +1515,33 @@ export function ElectronicPrescriptionSection({
 
             {/* Row 2: Dose, Route, Frequency, Duration, Quantity */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 pt-3">
-              <Input
-                label={language === "ar" ? "الجرعة" : "Dose"}
-                disabled={isLocked}
-                placeholder="مثال: 5 مل أو 1 قرص"
-                value={item.dose || ""}
-                onChange={(e) => handleUpdateItem(index, "dose", e.target.value)}
-                className="text-xs font-semibold"
-              />
+              <div className="w-full space-y-1.5 text-right">
+                <div className="flex items-center justify-between">
+                  <label htmlFor={`medication-item-${index}-dose`} className="block text-xs font-bold text-slate-700">
+                    {language === "ar" ? "الجرعة" : "Dose"}
+                  </label>
+                  {isItemEligibleForPediatricAmoxicillin(item) && !isLocked && (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenPediatricCalculator(index)}
+                      className="text-[10px] font-bold text-teal-600 hover:text-teal-800 inline-flex items-center gap-0.5 hover:underline"
+                      data-testid={`quick-pediatric-calc-btn-${index}`}
+                      title={language === "ar" ? "احسب بالوزن" : "Calculate by weight"}
+                    >
+                      <Calculator className="w-2.5 h-2.5" />
+                      <span>{language === "ar" ? "احسب بالوزن" : "Calc by wt"}</span>
+                    </button>
+                  )}
+                </div>
+                <Input
+                  id={`medication-item-${index}-dose`}
+                  disabled={isLocked}
+                  placeholder="مثال: 5 مل أو 1 قرص"
+                  value={item.dose || ""}
+                  onChange={(e) => handleUpdateItem(index, "dose", e.target.value)}
+                  className="text-xs font-semibold"
+                />
+              </div>
 
               <div className="space-y-1.5 text-right">
                 <label className="block text-xs font-bold text-slate-700">
@@ -1741,6 +1942,29 @@ export function ElectronicPrescriptionSection({
         medicationName={viewingLabelProduct?.name}
         language={language}
       />
+
+      {/* Safe Pediatric Dosage Calculator Modal */}
+      {isCalculatorOpen && (
+        <PediatricDosageCalculatorModal
+          isOpen={isCalculatorOpen}
+          onClose={() => setIsCalculatorOpen(false)}
+          patientContext={calculatorPatientContext}
+          rule={calculatorRule}
+          productDisplayName={
+            calculatorItemIndex !== null && items[calculatorItemIndex]
+              ? items[calculatorItemIndex].medication_name
+              : "Amoxicillin Oral Suspension"
+          }
+          rawStrengthText={
+            calculatorItemIndex !== null && items[calculatorItemIndex]
+              ? items[calculatorItemIndex].strength || "250 mg / 5 mL"
+              : "250 mg / 5 mL"
+          }
+          productEligibility={calculatorEligibility}
+          onRuleUpdated={(updated) => setCalculatorRule(updated)}
+          onApplyResult={handleApplyCalculatorResult}
+        />
+      )}
     </Card>
   );
 }
