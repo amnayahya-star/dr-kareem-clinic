@@ -35,7 +35,10 @@ import * as prescriptionService from '../src/services/prescriptionService';
 import { _resetInMemoryPrescriptions } from '../src/services/prescriptionService';
 
 import { PediatricDosageCalculatorModal } from '../src/components/prescriptions/PediatricDosageCalculatorModal';
-import { PediatricRuleReviewModal } from '../src/components/prescriptions/PediatricRuleReviewModal';
+import {
+  PediatricRuleReviewModal,
+  extractPediatricDosingExcerpt,
+} from '../src/components/prescriptions/PediatricRuleReviewModal';
 import {
   PediatricDosageRule,
   PediatricPatientContext,
@@ -1885,8 +1888,8 @@ describe('Safe Pediatric Dosage Calculator - Phase 1 (حاسبة جرعات ال
 
       // Product identity
       expect(screen.getByTestId('rule-product-name')).toBeDefined();
-      expect(screen.getByTestId('rule-product-ndc')).toBeDefined();
-      expect(screen.getByText(/NDC: 50090-6351/)).toBeDefined();
+      expect(screen.getByTestId('rule-product-ndc').textContent).toContain('50090-6351');
+      expect(screen.getByTestId('rule-product-ndc').textContent).toContain('NDC:');
       expect(screen.getByTestId('rule-active-ingredient')).toBeDefined();
       expect(screen.getByTestId('rule-dosage-form')).toBeDefined();
       expect(screen.getByTestId('rule-route')).toBeDefined();
@@ -1894,10 +1897,12 @@ describe('Safe Pediatric Dosage Calculator - Phase 1 (حاسبة جرعات ال
       // Clinical boundaries
       expect(screen.getByTestId('min-age-input')).toBeDefined();
       expect(screen.getByTestId('min-age-inclusive-note')).toBeDefined();
-      expect(screen.getAllByText(/عمر > 3 أشهر/).length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByText(/العمر: أكبر من 3 أشهر/)).toBeDefined();
+      expect(screen.getByText(/Age: older than 3 months/)).toBeDefined();
       expect(screen.getByTestId('max-weight-input')).toBeDefined();
       expect(screen.getByTestId('max-weight-inclusive-note')).toBeDefined();
-      expect(screen.getAllByText(/وزن < 40 كغم/).length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByText(/الوزن: أقل من 40 كغم/)).toBeDefined();
+      expect(screen.getByText(/Weight: under 40 kg/)).toBeDefined();
       expect(screen.getByTestId('min-dose-input')).toBeDefined();
       expect(screen.getByTestId('max-dose-input')).toBeDefined();
 
@@ -2497,6 +2502,258 @@ describe('Safe Pediatric Dosage Calculator - Phase 1 (حاسبة جرعات ال
 
       expect(sqlTestContent).toContain('SELECT * FROM finish();');
       expect(sqlTestContent).toContain('ROLLBACK;');
+    });
+  });
+
+  describe('Pediatric Rule Review Modal - RTL & Source Excerpt Presentation', () => {
+    const createTestRule = (status: 'pending_review' | 'approved' = 'pending_review'): PediatricDosageRule => ({
+      id: '00000000-0000-0000-0000-000000000301',
+      product_id: 'prod-amox-250',
+      drug_label_id: 'label-amox-250',
+      active_ingredient: 'Amoxicillin',
+      dosage_form: 'suspension',
+      route: 'oral',
+      min_age_value: 3.0,
+      min_age_unit: 'months',
+      min_age_inclusive: false,
+      max_weight_kg: 40.0,
+      max_weight_inclusive: false,
+      min_dose_mg_per_kg_day: 20,
+      max_dose_mg_per_kg_day: 45,
+      allowed_frequencies: ['every 12 hours', 'every 8 hours'],
+      source_reference: 'openFDA 50090-6351 Section 2.2 Table 1',
+      source_excerpt: 'Pediatric Patients: 20 to 45 mg/kg/day in divided doses every 8 to 12 hours.',
+      label_payload_hash: 'hash-amox-label-v1',
+      review_status: status,
+      product_display_name: 'Amoxicillin 250 MG / 5 ML Oral Suspension',
+      product_ndc: '50090-6351',
+      label_source_identifier: '50090-6351',
+      label_effective_time: '20240430',
+      label_review_status: 'pending_review',
+      current_label_payload_hash: 'hash-amox-label-v1',
+      is_hash_matching: true,
+      label_dosage_and_administration: 'Pediatric Patients: 20 to 45 mg/kg/day in divided doses every 8 to 12 hours.',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+
+    it('1. Pure function extractPediatricDosingExcerpt correctly isolates Section 2.2 Table 1 from full label and excludes subsequent sections', () => {
+      const fullLabelText = `
+2 DOSAGE AND ADMINISTRATION
+2.1 Dosing for Adults
+The usual adult dose is 500 mg every 12 hours or 250 mg every 8 hours.
+
+2.2 Pediatric Patients (aged 3 months and older and weight less than 40 kg)
+Table 1: Recommended Dosage Regimens for Pediatric Patients Aged 3 Months and Older and Weight Less than 40 kg
+Infection / Severity / Recommended Dosage / Frequency
+Ear/Nose/Throat, Skin/Skin Structure, Genitourinary Tract:
+Mild/Moderate: 25 mg/kg/day in divided doses every 12 hours or 20 mg/kg/day in divided doses every 8 hours
+Severe: 45 mg/kg/day in divided doses every 12 hours or 40 mg/kg/day in divided doses every 8 hours
+Lower Respiratory Tract:
+Mild/Moderate or Severe: 45 mg/kg/day in divided doses every 12 hours or 40 mg/kg/day in divided doses every 8 hours
+
+2.3 Dosing in Adults with Renal Impairment
+For patients with severe renal impairment (GFR < 10 mL/min), the dosage should not exceed 500 mg or 250 mg every 24 hours.
+
+2.4 Eradication of Helicobacter pylori
+Dual Therapy: 1 gram every 8 hours with clarithromycin.
+Triple Therapy: 1 gram every 12 hours with omeprazole.
+`;
+
+      const excerpt = extractPediatricDosingExcerpt(fullLabelText);
+      expect(excerpt).not.toBeNull();
+      expect(excerpt).toContain('Table 1');
+      expect(excerpt).toContain('Pediatric Patients');
+      expect(excerpt).toContain('25 mg/kg/day');
+      expect(excerpt).toContain('every 12 hours');
+
+      // Crucial: Must NOT contain Renal Impairment or H. pylori
+      expect(excerpt).not.toContain('Renal Impairment');
+      expect(excerpt).not.toContain('Helicobacter pylori');
+      expect(excerpt).not.toContain('H. pylori');
+      expect(excerpt).not.toContain('GFR < 10 mL/min');
+    });
+
+    it('2. Pure function extractPediatricDosingExcerpt rejects irrelevant sections (H. pylori or renal impairment only)', () => {
+      // Only H. pylori
+      const hpyloriText = `
+2.4 Eradication of Helicobacter pylori:
+Dual therapy with amoxicillin 1 g twice daily plus omeprazole 20 mg twice daily.
+Triple therapy with amoxicillin 1 g twice daily plus clarithromycin 500 mg twice daily.
+`;
+      expect(extractPediatricDosingExcerpt(hpyloriText)).toBeNull();
+
+      // Only Renal Impairment
+      const renalText = `
+2.3 Dosing in Renal Impairment:
+In patients with impaired renal function (GFR 10 to 30 mL/min), dosage should be reduced to 250 mg or 500 mg every 12 hours.
+`;
+      expect(extractPediatricDosingExcerpt(renalText)).toBeNull();
+
+      // Null, empty, or whitespace
+      expect(extractPediatricDosingExcerpt(null)).toBeNull();
+      expect(extractPediatricDosingExcerpt('')).toBeNull();
+      expect(extractPediatricDosingExcerpt('   ')).toBeNull();
+      expect(extractPediatricDosingExcerpt(undefined)).toBeNull();
+    });
+
+    it('3. UI eliminates < and > from Arabic titles/notes and renders explicit wording with LTR English equivalents', () => {
+      const rule = createTestRule('pending_review');
+      render(
+        <LanguageProvider>
+          <PediatricRuleReviewModal
+            isOpen={true}
+            onClose={vi.fn()}
+            rule={rule}
+            currentUserRole="doctor"
+          />
+        </LanguageProvider>
+      );
+
+      const minAgeEl = screen.getByTestId('min-age-input');
+      const minAgeNote = screen.getByTestId('min-age-inclusive-note');
+      const maxWeightEl = screen.getByTestId('max-weight-input');
+      const maxWeightNote = screen.getByTestId('max-weight-inclusive-note');
+
+      // Arabic wording must be explicit
+      expect(minAgeEl.textContent).toContain('العمر: أكبر من 3 أشهر');
+      expect(minAgeNote.textContent).toContain('غير شامل (العمر أكبر من 3 أشهر حصراً، لا يشمل حديثي الولادة)');
+      expect(maxWeightEl.textContent).toContain('الوزن: أقل من 40 كغم');
+      expect(maxWeightNote.textContent).toContain('غير شامل (الوزن أقل من 40 كغم حصراً، وأكبر من ذلك يتبع جرعات البالغين)');
+
+      // Absolutely NO comparison symbols (< or >) in these elements
+      expect(minAgeEl.textContent).not.toContain('>');
+      expect(minAgeEl.textContent).not.toContain('<');
+      expect(minAgeNote.textContent).not.toContain('>');
+      expect(minAgeNote.textContent).not.toContain('<');
+      expect(maxWeightEl.textContent).not.toContain('>');
+      expect(maxWeightEl.textContent).not.toContain('<');
+      expect(maxWeightNote.textContent).not.toContain('>');
+      expect(maxWeightNote.textContent).not.toContain('<');
+
+      // English equivalents
+      const minAgeEn = screen.getByTestId('min-age-en-label');
+      expect(minAgeEn.textContent).toBe('Age: older than 3 months');
+      expect(minAgeEn.getAttribute('dir')).toBe('ltr');
+
+      const maxWeightEn = screen.getByTestId('max-weight-en-label');
+      expect(maxWeightEn.textContent).toBe('Weight: under 40 kg');
+      expect(maxWeightEn.getAttribute('dir')).toBe('ltr');
+    });
+
+    it('4. Technical values have dir="ltr" and appropriate styling to prevent RTL flipping (NDC, effective_time, status, units, section)', () => {
+      const rule = createTestRule('pending_review');
+      render(
+        <LanguageProvider>
+          <PediatricRuleReviewModal
+            isOpen={true}
+            onClose={vi.fn()}
+            rule={rule}
+            currentUserRole="doctor"
+          />
+        </LanguageProvider>
+      );
+
+      // NDC badge has dir="ltr" containing 50090-6351
+      const ndcBadge = screen.getByTestId('rule-product-ndc');
+      expect(ndcBadge.textContent).toContain('50090-6351');
+      const ndcSpan = ndcBadge.querySelector('span[dir="ltr"]');
+      expect(ndcSpan).not.toBeNull();
+      expect(ndcSpan?.textContent).toBe('50090-6351');
+
+      // effective_time has dir="ltr"
+      const effectiveTimeEl = screen.getByTestId('rule-effective-time');
+      const effectiveTimeSpan = effectiveTimeEl.querySelector('span[dir="ltr"]');
+      expect(effectiveTimeSpan).not.toBeNull();
+      expect(effectiveTimeSpan?.textContent).toBe('20240430');
+
+      // pending_review status has dir="ltr"
+      const statusBadge = screen.getByTestId('rule-review-status-badge');
+      const statusSpan = statusBadge.querySelector('span[dir="ltr"]');
+      expect(statusSpan).not.toBeNull();
+      expect(statusSpan?.textContent).toContain('pending_review');
+
+      // dose range has dir="ltr" with mg/kg/day
+      const doseRangeEl = screen.getByTestId('dose-range-display');
+      const doseRangeSpan = doseRangeEl.querySelector('span[dir="ltr"]');
+      expect(doseRangeSpan).not.toBeNull();
+      expect(doseRangeSpan?.textContent).toContain('mg/kg/day');
+
+      // Regimens table Section 2.2 Table 1 has dir="ltr"
+      const regimensContainer = screen.getByTestId('regimens-table-container');
+      const sectionSpan = regimensContainer.querySelector('span[dir="ltr"]');
+      expect(sectionSpan).not.toBeNull();
+      expect(sectionSpan?.textContent).toContain('Section 2.2 Table 1');
+    });
+
+    it('5. Displays fallback warning and does NOT show irrelevant excerpt when label contains only H. pylori or renal impairment', () => {
+      const ruleWithIrrelevantLabel: PediatricDosageRule = {
+        ...createTestRule('pending_review'),
+        label_dosage_and_administration: '2.4 Eradication of Helicobacter pylori: Dual therapy with amoxicillin 1 g every 12 hours. 2.3 Renal impairment: GFR < 30 mL/min.',
+        source_excerpt: 'Irrelevant text',
+      };
+
+      const onViewDrugLabel = vi.fn();
+
+      render(
+        <LanguageProvider>
+          <PediatricRuleReviewModal
+            isOpen={true}
+            onClose={vi.fn()}
+            rule={ruleWithIrrelevantLabel}
+            currentUserRole="doctor"
+            onViewDrugLabel={onViewDrugLabel}
+          />
+        </LanguageProvider>
+      );
+
+      // Warning alert must be displayed
+      const warningAlert = screen.getByTestId('missing-pediatric-excerpt-warning');
+      expect(warningAlert).toBeDefined();
+      expect(warningAlert.textContent).toContain('تعذر استخراج المقتطف المطابق تلقائياً؛ راجع النشرة الكاملة قبل الاعتماد');
+
+      // Irrelevant text must NOT be displayed
+      expect(screen.queryByTestId('pediatric-label-excerpt')).toBeNull();
+      expect(screen.queryByText(/Helicobacter pylori/)).toBeNull();
+      expect(screen.queryByText(/Renal impairment/)).toBeNull();
+
+      // Full label button is still available
+      const fullLabelBtn = screen.getByTestId('view-full-label-from-excerpt-btn');
+      expect(fullLabelBtn).toBeDefined();
+      fireEvent.click(fullLabelBtn);
+      expect(onViewDrugLabel).toHaveBeenCalledTimes(1);
+    });
+
+    it('6. Displays extracted Section 2.2 Table 1 excerpt when matching text is present in dosage_and_administration', () => {
+      const ruleWithValidLabel: PediatricDosageRule = {
+        ...createTestRule('pending_review'),
+        label_dosage_and_administration: `
+2.1 Adults: 500 mg every 8 hours.
+2.2 Pediatric Patients (aged 3 months and older and weight less than 40 kg):
+Table 1: Recommended Dosage Regimens for Pediatric Patients:
+Ear/Nose/Throat: Mild/Moderate: 25 mg/kg/day q12h or 20 mg/kg/day q8h.
+2.3 Renal Impairment: GFR < 30 mL/min.
+`,
+      };
+
+      render(
+        <LanguageProvider>
+          <PediatricRuleReviewModal
+            isOpen={true}
+            onClose={vi.fn()}
+            rule={ruleWithValidLabel}
+            currentUserRole="doctor"
+          />
+        </LanguageProvider>
+      );
+
+      const excerptContainer = screen.getByTestId('pediatric-label-excerpt');
+      expect(excerptContainer).toBeDefined();
+      expect(excerptContainer.getAttribute('dir')).toBe('ltr');
+      expect(excerptContainer.textContent).toContain('Table 1');
+      expect(excerptContainer.textContent).toContain('Pediatric Patients');
+      expect(excerptContainer.textContent).not.toContain('Renal Impairment');
+      expect(screen.queryByTestId('missing-pediatric-excerpt-warning')).toBeNull();
     });
   });
 });

@@ -38,6 +38,86 @@ interface PediatricRuleReviewModalProps {
   onViewDrugLabel?: () => void;
 }
 
+/**
+ * دالة نقية لاستخراج المقتطف الخاص بجدول جرعات الأطفال (Section 2.2 Table 1) من نص النشرة الرسمية.
+ * تبحث عن:
+ * - "Table 1"
+ * - أو "Pediatric Patients"
+ * - أو العبارة المرتبطة بـ "3 months" و"40 kg"
+ * وتتوقف قبل الأقسام غير ذات الصلة بجرعات الأطفال (كالقصور الكلوي Renal Impairment أو جرعات H. pylori).
+ * إذا تعذر العثور على مقتطف مطابق، تُرجع null.
+ */
+export function extractPediatricDosingExcerpt(rawText?: string | null): string | null {
+  if (!rawText || typeof rawText !== 'string' || !rawText.trim()) {
+    return null;
+  }
+
+  const text = rawText.trim();
+  const lower = text.toLowerCase();
+
+  // فحص وجود العلامات السريرية المستهدفة للأطفال
+  const hasTable1 = /\btable\s*1\b/i.test(text);
+  const hasPediatric = /\bpediatric\b/i.test(text);
+  const hasMonthsAndKg =
+    (lower.includes('3 months') || lower.includes('3 month')) &&
+    (lower.includes('40 kg') || lower.includes('40kg'));
+
+  if (!hasTable1 && !hasPediatric && !hasMonthsAndKg) {
+    return null;
+  }
+
+  // تحديد نقطة بداية المقتطف المرجعي
+  let startIndex = -1;
+  const match22 = text.search(/section\s*2\.2/i);
+  const matchTable1 = text.search(/\btable\s*1\b/i);
+  const matchPediatric = text.search(/pediatric\s+patients/i);
+  const matchMonths = text.search(/3\s*months?/i);
+
+  if (match22 !== -1) {
+    startIndex = match22;
+  } else if (matchTable1 !== -1) {
+    startIndex = matchTable1;
+  } else if (matchPediatric !== -1) {
+    startIndex = matchPediatric;
+  } else if (matchMonths !== -1) {
+    startIndex = Math.max(0, matchMonths - 50);
+  } else {
+    startIndex = 0;
+  }
+
+  const candidate = text.slice(startIndex);
+
+  // تحديد نقطة النهاية قبل الأقسام اللاحقة غير ذات الصلة بجرعات الأطفال:
+  // مثل Section 2.3 أو القصور الكلوي (Renal Impairment) أو H. pylori
+  const endRegex = /(?:\n\s*2\.[3-9]\b|\bsection\s*2\.[3-9]\b|(?<=\s)2\.[3-9]\b|\badults\s+with\s+renal\s+impairment\b|\brenal\s+impairment\b|\bh\.\s*pylori\b|\bhelicobacter\s+pylori\b|\bdialysis\b)/i;
+  const matchEnd = candidate.search(endRegex);
+
+  let excerpt = matchEnd !== -1 ? candidate.slice(0, matchEnd).trim() : candidate.trim();
+
+  if (excerpt.length < 15) {
+    return null;
+  }
+
+  // التحقق من أن المقتطف المستخلص لا يزال يحتوي على إحدى العلامات الأساسية لجرعات الأطفال
+  const excerptLower = excerpt.toLowerCase();
+  const excerptValid =
+    /\btable\s*1\b/i.test(excerpt) ||
+    /\bpediatric\b/i.test(excerpt) ||
+    ((excerptLower.includes('3 months') || excerptLower.includes('3 month')) &&
+      (excerptLower.includes('40 kg') || excerptLower.includes('40kg')));
+
+  if (!excerptValid) {
+    return null;
+  }
+
+  // ضبط الحد الأقصى للمقتطف لعدم فيضان الواجهة
+  if (excerpt.length > 1200) {
+    excerpt = excerpt.slice(0, 1200).trim() + '...';
+  }
+
+  return excerpt;
+}
+
 export function PediatricRuleReviewModal({
   isOpen,
   onClose,
@@ -84,6 +164,10 @@ export function PediatricRuleReviewModal({
     rule.regimens && rule.regimens.length > 0
       ? rule.regimens
       : DEFAULT_AMOXICILLIN_REGIMENS;
+
+  // استخراج مقتطف النشرة المرجعي لجدول الأطفال Section 2.2 Table 1
+  const rawExcerptSource = rule.label_dosage_and_administration || rule.source_excerpt || null;
+  const pediatricExcerpt = extractPediatricDosingExcerpt(rawExcerptSource);
 
   const validateForApproval = (): boolean => {
     setErrorMessage(null);
@@ -200,7 +284,7 @@ export function PediatricRuleReviewModal({
         isOpen={isOpen}
         onClose={onClose}
         title="المراجعة السريرية لقاعدة وأنظمة جرعات الأطفال (خاص بالطبيب)"
-        description="مراجعة وتدقيق أنظمة الجرعات المنظمة المستخرجة حصراً من جدول النشرة الرسمية 2.2 Table 1 واعتمادها سريرياً."
+        description="مراجعة وتدقيق أنظمة الجرعات المنظمة المستخرجة حصراً من جدول النشرة الرسمية Section 2.2 Table 1 واعتمادها سريرياً."
         maxWidth="2xl"
       >
         <div className="space-y-4 text-xs text-slate-700" data-testid="pediatric-rule-review-modal">
@@ -230,22 +314,28 @@ export function PediatricRuleReviewModal({
               </div>
 
               <div className="flex items-center gap-1.5 flex-wrap">
-                <Badge variant="outline" size="sm" className="font-mono font-bold border-slate-300" data-testid="rule-product-ndc">
-                  NDC: {rule.product_ndc || '50090-6351'}
+                <Badge variant="outline" size="sm" className="font-bold border-slate-300 inline-flex items-center gap-1" data-testid="rule-product-ndc">
+                  <span className="text-slate-500 font-sans">NDC:</span>
+                  <span dir="ltr" className="font-mono inline-block text-slate-900 font-bold">{rule.product_ndc || '50090-6351'}</span>
                 </Badge>
                 <Badge
                   variant={rule.review_status === 'approved' ? 'success' : rule.review_status === 'rejected' ? 'danger' : 'warning'}
                   size="sm"
-                  className="font-bold"
+                  className="font-bold inline-flex items-center gap-1"
                   data-testid="rule-review-status-badge"
                 >
-                  {rule.review_status === 'approved'
-                    ? 'معتمدة سريرياً'
-                    : rule.review_status === 'needs_re_review'
-                    ? 'تتطلب إعادة مراجعة'
-                    : rule.review_status === 'rejected'
-                    ? 'مرفوضة'
-                    : 'قيد المراجعة الأولى'}
+                  <span>
+                    {rule.review_status === 'approved'
+                      ? 'معتمدة سريرياً'
+                      : rule.review_status === 'needs_re_review'
+                      ? 'تتطلب إعادة مراجعة'
+                      : rule.review_status === 'rejected'
+                      ? 'مرفوضة'
+                      : 'قيد المراجعة الأولى'}
+                  </span>
+                  <span dir="ltr" className="font-mono text-[9px] opacity-75 inline-block">
+                    ({rule.review_status || 'pending_review'})
+                  </span>
                 </Badge>
               </div>
             </div>
@@ -282,10 +372,16 @@ export function PediatricRuleReviewModal({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[10px] text-slate-600 font-mono pt-1 border-t border-slate-100">
-                <span data-testid="rule-label-id">معرف النشرة: {rule.label_source_identifier || rule.drug_label_id || '50090-6351'}</span>
-                <span data-testid="rule-effective-time">تاريخ السريان: {rule.label_effective_time || '20240430'}</span>
-                <span data-testid="rule-label-status">حالة النشرة: {rule.label_review_status || 'موثقة'}</span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[10px] text-slate-600 pt-1 border-t border-slate-100">
+                <span data-testid="rule-label-id">
+                  معرف النشرة: <span dir="ltr" className="font-mono inline-block font-semibold">{rule.label_source_identifier || rule.drug_label_id || '50090-6351'}</span>
+                </span>
+                <span data-testid="rule-effective-time">
+                  تاريخ السريان: <span dir="ltr" className="font-mono inline-block font-semibold">{rule.label_effective_time || '20240430'}</span>
+                </span>
+                <span data-testid="rule-label-status">
+                  حالة النشرة: <span dir="ltr" className="font-mono inline-block font-semibold">{rule.label_review_status || 'pending_review'}</span>
+                </span>
               </div>
             </div>
           </div>
@@ -309,11 +405,14 @@ export function PediatricRuleReviewModal({
                   <Calendar className="w-3.5 h-3.5 text-slate-400" />
                   <span>الحد الأدنى للعمر:</span>
                 </div>
-                <div className="font-black text-slate-900" data-testid="min-age-input">
-                  عمر &gt; {rule.min_age_value} أشهر
+                <div className="font-black text-slate-900 text-xs" data-testid="min-age-input">
+                  العمر: أكبر من {rule.min_age_value} أشهر
                 </div>
                 <div className="text-[10px] text-slate-600" data-testid="min-age-inclusive-note">
-                  غير شامل (عمر &gt; 3 أشهر حصراً، لا يشمل حديثي الولادة)
+                  غير شامل (العمر أكبر من 3 أشهر حصراً، لا يشمل حديثي الولادة)
+                </div>
+                <div className="text-[10px] text-slate-400 font-medium font-mono" dir="ltr" data-testid="min-age-en-label">
+                  Age: older than 3 months
                 </div>
               </div>
 
@@ -323,11 +422,14 @@ export function PediatricRuleReviewModal({
                   <Scale className="w-3.5 h-3.5 text-slate-400" />
                   <span>الحد الأقصى للوزن:</span>
                 </div>
-                <div className="font-black text-slate-900" data-testid="max-weight-input">
-                  وزن &lt; {rule.max_weight_kg} كغم
+                <div className="font-black text-slate-900 text-xs" data-testid="max-weight-input">
+                  الوزن: أقل من {rule.max_weight_kg} كغم
                 </div>
                 <div className="text-[10px] text-slate-600" data-testid="max-weight-inclusive-note">
-                  غير شامل (وزن &lt; 40 كغم حصراً، وأكبر من ذلك يتبع جرعات البالغين)
+                  غير شامل (الوزن أقل من 40 كغم حصراً، وأكبر من ذلك يتبع جرعات البالغين)
+                </div>
+                <div className="text-[10px] text-slate-400 font-medium font-mono" dir="ltr" data-testid="max-weight-en-label">
+                  Weight: under 40 kg
                 </div>
               </div>
 
@@ -335,8 +437,10 @@ export function PediatricRuleReviewModal({
               <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
                 <div className="text-slate-500 font-semibold">نطاق النشرة المرجعي:</div>
                 <div className="font-black text-slate-900" data-testid="dose-range-display">
-                  <span data-testid="min-dose-input">{rule.min_dose_mg_per_kg_day}</span> -{' '}
-                  <span data-testid="max-dose-input">{rule.max_dose_mg_per_kg_day}</span> mg/kg/day
+                  <span dir="ltr" className="font-mono inline-block font-bold">
+                    <span data-testid="min-dose-input">{rule.min_dose_mg_per_kg_day}</span> -{' '}
+                    <span data-testid="max-dose-input">{rule.max_dose_mg_per_kg_day}</span> mg/kg/day
+                  </span>
                 </div>
                 <div className="text-[10px] text-slate-600">
                   مقسمة حسب الاستطباب والشدة أدناه
@@ -350,7 +454,7 @@ export function PediatricRuleReviewModal({
             <div className="font-bold text-slate-800 flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center gap-1.5">
                 <ListFilter className="w-4 h-4 text-clinic-600" />
-                <span>أنظمة الجرعات المنظمة المستخرجة من النشرة الرسمية (Section 2.2 Table 1):</span>
+                <span>أنظمة الجرعات المنظمة المستخرجة من النشرة الرسمية (<span dir="ltr" className="font-mono font-bold text-slate-900 inline-block">Section 2.2 Table 1</span>):</span>
               </div>
               <Badge variant="outline" size="sm" className="font-mono text-[10px]">
                 {regimens.length} أنظمة مسجلة
@@ -364,7 +468,7 @@ export function PediatricRuleReviewModal({
                     <tr>
                       <th className="py-2 px-2.5 text-start">مجموعة العدوى</th>
                       <th className="py-2 px-2.5 text-start">الشدة السريرية</th>
-                      <th className="py-2 px-2.5 text-start">الجرعة (mg/kg/day)</th>
+                      <th className="py-2 px-2.5 text-start">الجرعة (<span dir="ltr" className="font-mono inline-block font-bold">mg/kg/day</span>)</th>
                       <th className="py-2 px-2.5 text-start">فترة التكرار</th>
                       <th className="py-2 px-2.5 text-start">المرجع</th>
                     </tr>
@@ -388,14 +492,14 @@ export function PediatricRuleReviewModal({
                             {getSeverityLabel(reg.severity)}
                           </span>
                         </td>
-                        <td className="py-1.5 px-2.5 font-mono font-bold text-clinic-700">
-                          {reg.dose_mg_per_kg_day} mg/kg/day
+                        <td className="py-1.5 px-2.5 font-bold text-clinic-700">
+                          <span dir="ltr" className="font-mono inline-block">{reg.dose_mg_per_kg_day} mg/kg/day</span>
                         </td>
                         <td className="py-1.5 px-2.5 font-semibold text-slate-700">
                           كل {reg.interval_hours} ساعة ({reg.doses_per_day} جرعات/يوم)
                         </td>
                         <td className="py-1.5 px-2.5 text-slate-500 font-mono text-[10px]">
-                          {reg.source_section} {reg.source_table}
+                          <span dir="ltr" className="inline-block font-mono">{reg.source_section} {reg.source_table}</span>
                         </td>
                       </tr>
                     ))}
@@ -406,14 +510,44 @@ export function PediatricRuleReviewModal({
           </div>
 
           {/* 4. Official FDA Excerpt */}
-          <div className="space-y-1" data-testid="official-fda-label-section">
-            <div className="font-bold text-slate-700 flex items-center gap-1.5">
-              <FileText className="w-3.5 h-3.5 text-slate-500" />
-              <span>نص النشرة المصدرية المقتطف:</span>
+          <div className="space-y-1.5" data-testid="official-fda-label-section">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="font-bold text-slate-700 flex items-center gap-1.5">
+                <FileText className="w-3.5 h-3.5 text-slate-500" />
+                <span>نص النشرة المصدرية المقتطف (<span dir="ltr" className="font-mono font-bold text-slate-900 inline-block">Section 2.2 Table 1</span>):</span>
+              </div>
+              {onViewDrugLabel && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={onViewDrugLabel}
+                  className="text-[10px] font-bold h-6 px-2 text-clinic-700 border-clinic-300 hover:bg-clinic-50 gap-1"
+                  data-testid="view-full-label-from-excerpt-btn"
+                >
+                  <ExternalLink className="w-2.5 h-2.5" />
+                  <span>عرض النشرة الكاملة</span>
+                </Button>
+              )}
             </div>
-            <div className="p-2.5 bg-amber-50/60 border border-amber-200 rounded-xl text-amber-950 font-sans leading-relaxed text-[10px] max-h-24 overflow-y-auto whitespace-pre-wrap select-text">
-              {rule.label_dosage_and_administration || rule.source_excerpt}
-            </div>
+
+            {pediatricExcerpt ? (
+              <div
+                dir="ltr"
+                className="p-2.5 bg-amber-50/60 border border-amber-200 rounded-xl text-amber-950 font-mono leading-relaxed text-[10px] max-h-32 overflow-y-auto whitespace-pre-wrap select-text text-start"
+                data-testid="pediatric-label-excerpt"
+              >
+                {pediatricExcerpt}
+              </div>
+            ) : (
+              <div
+                className="p-3 bg-amber-50 border border-amber-300 text-amber-900 rounded-xl text-xs font-semibold flex items-center gap-2"
+                data-testid="missing-pediatric-excerpt-warning"
+              >
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>تعذر استخراج المقتطف المطابق تلقائياً؛ راجع النشرة الكاملة قبل الاعتماد</span>
+              </div>
+            )}
           </div>
 
           {/* 5. Doctor Review Notes */}
@@ -508,8 +642,13 @@ export function PediatricRuleReviewModal({
               <ul className="list-disc list-inside space-y-1 text-[11px]">
                 <li>الدواء: <strong className="font-bold">{rule.product_display_name || rule.active_ingredient}</strong></li>
                 <li>عدد الأنظمة المعتمدة: <strong className="font-bold">{regimens.length} أنظمة سريرية</strong></li>
-                <li>الحدود: <strong className="font-bold">عمر &gt; 3 أشهر ووزن &lt; 40 كغم</strong></li>
-                <li>المصدر: <strong className="font-bold font-mono">openFDA Section 2.2 Table 1</strong></li>
+                <li>
+                  الحدود السريرية: <strong className="font-bold">العمر أكبر من 3 أشهر والوزن أقل من 40 كغم</strong>{' '}
+                  <span dir="ltr" className="font-mono text-[10px] text-emerald-800 ms-1 inline-block">(Age: older than 3 months, Weight: under 40 kg)</span>
+                </li>
+                <li>
+                  المصدر: <strong className="font-bold"><span dir="ltr" className="font-mono inline-block">openFDA Section 2.2 Table 1</span></strong>
+                </li>
               </ul>
             </div>
 
