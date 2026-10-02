@@ -3,9 +3,14 @@
 import React, { useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
-import { Input, Textarea } from '@/components/ui/Input';
+import { Textarea } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
-import { PediatricDosageRule } from '@/types/pediatricDosage';
+import {
+  PediatricDosageRule,
+  DEFAULT_AMOXICILLIN_REGIMENS,
+  PEDIATRIC_INDICATION_GROUPS,
+  PEDIATRIC_SEVERITIES,
+} from '@/types/pediatricDosage';
 import { reviewPediatricDosageRule } from '@/services/pediatricDosageService';
 import { useAuth } from '@/context/AuthContext';
 import { UserRole } from '@/types/database';
@@ -19,6 +24,7 @@ import {
   Calendar,
   ExternalLink,
   ShieldCheck,
+  ListFilter,
 } from 'lucide-react';
 
 interface PediatricRuleReviewModalProps {
@@ -42,12 +48,6 @@ export function PediatricRuleReviewModal({
   onRuleSaved,
   onViewDrugLabel,
 }: PediatricRuleReviewModalProps) {
-  const [minDose, setMinDose] = useState<string>(rule ? String(rule.min_dose_mg_per_kg_day) : '20');
-  const [maxDose, setMaxDose] = useState<string>(rule ? String(rule.max_dose_mg_per_kg_day) : '45');
-  const [minAge, setMinAge] = useState<string>(rule ? String(rule.min_age_value) : '3');
-  const [minAgeInclusive, setMinAgeInclusive] = useState<boolean>(rule ? rule.min_age_inclusive : false);
-  const [maxWeight, setMaxWeight] = useState<string>(rule ? String(rule.max_weight_kg) : '40');
-  const [maxWeightInclusive, setMaxWeightInclusive] = useState<boolean>(rule ? rule.max_weight_inclusive : false);
   const [notes, setNotes] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -72,12 +72,6 @@ export function PediatricRuleReviewModal({
   if (currentRuleKey !== prevRuleId) {
     setPrevRuleId(currentRuleKey);
     if (rule) {
-      setMinDose(String(rule.min_dose_mg_per_kg_day));
-      setMaxDose(String(rule.max_dose_mg_per_kg_day));
-      setMinAge(String(rule.min_age_value));
-      setMinAgeInclusive(rule.min_age_inclusive);
-      setMaxWeight(String(rule.max_weight_kg));
-      setMaxWeightInclusive(rule.max_weight_inclusive);
       setNotes(rule.review_notes || '');
       setErrorMessage(null);
       setIsConfirmApprovalOpen(false);
@@ -86,99 +80,62 @@ export function PediatricRuleReviewModal({
 
   if (!rule) return null;
 
-  const validateForApproval = (): {
-    isValid: boolean;
-    minDoseNum: number;
-    maxDoseNum: number;
-    minAgeNum: number;
-    maxWeightNum: number;
-  } => {
+  const regimens =
+    rule.regimens && rule.regimens.length > 0
+      ? rule.regimens
+      : DEFAULT_AMOXICILLIN_REGIMENS;
+
+  const validateForApproval = (): boolean => {
     setErrorMessage(null);
 
     if (!isDoctor) {
       setErrorMessage('غير مصرح: عملية اعتماد قواعد الجرعات السريرية مخصصة للأطباء المصرح لهم فقط.');
-      return { isValid: false, minDoseNum: 0, maxDoseNum: 0, minAgeNum: 0, maxWeightNum: 0 };
+      return false;
     }
 
     if (!rule.drug_label_id) {
       setErrorMessage('لا يمكن اعتماد القاعدة: النشرة الرسمية غير مرتبطة بهذا المنتج.');
-      return { isValid: false, minDoseNum: 0, maxDoseNum: 0, minAgeNum: 0, maxWeightNum: 0 };
+      return false;
     }
 
     if (rule.is_hash_matching === false) {
       setErrorMessage('تحذير أمان حرج: تم تعديل نشرة openFDA المنبع وتغير الهاش الرقمي. لا يمكن اعتماد القاعدة حتى مطابقة الهاش.');
-      return { isValid: false, minDoseNum: 0, maxDoseNum: 0, minAgeNum: 0, maxWeightNum: 0 };
+      return false;
     }
 
-    const minDoseNum = parseFloat(minDose);
-    const maxDoseNum = parseFloat(maxDose);
-    const minAgeNum = parseFloat(minAge);
-    const maxWeightNum = parseFloat(maxWeight);
-
-    if (isNaN(minDoseNum) || minDoseNum <= 0 || isNaN(maxDoseNum) || maxDoseNum <= 0) {
-      setErrorMessage('نطاق الجرعة (mg/kg/day) يجب أن يكون أرقاماً موجبة صحيحة');
-      return { isValid: false, minDoseNum: 0, maxDoseNum: 0, minAgeNum: 0, maxWeightNum: 0 };
-    }
-    if (minDoseNum > maxDoseNum) {
-      setErrorMessage('الحد الأدنى للجرعة لا يجوز أن يتجاوز الحد الأقصى');
-      return { isValid: false, minDoseNum: 0, maxDoseNum: 0, minAgeNum: 0, maxWeightNum: 0 };
-    }
-    if (isNaN(minAgeNum) || minAgeNum < 0) {
-      setErrorMessage('الحد الأدنى للعمر يجب أن يكون صفراً أو أكبر');
-      return { isValid: false, minDoseNum: 0, maxDoseNum: 0, minAgeNum: 0, maxWeightNum: 0 };
-    }
-    if (isNaN(maxWeightNum) || maxWeightNum <= 0) {
-      setErrorMessage('الحد الأقصى للوزن يجب أن يكون رقماً موجباً (مثل 40 كغم)');
-      return { isValid: false, minDoseNum: 0, maxDoseNum: 0, minAgeNum: 0, maxWeightNum: 0 };
+    if (rule.active_ingredient === 'Amoxicillin' && regimens.length !== 14) {
+      setErrorMessage(`لا يمكن اعتماد القاعدة: يجب أن تشتمل قاعدة الأموكسيسيلين على الأنظمة الـ 14 المعتمدة بنشرة FDA بدقة دون زيادة أو نقصان (العدد الحالي: ${regimens.length}).`);
+      return false;
     }
 
     if (!notes.trim()) {
       setErrorMessage('ملاحظات التدقيق الطبي إلزامية لتوثيق سبب القرار السريري وحفظ سجل الاعتماد');
-      return { isValid: false, minDoseNum: 0, maxDoseNum: 0, minAgeNum: 0, maxWeightNum: 0 };
+      return false;
     }
 
-    return { isValid: true, minDoseNum, maxDoseNum, minAgeNum, maxWeightNum };
+    return true;
   };
 
   const handleOpenApproveConfirmation = () => {
-    const val = validateForApproval();
-    if (val.isValid) {
+    if (validateForApproval()) {
       setIsConfirmApprovalOpen(true);
     }
   };
 
   const executeApprove = async () => {
-    const val = validateForApproval();
-    if (!val.isValid) return;
+    if (!validateForApproval()) return;
 
     setIsSubmitting(true);
     setIsConfirmApprovalOpen(false);
 
     try {
-      const updated = await reviewPediatricDosageRule(
-        rule.id,
-        'approve',
-        notes.trim(),
-        {
-          min_dose_mg_per_kg_day: val.minDoseNum,
-          max_dose_mg_per_kg_day: val.maxDoseNum,
-          min_age_value: val.minAgeNum,
-          min_age_inclusive: minAgeInclusive,
-          max_weight_kg: val.maxWeightNum,
-          max_weight_inclusive: maxWeightInclusive,
-        }
-      );
+      const updated = await reviewPediatricDosageRule(rule.id, 'approve', notes.trim());
 
       const approvedWithJoined: PediatricDosageRule = {
         ...rule,
         ...updated,
         review_status: 'approved',
-        min_dose_mg_per_kg_day: val.minDoseNum,
-        max_dose_mg_per_kg_day: val.maxDoseNum,
-        min_age_value: val.minAgeNum,
-        min_age_inclusive: minAgeInclusive,
-        max_weight_kg: val.maxWeightNum,
-        max_weight_inclusive: maxWeightInclusive,
+        regimens,
         review_notes: notes.trim(),
       };
 
@@ -207,6 +164,7 @@ export function PediatricRuleReviewModal({
         ...rule,
         ...updated,
         review_status: 'rejected',
+        regimens,
         review_notes: notes.trim(),
       };
 
@@ -226,14 +184,24 @@ export function PediatricRuleReviewModal({
 
   const isHashMatching = rule.is_hash_matching !== false;
 
+  const getIndicationLabel = (id: string) => {
+    const found = PEDIATRIC_INDICATION_GROUPS.find((g) => g.id === id);
+    return found ? found.labelAr : id;
+  };
+
+  const getSeverityLabel = (id: string) => {
+    const found = PEDIATRIC_SEVERITIES.find((s) => s.id === id);
+    return found ? found.labelAr : id;
+  };
+
   return (
     <>
       <Modal
         isOpen={isOpen}
         onClose={onClose}
-        title="المراجعة السريرية لقاعدة جرعات الأطفال (خاص بالطبيب)"
-        description="مراجعة وتدقيق معايير الجرعات المنظمة المستخرجة من نشرة openFDA الرسمية واعتمادها سريرياً."
-        maxWidth="xl"
+        title="المراجعة السريرية لقاعدة وأنظمة جرعات الأطفال (خاص بالطبيب)"
+        description="مراجعة وتدقيق أنظمة الجرعات المنظمة المستخرجة حصراً من جدول النشرة الرسمية 2.2 Table 1 واعتمادها سريرياً."
+        maxWidth="2xl"
       >
         <div className="space-y-4 text-xs text-slate-700" data-testid="pediatric-rule-review-modal">
           {errorMessage && (
@@ -322,104 +290,141 @@ export function PediatricRuleReviewModal({
             </div>
           </div>
 
-          {/* 2. Official FDA Excerpt */}
-          <div className="space-y-1.5" data-testid="official-fda-label-section">
-            <div className="font-bold text-slate-800 flex items-center gap-1.5">
-              <FileText className="w-4 h-4 text-clinic-600" />
-              <span>النص الرسمي لنشرة FDA (المقتطف السريري للجرعات والأطفال):</span>
-            </div>
-            <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl text-amber-950 font-sans leading-relaxed text-[11px] max-h-32 overflow-y-auto whitespace-pre-wrap select-text">
-              {rule.label_dosage_and_administration || rule.source_excerpt}
-            </div>
-          </div>
-
-          {/* 3. Structured Bounds Form */}
-          <div className="p-3.5 bg-white border border-clinic-200 rounded-2xl space-y-3">
+          {/* 2. Read-Only Clinical Boundaries (Age, Weight, Range) */}
+          <div className="p-3 bg-white border border-clinic-200 rounded-2xl space-y-2">
             <div className="font-bold text-slate-900 flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center gap-1.5">
                 <ShieldAlert className="w-4 h-4 text-clinic-600" />
-                <span>الحدود المنظمة المعتمدة سريرياً (العمر، الوزن، ونطاق الجرعة):</span>
+                <span>الحدود السريرية الإلزامية للقاعدة (للقراءة فقط):</span>
               </div>
               <span className="text-[11px] text-clinic-800 font-bold bg-clinic-50 px-2 py-0.5 rounded-lg border border-clinic-200" data-testid="rule-frequencies">
-                التكرارات: {formattedFrequencies}
+                التكرارات المسموحة: {formattedFrequencies}
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Input
-                type="number"
-                step="1"
-                label="الحد الأدنى للجرعة (mg/kg/day)"
-                value={minDose}
-                onChange={(e) => setMinDose(e.target.value)}
-                className="text-xs"
-                data-testid="min-dose-input"
-              />
-              <Input
-                type="number"
-                step="1"
-                label="الحد الأقصى للجرعة (mg/kg/day)"
-                value={maxDose}
-                onChange={(e) => setMaxDose(e.target.value)}
-                className="text-xs"
-                data-testid="max-dose-input"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-slate-100">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
               {/* Age Bounds */}
-              <div className="space-y-1">
-                <Input
-                  type="number"
-                  step="0.5"
-                  label="الحد الأدنى للعمر (أشهر)"
-                  value={minAge}
-                  onChange={(e) => setMinAge(e.target.value)}
-                  className="text-xs"
-                  data-testid="min-age-input"
-                />
-                <div className="text-[10px] text-slate-600 flex items-center gap-1.5" data-testid="min-age-inclusive-note">
-                  <Calendar className="w-3 h-3 text-slate-400" />
-                  <span>
-                    {minAgeInclusive
-                      ? `شامل للحد (عمر >= ${minAge} شهر)`
-                      : `غير شامل (عمر > ${minAge} أشهر حصراً)`}
-                  </span>
+              <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+                <div className="text-slate-500 font-semibold flex items-center gap-1">
+                  <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                  <span>الحد الأدنى للعمر:</span>
+                </div>
+                <div className="font-black text-slate-900" data-testid="min-age-input">
+                  عمر &gt; {rule.min_age_value} أشهر
+                </div>
+                <div className="text-[10px] text-slate-600" data-testid="min-age-inclusive-note">
+                  غير شامل (عمر &gt; 3 أشهر حصراً، لا يشمل حديثي الولادة)
                 </div>
               </div>
 
               {/* Weight Bounds */}
-              <div className="space-y-1">
-                <Input
-                  type="number"
-                  step="0.5"
-                  label="الحد الأقصى للوزن (كغم)"
-                  value={maxWeight}
-                  onChange={(e) => setMaxWeight(e.target.value)}
-                  className="text-xs"
-                  data-testid="max-weight-input"
-                />
-                <div className="text-[10px] text-slate-600 flex items-center gap-1.5" data-testid="max-weight-inclusive-note">
-                  <Scale className="w-3 h-3 text-slate-400" />
-                  <span>
-                    {maxWeightInclusive
-                      ? `شامل للحد (وزن <= ${maxWeight} كغم)`
-                      : `غير شامل (وزن < ${maxWeight} كغم حصراً، وأكبر من ذلك يتبع جرعات البالغين)`}
-                  </span>
+              <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+                <div className="text-slate-500 font-semibold flex items-center gap-1">
+                  <Scale className="w-3.5 h-3.5 text-slate-400" />
+                  <span>الحد الأقصى للوزن:</span>
+                </div>
+                <div className="font-black text-slate-900" data-testid="max-weight-input">
+                  وزن &lt; {rule.max_weight_kg} كغم
+                </div>
+                <div className="text-[10px] text-slate-600" data-testid="max-weight-inclusive-note">
+                  غير شامل (وزن &lt; 40 كغم حصراً، وأكبر من ذلك يتبع جرعات البالغين)
+                </div>
+              </div>
+
+              {/* Dose Range Reference */}
+              <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+                <div className="text-slate-500 font-semibold">نطاق النشرة المرجعي:</div>
+                <div className="font-black text-slate-900" data-testid="dose-range-display">
+                  <span data-testid="min-dose-input">{rule.min_dose_mg_per_kg_day}</span> -{' '}
+                  <span data-testid="max-dose-input">{rule.max_dose_mg_per_kg_day}</span> mg/kg/day
+                </div>
+                <div className="text-[10px] text-slate-600">
+                  مقسمة حسب الاستطباب والشدة أدناه
                 </div>
               </div>
             </div>
           </div>
 
-          {/* 4. Doctor Review Notes */}
+          {/* 3. Structured Regimens Table (Read-Only from FDA Table 1) */}
+          <div className="space-y-2" data-testid="regimens-table-container">
+            <div className="font-bold text-slate-800 flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-1.5">
+                <ListFilter className="w-4 h-4 text-clinic-600" />
+                <span>أنظمة الجرعات المنظمة المستخرجة من النشرة الرسمية (Section 2.2 Table 1):</span>
+              </div>
+              <Badge variant="outline" size="sm" className="font-mono text-[10px]">
+                {regimens.length} أنظمة مسجلة
+              </Badge>
+            </div>
+
+            <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm bg-white">
+              <div className="overflow-x-auto max-h-60 overflow-y-auto">
+                <table className="w-full text-start text-[11px]" data-testid="regimens-table">
+                  <thead className="bg-slate-100/90 text-slate-700 font-bold sticky top-0 border-b border-slate-200">
+                    <tr>
+                      <th className="py-2 px-2.5 text-start">مجموعة العدوى</th>
+                      <th className="py-2 px-2.5 text-start">الشدة السريرية</th>
+                      <th className="py-2 px-2.5 text-start">الجرعة (mg/kg/day)</th>
+                      <th className="py-2 px-2.5 text-start">فترة التكرار</th>
+                      <th className="py-2 px-2.5 text-start">المرجع</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-800">
+                    {regimens.map((reg) => (
+                      <tr key={reg.id} className="hover:bg-slate-50/80 transition-colors" data-testid={`regimen-row-${reg.id}`}>
+                        <td className="py-1.5 px-2.5 font-bold text-slate-900">
+                          {getIndicationLabel(reg.indication_group)}
+                        </td>
+                        <td className="py-1.5 px-2.5">
+                          <span
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                              reg.severity === 'severe'
+                                ? 'bg-rose-50 text-rose-800 border border-rose-200'
+                                : reg.severity === 'mild_moderate'
+                                ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                                : 'bg-blue-50 text-blue-800 border border-blue-200'
+                            }`}
+                          >
+                            {getSeverityLabel(reg.severity)}
+                          </span>
+                        </td>
+                        <td className="py-1.5 px-2.5 font-mono font-bold text-clinic-700">
+                          {reg.dose_mg_per_kg_day} mg/kg/day
+                        </td>
+                        <td className="py-1.5 px-2.5 font-semibold text-slate-700">
+                          كل {reg.interval_hours} ساعة ({reg.doses_per_day} جرعات/يوم)
+                        </td>
+                        <td className="py-1.5 px-2.5 text-slate-500 font-mono text-[10px]">
+                          {reg.source_section} {reg.source_table}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          {/* 4. Official FDA Excerpt */}
+          <div className="space-y-1" data-testid="official-fda-label-section">
+            <div className="font-bold text-slate-700 flex items-center gap-1.5">
+              <FileText className="w-3.5 h-3.5 text-slate-500" />
+              <span>نص النشرة المصدرية المقتطف:</span>
+            </div>
+            <div className="p-2.5 bg-amber-50/60 border border-amber-200 rounded-xl text-amber-950 font-sans leading-relaxed text-[10px] max-h-24 overflow-y-auto whitespace-pre-wrap select-text">
+              {rule.label_dosage_and_administration || rule.source_excerpt}
+            </div>
+          </div>
+
+          {/* 5. Doctor Review Notes */}
           <div className="space-y-1.5">
             <Textarea
               data-testid="rule-review-notes-input"
               label="ملاحظات المراجعة الطبية (إلزامية للتوثيق والمساءلة)"
-              placeholder="اكتب ملاحظاتك السريرية وتأكيدك لمطابقة معايير النشرة..."
+              placeholder="اكتب ملاحظاتك وتأكيدك السريري لمطابقة الأنظمة مع النشرة الرسمية قبل الاعتماد..."
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              className="text-xs min-h-[70px]"
+              className="text-xs min-h-[65px]"
             />
           </div>
 
@@ -448,104 +453,90 @@ export function PediatricRuleReviewModal({
             <Button
               type="button"
               variant="ghost"
+              size="sm"
               onClick={onClose}
               disabled={isSubmitting}
-              className="text-xs"
             >
-              إغلاق
+              إلغاء
             </Button>
 
             <div className="flex items-center gap-2">
               <Button
                 type="button"
                 variant="outline"
-                disabled={isSubmitting}
+                size="sm"
                 onClick={handleReject}
-                className="text-rose-700 border-rose-300 hover:bg-rose-50 text-xs font-bold gap-1.5"
+                disabled={isSubmitting || !isDoctor}
+                className="text-rose-700 border-rose-300 hover:bg-rose-50 gap-1 font-bold"
                 data-testid="reject-rule-btn"
               >
-                <XCircle className="w-4 h-4 text-rose-600" />
+                <XCircle className="w-3.5 h-3.5" />
                 <span>رفض القاعدة</span>
               </Button>
 
               <Button
                 type="button"
-                variant="primary"
-                disabled={isSubmitting || !isDoctor || !isHashMatching}
+                size="sm"
                 onClick={handleOpenApproveConfirmation}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold gap-1.5"
+                disabled={isSubmitting || !isDoctor || !isHashMatching}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-1 shadow-sm"
                 data-testid="approve-rule-btn"
               >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>{isSubmitting ? 'جاري الاعتماد...' : 'اعتماد القاعدة السريرية'}</span>
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>اعتماد أنظمة الجرعات السريرية</span>
               </Button>
             </div>
           </div>
         </div>
       </Modal>
 
-      {/* Explicit Confirmation Modal for Doctor Approval */}
+      {/* Confirmation Modal */}
       {isConfirmApprovalOpen && (
         <Modal
           isOpen={isConfirmApprovalOpen}
           onClose={() => setIsConfirmApprovalOpen(false)}
-          title="تأكيد اعتماد قاعدة جرعات الأطفال سريرياً"
-          description="يرجى مراجعة وتأكيد المعايير السريرية المعتمدة قبل تفعيل القاعدة في حاسبة الجرعات."
-          maxWidth="md"
+          title="تأكيد الاعتماد السريري لأنظمة الجرعات"
+          description="يرجى تأكيد مسؤوليتك الطبية عن اعتماد هذه الأنظمة المستخرجة من النشرة الرسمية."
+          maxWidth="sm"
         >
-          <div className="space-y-4 text-xs text-slate-700" data-testid="confirm-approve-rule-modal">
-            <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl space-y-2">
-              <div className="font-bold text-emerald-950 flex items-center gap-1.5 text-sm">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                <span>تأكيد اعتماد المستحضر:</span>
+          <div className="space-y-3 text-xs text-slate-700" data-testid="confirm-approve-rule-modal">
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl space-y-1.5 text-emerald-950">
+              <div className="font-bold flex items-center gap-1.5 text-emerald-900">
+                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                <span>ملخص الاعتماد السريري:</span>
               </div>
-              <ul className="space-y-1 text-emerald-900 text-xs list-disc list-inside">
-                <li>
-                  <span className="font-semibold">المستحضر:</span> {rule.product_display_name || rule.active_ingredient} (NDC: {rule.product_ndc || '50090-6351'})
-                </li>
-                <li>
-                  <span className="font-semibold">نطاق الجرعة المعتمد:</span> {minDose} إلى {maxDose} ملغ/كغم/يوم
-                </li>
-                <li>
-                  <span className="font-semibold">شرط العمر:</span> عمر أكبر من {minAge} أشهر ({minAgeInclusive ? 'شامل' : 'غير شامل'})
-                </li>
-                <li>
-                  <span className="font-semibold">شرط الوزن:</span> وزن أقل من {maxWeight} كغم ({maxWeightInclusive ? 'شامل' : 'غير شامل'})
-                </li>
-                <li>
-                  <span className="font-semibold">الهاش الرقمي:</span> متطابق مع نشرة openFDA الرسمية
-                </li>
+              <ul className="list-disc list-inside space-y-1 text-[11px]">
+                <li>الدواء: <strong className="font-bold">{rule.product_display_name || rule.active_ingredient}</strong></li>
+                <li>عدد الأنظمة المعتمدة: <strong className="font-bold">{regimens.length} أنظمة سريرية</strong></li>
+                <li>الحدود: <strong className="font-bold">عمر &gt; 3 أشهر ووزن &lt; 40 كغم</strong></li>
+                <li>المصدر: <strong className="font-bold font-mono">openFDA Section 2.2 Table 1</strong></li>
               </ul>
             </div>
 
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-[11px] flex items-start gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-              <span>
-                إقرار طبي: بالضغط على «تأكيد الاعتماد الطبي»، تقر بصفتك الطبيب المعالج بأنك راجعت نشرة FDA المنبع واعتمدت هذا النطاق السريري.
-              </span>
-            </div>
+            <p className="text-[11px] text-slate-600 leading-relaxed">
+              بالضغط على تأكيد الاعتماد، يتم تسجيل اسم الطبيب وتاريخ الاعتماد وملاحظات المراجعة ولقطة للأنظمة المعتمدة في سجل التدقيق غير القابل للتعديل.
+            </p>
 
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
               <Button
                 type="button"
                 variant="ghost"
+                size="sm"
                 onClick={() => setIsConfirmApprovalOpen(false)}
                 disabled={isSubmitting}
-                className="text-xs"
                 data-testid="cancel-approve-rule-btn"
               >
-                تراجع
+                رجوع
               </Button>
               <Button
                 type="button"
-                variant="primary"
+                size="sm"
                 onClick={executeApprove}
                 disabled={isSubmitting}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold gap-1.5"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
                 data-testid="confirm-approve-rule-btn"
               >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>{isSubmitting ? 'جاري التنفيذ...' : 'تأكيد الاعتماد الطبي'}</span>
+                {isSubmitting ? 'جاري الاعتماد...' : 'تأكيد واعتماد الآن'}
               </Button>
             </div>
           </div>

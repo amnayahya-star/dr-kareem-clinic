@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import fs from 'fs';
 import path from 'path';
+import { LanguageProvider } from '../src/context/LanguageContext';
 
 import {
   calculatePatientAgeInMonths,
@@ -35,8 +36,13 @@ import { _resetInMemoryPrescriptions } from '../src/services/prescriptionService
 
 import { PediatricDosageCalculatorModal } from '../src/components/prescriptions/PediatricDosageCalculatorModal';
 import { PediatricRuleReviewModal } from '../src/components/prescriptions/PediatricRuleReviewModal';
-import { LanguageProvider } from '../src/context/LanguageContext';
-import { PediatricDosageRule, PediatricPatientContext } from '../src/types/pediatricDosage';
+import {
+  PediatricDosageRule,
+  PediatricPatientContext,
+  DEFAULT_AMOXICILLIN_REGIMENS,
+  PEDIATRIC_INDICATION_GROUPS,
+  PEDIATRIC_SEVERITIES,
+} from '../src/types/pediatricDosage';
 
 // Mock Supabase
 const mockRpc = vi.fn();
@@ -437,8 +443,8 @@ describe('Safe Pediatric Dosage Calculator - Phase 1 (حاسبة جرعات ال
       expect(screen.getAllByText(/30 شهر/).length).toBeGreaterThan(0);
       expect(screen.getAllByText(/12/).length).toBeGreaterThan(0);
 
-      // Check math output: 12 kg x 30 mg/kg/day = 360 mg/day -> 180 mg single -> 3.6 mL
-      expect(screen.getAllByText(/3\.6/).length).toBeGreaterThan(0);
+      // Check math output: 12 kg x 25 mg/kg/day = 300 mg/day -> 150 mg single -> 3.0 mL
+      expect(screen.getAllByText(/3(\.0)? مل/).length).toBeGreaterThan(0);
     });
 
     it('blocks unapproved rules and displays review trigger banner', () => {
@@ -469,13 +475,14 @@ describe('Safe Pediatric Dosage Calculator - Phase 1 (حاسبة جرعات ال
       expect(applyBtn.disabled).toBe(true);
     });
 
-    it('handles allergy acknowledgment strictly before allowing application', () => {
+    it('strictly enforces allergy as a HARD STOP: no acknowledgment checkbox, permanently disabled apply, and demands alternative therapy', () => {
       const allergicContext: PediatricPatientContext = {
         ...mockContext,
         hasPenicillinOrAmoxicillinAllergy: true,
         allergyMatchTerm: 'Penicillin',
         rawAllergiesText: 'Severe allergy to Penicillin',
       };
+      const handleApply = vi.fn();
 
       render(
         <LanguageProvider>
@@ -487,25 +494,32 @@ describe('Safe Pediatric Dosage Calculator - Phase 1 (حاسبة جرعات ال
             productDisplayName="Amoxicillin Oral Suspension"
             rawStrengthText="250 mg / 5 mL"
             onRuleUpdated={vi.fn()}
-            onApplyResult={vi.fn()}
+            onApplyResult={handleApply}
           />
         </LanguageProvider>
       );
 
-      // Alert must be prominent
+      // 1. Alert must be a prominent hard-stop contraindication banner
       expect(screen.getByTestId('allergy-warning-banner')).toBeDefined();
       expect(screen.getByText(/Severe allergy to Penicillin/)).toBeDefined();
+      expect(screen.getByText(/إيقاف سريري نهائي/)).toBeDefined();
+      expect(screen.getAllByText(/علاج بديل/).length).toBeGreaterThanOrEqual(1);
 
-      // Apply button disabled initially
+      // 2. Acknowledgment checkbox or override mechanisms MUST NOT EXIST
+      expect(screen.queryByTestId('allergy-acknowledge-checkbox')).toBeNull();
+      expect(screen.queryByText(/أقر بأنني دققت سجل الحساسية/)).toBeNull();
+
+      // 3. Alternative therapy notice is visible
+      expect(screen.getByTestId('allergy-alternative-therapy-notice')).toBeDefined();
+
+      // 4. Apply button is permanently disabled
       const applyBtn = screen.getByTestId('apply-pediatric-dose-btn') as HTMLButtonElement;
       expect(applyBtn.disabled).toBe(true);
 
-      // Check acknowledgment checkbox
-      const ackCheckbox = screen.getByTestId('allergy-acknowledge-checkbox') as HTMLInputElement;
-      fireEvent.click(ackCheckbox);
-
-      // Apply button now enabled
-      expect(applyBtn.disabled).toBe(false);
+      // 5. Clicking apply does NOT trigger any action or modal
+      fireEvent.click(applyBtn);
+      expect(handleApply).not.toHaveBeenCalled();
+      expect(screen.queryByTestId('confirm-apply-dose-modal')).toBeNull();
     });
 
     it('displays previous visit weight warning when weight is not from current visit', () => {
@@ -565,8 +579,8 @@ describe('Safe Pediatric Dosage Calculator - Phase 1 (حاسبة جرعات ال
       fireEvent.click(screen.getByTestId('confirm-apply-dose-btn'));
 
       expect(handleApply).toHaveBeenCalledWith({
-        dose: expect.stringContaining('3.6 مل'),
-        instructions: expect.stringContaining('3.6 مل'),
+        dose: expect.stringMatching(/3(\.0)? مل/),
+        instructions: expect.stringMatching(/3(\.0)? مل/),
         frequency: expect.stringContaining('كل 12 ساعة'),
       });
     });
@@ -1880,10 +1894,10 @@ describe('Safe Pediatric Dosage Calculator - Phase 1 (حاسبة جرعات ال
       // Clinical boundaries
       expect(screen.getByTestId('min-age-input')).toBeDefined();
       expect(screen.getByTestId('min-age-inclusive-note')).toBeDefined();
-      expect(screen.getByText(/عمر > 3 أشهر/)).toBeDefined();
+      expect(screen.getAllByText(/عمر > 3 أشهر/).length).toBeGreaterThanOrEqual(1);
       expect(screen.getByTestId('max-weight-input')).toBeDefined();
       expect(screen.getByTestId('max-weight-inclusive-note')).toBeDefined();
-      expect(screen.getByText(/وزن < 40 كغم/)).toBeDefined();
+      expect(screen.getAllByText(/وزن < 40 كغم/).length).toBeGreaterThanOrEqual(1);
       expect(screen.getByTestId('min-dose-input')).toBeDefined();
       expect(screen.getByTestId('max-dose-input')).toBeDefined();
 
@@ -2163,6 +2177,326 @@ describe('Safe Pediatric Dosage Calculator - Phase 1 (حاسبة جرعات ال
 
       // onPrescriptionChanged was NOT called with issued status
       expect(handlePrescriptionChanged).not.toHaveBeenCalled();
+    });
+  });
+
+  // ============================================================================
+  // 9. Indication & Severity Coupled Regimens and Evasion Tests (Migration 00022)
+  // ============================================================================
+  describe('9. Indication & Severity Coupled Regimens & Strict Dosing Scenarios (أنظمة الجرعات المقترنة بالاستطباب والشدة)', () => {
+    const migration22Path = path.resolve(__dirname, '../supabase/migrations/00022_pediatric_dosage_regimens.sql');
+    const migration22Sql = fs.existsSync(migration22Path) ? fs.readFileSync(migration22Path, 'utf-8') : '';
+
+    it('1. Verifies 14 official structured regimens exist in DEFAULT_AMOXICILLIN_REGIMENS conforming to FDA Table 1', () => {
+      expect(DEFAULT_AMOXICILLIN_REGIMENS.length).toBe(14);
+
+      const ent = DEFAULT_AMOXICILLIN_REGIMENS.filter((r) => r.indication_group === 'ear_nose_throat');
+      const skin = DEFAULT_AMOXICILLIN_REGIMENS.filter((r) => r.indication_group === 'skin_skin_structure');
+      const gu = DEFAULT_AMOXICILLIN_REGIMENS.filter((r) => r.indication_group === 'genitourinary_tract');
+      const lrt = DEFAULT_AMOXICILLIN_REGIMENS.filter((r) => r.indication_group === 'lower_respiratory_tract');
+
+      expect(ent.length).toBe(4);
+      expect(skin.length).toBe(4);
+      expect(gu.length).toBe(4);
+      expect(lrt.length).toBe(2);
+    });
+
+    it('2. Ear/Nose/Throat, Skin, and Genitourinary: Mild/Moderate offers strictly 25 q12 and 20 q8', () => {
+      const groups = ['ear_nose_throat', 'skin_skin_structure', 'genitourinary_tract'] as const;
+
+      groups.forEach((grp) => {
+        const mildRegimens = DEFAULT_AMOXICILLIN_REGIMENS.filter(
+          (r) => r.indication_group === grp && r.severity === 'mild_moderate'
+        );
+        expect(mildRegimens.length).toBe(2);
+
+        const q12 = mildRegimens.find((r) => r.interval_hours === 12);
+        const q8 = mildRegimens.find((r) => r.interval_hours === 8);
+
+        expect(q12).toBeDefined();
+        expect(q12?.dose_mg_per_kg_day).toBe(25);
+        expect(q12?.doses_per_day).toBe(2);
+
+        expect(q8).toBeDefined();
+        expect(q8?.dose_mg_per_kg_day).toBe(20);
+        expect(q8?.doses_per_day).toBe(3);
+      });
+    });
+
+    it('3. Ear/Nose/Throat, Skin, and Genitourinary: Severe offers strictly 45 q12 and 40 q8', () => {
+      const groups = ['ear_nose_throat', 'skin_skin_structure', 'genitourinary_tract'] as const;
+
+      groups.forEach((grp) => {
+        const severeRegimens = DEFAULT_AMOXICILLIN_REGIMENS.filter(
+          (r) => r.indication_group === grp && r.severity === 'severe'
+        );
+        expect(severeRegimens.length).toBe(2);
+
+        const q12 = severeRegimens.find((r) => r.interval_hours === 12);
+        const q8 = severeRegimens.find((r) => r.interval_hours === 8);
+
+        expect(q12).toBeDefined();
+        expect(q12?.dose_mg_per_kg_day).toBe(45);
+        expect(q12?.doses_per_day).toBe(2);
+
+        expect(q8).toBeDefined();
+        expect(q8?.dose_mg_per_kg_day).toBe(40);
+        expect(q8?.doses_per_day).toBe(3);
+      });
+    });
+
+    it('4. Lower Respiratory Tract: strictly coupled to 45 q12 and 40 q8 under mild_moderate_or_severe', () => {
+      const lrtRegimens = DEFAULT_AMOXICILLIN_REGIMENS.filter(
+        (r) => r.indication_group === 'lower_respiratory_tract'
+      );
+      expect(lrtRegimens.length).toBe(2);
+
+      const q12 = lrtRegimens.find((r) => r.interval_hours === 12);
+      const q8 = lrtRegimens.find((r) => r.interval_hours === 8);
+
+      expect(q12).toBeDefined();
+      expect(q12?.severity).toBe('mild_moderate_or_severe');
+      expect(q12?.dose_mg_per_kg_day).toBe(45);
+      expect(q12?.doses_per_day).toBe(2);
+
+      expect(q8).toBeDefined();
+      expect(q8?.severity).toBe('mild_moderate_or_severe');
+      expect(q8?.dose_mg_per_kg_day).toBe(40);
+      expect(q8?.doses_per_day).toBe(3);
+    });
+
+    it('5. Evasion Check: strictly rejects combinations not found in FDA label (20 q12, 25 q8, 40 q12, 45 q8)', () => {
+      // 20 q12 (Invalid: Mild dose with twice daily is 25, not 20)
+      const invalid20q12 = DEFAULT_AMOXICILLIN_REGIMENS.find(
+        (r) => r.dose_mg_per_kg_day === 20 && r.interval_hours === 12
+      );
+      expect(invalid20q12).toBeUndefined();
+
+      // 25 q8 (Invalid: Mild dose with 3 times daily is 20, not 25)
+      const invalid25q8 = DEFAULT_AMOXICILLIN_REGIMENS.find(
+        (r) => r.dose_mg_per_kg_day === 25 && r.interval_hours === 8
+      );
+      expect(invalid25q8).toBeUndefined();
+
+      // 40 q12 (Invalid: Severe dose with twice daily is 45, not 40)
+      const invalid40q12 = DEFAULT_AMOXICILLIN_REGIMENS.find(
+        (r) => r.dose_mg_per_kg_day === 40 && r.interval_hours === 12
+      );
+      expect(invalid40q12).toBeUndefined();
+
+      // 45 q8 (Invalid: Severe dose with 3 times daily is 40, not 45)
+      const invalid45q8 = DEFAULT_AMOXICILLIN_REGIMENS.find(
+        (r) => r.dose_mg_per_kg_day === 45 && r.interval_hours === 8
+      );
+      expect(invalid45q8).toBeUndefined();
+
+      // Arbitrary continuous doses (e.g. 30, 35, 22)
+      const arbitraryDose = DEFAULT_AMOXICILLIN_REGIMENS.find(
+        (r) => ![20, 25, 40, 45].includes(r.dose_mg_per_kg_day)
+      );
+      expect(arbitraryDose).toBeUndefined();
+    });
+
+    it('6. Calculator UI: Switching Indication to Lower Respiratory Tract dynamically presents only mild_moderate_or_severe', () => {
+      const approvedRule: PediatricDosageRule = {
+        id: 'rule-amox-test-9',
+        product_id: 'prod-amox-9',
+        drug_label_id: 'label-amox-9',
+        active_ingredient: 'Amoxicillin',
+        dosage_form: 'suspension',
+        route: 'oral',
+        min_age_value: 3.0,
+        min_age_unit: 'months',
+        min_age_inclusive: false,
+        max_weight_kg: 40.0,
+        max_weight_inclusive: false,
+        min_dose_mg_per_kg_day: 20,
+        max_dose_mg_per_kg_day: 45,
+        allowed_frequencies: ['every 12 hours', 'every 8 hours'],
+        source_reference: 'openFDA Table 1',
+        source_excerpt: 'Table 1',
+        label_payload_hash: 'hash-9',
+        review_status: 'approved',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        regimens: DEFAULT_AMOXICILLIN_REGIMENS,
+      };
+
+      const ctx: PediatricPatientContext = {
+        patientId: 'p-1',
+        visitId: 'v-1',
+        patientName: 'عمر خالد',
+        dateOfBirth: '2024-01-01',
+        visitDate: '2026-10-01',
+        ageInMonths: 33,
+        ageDays: 0,
+        ageFormatted: '33 شهر',
+        isAgeSupportedByCalculator: true,
+        weightKg: 10.0,
+        weightSource: 'current_visit',
+        weightDate: '2026-10-01',
+        weightWarning: null,
+        hasPenicillinOrAmoxicillinAllergy: false,
+        allergyMatchType: 'none',
+        rawAllergiesText: null,
+      };
+
+      render(
+        <LanguageProvider>
+          <PediatricDosageCalculatorModal
+            isOpen={true}
+            onClose={vi.fn()}
+            patientContext={ctx}
+            rule={approvedRule}
+            productDisplayName="Amoxicillin 250 MG / 5 ML Oral Suspension"
+            rawStrengthText="250 mg / 5 mL"
+            onRuleUpdated={vi.fn()}
+            onApplyResult={vi.fn()}
+          />
+        </LanguageProvider>
+      );
+
+      // Initially ENT + Mild/Mod
+      expect(screen.getByTestId('indication-group-select')).toBeDefined();
+      expect(screen.getByTestId('severity-select')).toBeDefined();
+
+      // Check default math for 10 kg child with ENT Mild/Mod (25 mg/kg/day q12h):
+      // 10 * 25 = 250 mg/day -> 125 mg single -> 125 / 50 = 2.5 mL
+      expect(screen.getByTestId('suggested-volume-ml').textContent).toContain('2.5');
+
+      // Change Indication to Lower Respiratory Tract
+      const indicationSelect = screen.getByTestId('indication-group-select');
+      fireEvent.change(indicationSelect, { target: { value: 'lower_respiratory_tract' } });
+
+      // Severity automatically synchronizes to mild_moderate_or_severe
+      const severitySelect = screen.getByTestId('severity-select') as HTMLSelectElement;
+      expect(severitySelect.value).toBe('mild_moderate_or_severe');
+
+      // Matching regimens are 45 q12 (4.5 mL) and 40 q8 (2.7 mL)
+      expect(screen.getByTestId('regimen-option-12h')).toBeDefined();
+      expect(screen.getByTestId('regimen-option-8h')).toBeDefined();
+
+      // 45 mg/kg/day q12h for 10 kg = 450 mg/day -> 225 mg single -> 225 / 50 = 4.5 mL
+      expect(screen.getByTestId('suggested-volume-ml').textContent).toContain('4.5');
+
+      // Select 40 mg/kg/day q8h
+      fireEvent.click(screen.getByTestId('regimen-option-8h'));
+      // 40 mg/kg/day q8h for 10 kg = 400 mg/day -> 133.33 mg single -> 133.33 / 50 = 2.67 mL -> 2.7 mL rounded
+      expect(screen.getByTestId('suggested-volume-ml').textContent).toContain('2.7');
+    });
+
+    it('7. PediatricRuleReviewModal: Renders all 14 structured regimens in a read-only table without free numeric inputs', () => {
+      const pendingRule: PediatricDosageRule = {
+        id: 'rule-review-test',
+        product_id: 'prod-amox-test',
+        drug_label_id: 'label-amox-test',
+        active_ingredient: 'Amoxicillin',
+        dosage_form: 'suspension',
+        route: 'oral',
+        min_age_value: 3.0,
+        min_age_unit: 'months',
+        min_age_inclusive: false,
+        max_weight_kg: 40.0,
+        max_weight_inclusive: false,
+        min_dose_mg_per_kg_day: 20,
+        max_dose_mg_per_kg_day: 45,
+        allowed_frequencies: ['every 12 hours', 'every 8 hours'],
+        source_reference: 'openFDA Section 2.2 Table 1',
+        source_excerpt: 'Table 1',
+        label_payload_hash: 'hash-valid-123',
+        review_status: 'pending_review',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        regimens: DEFAULT_AMOXICILLIN_REGIMENS,
+      };
+
+      render(
+        <LanguageProvider>
+          <PediatricRuleReviewModal
+            isOpen={true}
+            onClose={vi.fn()}
+            rule={pendingRule}
+            currentUserRole="doctor"
+            onViewDrugLabel={vi.fn()}
+          />
+        </LanguageProvider>
+      );
+
+      // Verify regimens table
+      expect(screen.getByTestId('regimens-table')).toBeDefined();
+      expect(screen.getByText('14 أنظمة مسجلة')).toBeDefined();
+
+      // Check specific rows
+      expect(screen.getByTestId('regimen-row-reg-ent-mild-12h')).toBeDefined();
+      expect(screen.getByTestId('regimen-row-reg-lrt-12h')).toBeDefined();
+
+      // Verify there is NO editable input for min dose (it is a read-only element)
+      const minDoseElem = screen.getByTestId('min-dose-input');
+      expect(minDoseElem.tagName).not.toBe('INPUT');
+    });
+
+    it('8. SQL Migration 00022 contract: schema defines trigger-enforced coupling, full columns, and fail-closed RPC', () => {
+      expect(migration22Sql).toContain('CREATE TABLE IF NOT EXISTS public.pediatric_dosage_regimens');
+      expect(migration22Sql).toContain('source_section VARCHAR(50)');
+      expect(migration22Sql).toContain('source_table VARCHAR(50)');
+      expect(migration22Sql).toContain('source_text TEXT NOT NULL');
+      expect(migration22Sql).toContain('is_active BOOLEAN NOT NULL DEFAULT TRUE');
+      expect(migration22Sql).toContain('created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()');
+      expect(migration22Sql).toContain('updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()');
+      expect(migration22Sql).toContain('fn_check_pediatric_regimen_clinical_rules()');
+      expect(migration22Sql).toContain('trg_check_pediatric_regimen_clinical_rules');
+      expect(migration22Sql).toContain('uq_pediatric_dosage_regimen');
+      expect(migration22Sql).toContain('public.review_pediatric_dosage_rule');
+      expect(migration22Sql).toContain('IF NOT public.is_doctor() THEN');
+      expect(migration22Sql).toContain('v_regimen_count != 14');
+      expect(migration22Sql).toContain('50090-6351');
+    });
+
+    it('9. pgTAP SQL Test Script contract: verifies all 6 explicit rejection scenarios and TAP assertions are present', () => {
+      const sqlTestPath = path.resolve(__dirname, '../supabase/tests/test_pediatric_dosage_regimens.sql');
+      const sqlTestContent = fs.readFileSync(sqlTestPath, 'utf8');
+
+      // pgTAP Plan and Schema checks
+      expect(sqlTestContent).toContain('SELECT plan(45);');
+      expect(sqlTestContent).toContain("has_table('public', 'pediatric_dosage_regimens'");
+      expect(sqlTestContent).toContain('has_trigger(');
+      expect(sqlTestContent).toContain('trg_check_pediatric_regimen_clinical_rules');
+
+      // Valid 64-character hex hash format
+      expect(sqlTestContent).toContain('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+
+      // The 6 mandatory rejection tests with SQLSTATE 23514
+      expect(sqlTestContent).toContain('Should reject mild_moderate + 45 q12 with SQLSTATE 23514');
+      expect(sqlTestContent).toContain('Should reject mild_moderate + 40 q8 with SQLSTATE 23514');
+      expect(sqlTestContent).toContain('Should reject severe + 25 q12 with SQLSTATE 23514');
+      expect(sqlTestContent).toContain('Should reject severe + 20 q8 with SQLSTATE 23514');
+      expect(sqlTestContent).toContain('Should reject lower_respiratory_tract + 25 q12 with SQLSTATE 23514');
+      expect(sqlTestContent).toContain('Should reject lower_respiratory_tract + 20 q8 with SQLSTATE 23514');
+
+      // Arbitrary and duplicate rejections
+      expect(sqlTestContent).toContain('Should reject arbitrary free dose 30 mg/kg/day with SQLSTATE 23514');
+      expect(sqlTestContent).toContain('Should reject duplicate regimen with SQLSTATE 23505 (unique_violation)');
+
+      // Strict 14 regimens, source, and rollback
+      expect(sqlTestContent).toContain('Total active regimens count should equal exactly 14');
+      expect(sqlTestContent).toContain("All 14 regimens should reference source_section 2.2");
+      expect(sqlTestContent).toContain("All 14 regimens should reference source_table Table 1");
+
+      // Security layer assertions
+      expect(sqlTestContent).toContain('anon cannot SELECT from public.pediatric_dosage_regimens');
+      expect(sqlTestContent).toContain('sees 0 rows in pediatric_dosage_regimens due to RLS');
+      expect(sqlTestContent).toContain('Doctor can see all 14 rows in pediatric_dosage_regimens under RLS');
+      expect(sqlTestContent).toContain('anon cannot execute review_pediatric_dosage_rule');
+      expect(sqlTestContent).toContain('fails when executing review_pediatric_dosage_rule due to is_doctor()');
+      expect(sqlTestContent).toContain('authenticated cannot directly INSERT into pediatric_dosage_regimens');
+      expect(sqlTestContent).toContain('authenticated cannot directly UPDATE pediatric_dosage_regimens');
+      expect(sqlTestContent).toContain('authenticated cannot directly DELETE from pediatric_dosage_regimens');
+      expect(sqlTestContent).toContain('authenticated cannot directly invoke trigger function');
+      expect(sqlTestContent).toContain('fn_check_pediatric_regimen_clinical_rules has search_path set to empty string');
+      expect(sqlTestContent).toContain('review_pediatric_dosage_rule has search_path set to empty string');
+
+      expect(sqlTestContent).toContain('SELECT * FROM finish();');
+      expect(sqlTestContent).toContain('ROLLBACK;');
     });
   });
 });

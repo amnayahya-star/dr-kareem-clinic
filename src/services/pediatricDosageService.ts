@@ -9,6 +9,7 @@ import {
   PediatricDosageRule,
   PediatricPatientContext,
   ProductPediatricEligibilityResult,
+  DEFAULT_AMOXICILLIN_REGIMENS,
 } from '@/types/pediatricDosage';
 import {
   calculatePatientAgeInMonths,
@@ -96,6 +97,7 @@ export async function fetchPediatricDosageRuleForProduct(
         min_dose_mg_per_kg_day: 20,
         max_dose_mg_per_kg_day: 45,
         allowed_frequencies: ['every 12 hours', 'every 8 hours'],
+        regimens: DEFAULT_AMOXICILLIN_REGIMENS,
         source_reference: 'openFDA Drug Labeling (A-S Medication Solutions / Aurobindo) Section 2.2 Table 1',
         source_excerpt:
           'Pediatric Patients Aged 3 Months and Older and Weight Less than 40 kg: Mild/Moderate: 25 mg/kg/day in divided doses every 12 hours or 20 mg/kg/day in divided doses every 8 hours. Severe: 45 mg/kg/day in divided doses every 12 hours or 40 mg/kg/day in divided doses every 8 hours.',
@@ -136,7 +138,8 @@ export async function fetchPediatricDosageRuleForProduct(
         payload_hash,
         effective_time,
         review_status
-      )
+      ),
+      pediatric_dosage_regimens (*)
     `)
     .eq('product_id', cleanId)
     .maybeSingle();
@@ -159,6 +162,7 @@ export async function fetchPediatricDosageRuleForProduct(
     label_effective_time: data.drug_labels?.effective_time || data.label_effective_time,
     label_review_status: data.drug_labels?.review_status,
     current_label_payload_hash: data.drug_labels?.payload_hash,
+    regimens: data.pediatric_dosage_regimens || [],
     is_hash_matching: Boolean(
       data.label_payload_hash &&
       data.drug_labels?.payload_hash &&
@@ -266,6 +270,7 @@ export async function reviewPediatricDosageRule(
       max_weight_kg: maxWeight,
       max_weight_inclusive: maxWeightInc,
       allowed_frequencies: allowedFreq,
+      regimens: rule.regimens || DEFAULT_AMOXICILLIN_REGIMENS,
       review_notes: notes.trim(),
     } : null;
 
@@ -282,6 +287,7 @@ export async function reviewPediatricDosageRule(
       max_weight_kg: maxWeight,
       max_weight_inclusive: maxWeightInc,
       allowed_frequencies: allowedFreq,
+      regimens: rule.regimens || DEFAULT_AMOXICILLIN_REGIMENS,
       approved_snapshot: snapshot,
       updated_at: new Date().toISOString(),
     };
