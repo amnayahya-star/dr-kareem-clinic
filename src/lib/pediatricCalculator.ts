@@ -661,18 +661,22 @@ export function verifyProductPediatricEligibilityPure(
     };
   }
 
-  // 10. التحقق من حالة مراجعة القاعدة (يجب أن تكون approved حصراً للحساب)
-  if (rule.review_status !== 'approved') {
+  // 10. التحقق من حالة مراجعة القاعدة (pending_review مؤهلة للحساب، rejected و needs_re_review تمنع)
+  if (rule.review_status === 'rejected') {
     return {
       isEligible: false,
-      ruleStatus: rule.review_status as any,
+      ruleStatus: 'rejected',
       rule: rule as any,
-      reason:
-        rule.review_status === 'needs_re_review'
-          ? 'قاعدة الجرعات تتطلب إعادة مراجعة واعتماد من الطبيب لتحديث النشرة الرسمية'
-          : rule.review_status === 'rejected'
-          ? 'تم رفض قاعدة الجرعات السريرية لهذا المنتج؛ ولا يمكن استخدام الحاسبة.'
-          : `قاعدة الجرعات غير معتمدة (حالتها الحالية: ${rule.review_status})`,
+      reason: 'تم رفض قاعدة الجرعات السريرية لهذا المنتج؛ ولا يمكن استخدام الحاسبة.',
+    };
+  }
+
+  if (rule.review_status === 'needs_re_review') {
+    return {
+      isEligible: false,
+      ruleStatus: 'needs_re_review',
+      rule: rule as any,
+      reason: 'قاعدة الجرعات تتطلب إعادة مراجعة واعتماد من الطبيب لتحديث النشرة الرسمية',
     };
   }
 
@@ -700,7 +704,7 @@ export function verifyProductPediatricEligibilityPure(
 
   return {
     isEligible: true,
-    ruleStatus: 'approved',
+    ruleStatus: (rule.review_status || 'pending_review') as any,
     rule: rule as any,
     concentrationMgPerMl: conc,
     numeratorMg: numVal,

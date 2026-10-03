@@ -73,8 +73,11 @@ export function PediatricDosageCalculatorModal({
 
   const [useRoundedDose, setUseRoundedDose] = useState<boolean>(true);
 
+  // Temporary inputs when DOB or weight is missing from patient record (for calculation only, never modifies patient record)
+  const [tempAgeMonths, setTempAgeMonths] = useState<string>('');
+  const [tempWeightKg, setTempWeightKg] = useState<string>('');
+
   // Modals inside calculator
-  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState<boolean>(false);
   const [isReviewRuleModalOpen, setIsReviewRuleModalOpen] = useState<boolean>(false);
 
   // Available regimens from rule or official default
@@ -139,34 +142,56 @@ export function PediatricDosageCalculatorModal({
     return parseStructuredConcentration(rawStrengthText);
   }, [productEligibility, rawStrengthText]);
 
-  // Eligibility check for Age and Weight (Fail-closed)
-  const eligibility = useMemo(() => {
-    if (!patientContext || !rule) {
-      return { isEligible: false, ageBlocked: false, weightBlocked: false };
-    }
-    return checkPatientEligibilityForRule(
-      patientContext.ageInMonths,
-      0,
-      patientContext.weightKg,
-      rule
-    );
-  }, [patientContext, rule]);
-
-  const hasDob = Boolean(
+  // Patient Age Resolution (auto from DOB or temporary input for calculation only)
+  const hasAutoDob = Boolean(
     patientContext?.dateOfBirth &&
     patientContext.dateOfBirth.trim() &&
     patientContext.ageFormatted !== 'تاريخ غير صالح'
   );
-  const hasWeight = Boolean(patientContext?.weightKg && patientContext.weightKg > 0);
+  const parsedTempAge = parseInt(tempAgeMonths, 10);
+  const hasTempAge = !hasAutoDob && !isNaN(parsedTempAge) && parsedTempAge > 0;
+  const effectiveAgeMonths = hasAutoDob
+    ? (patientContext?.ageInMonths ?? 0)
+    : (hasTempAge ? parsedTempAge : 0);
+  const hasEffectiveAge = hasAutoDob || hasTempAge;
+  const ageDisplayText = hasAutoDob
+    ? (patientContext?.ageFormatted || 'غير محدد')
+    : (patientContext?.ageFormatted === 'تاريخ غير صالح'
+        ? 'تاريخ غير صالح'
+        : (hasTempAge ? `${parsedTempAge} شهر (إدخال مؤقت)` : 'غير مسجل'));
+
+  // Patient Weight Resolution (auto from latest measurement or temporary input for calculation only)
+  const hasAutoWeight = Boolean(patientContext?.weightKg && patientContext.weightKg > 0);
+  const parsedTempWeight = parseFloat(tempWeightKg);
+  const hasTempWeight = !hasAutoWeight && !isNaN(parsedTempWeight) && parsedTempWeight > 0;
+  const effectiveWeightKg = hasAutoWeight
+    ? (patientContext?.weightKg ?? null)
+    : (hasTempWeight ? parsedTempWeight : null);
+  const hasEffectiveWeight = hasAutoWeight || hasTempWeight;
+  const weightDisplayText = hasAutoWeight
+    ? `${patientContext?.weightKg} كغم`
+    : (hasTempWeight ? `${parsedTempWeight} كغم (إدخال مؤقت)` : 'غير مسجل');
+
+  // Eligibility check for Age and Weight (Fail-closed)
+  const eligibility = useMemo(() => {
+    if (!rule || !hasEffectiveAge || !hasEffectiveWeight || !effectiveWeightKg) {
+      return { isEligible: false, ageBlocked: false, weightBlocked: false, reason: '' };
+    }
+    return checkPatientEligibilityForRule(
+      effectiveAgeMonths,
+      0,
+      effectiveWeightKg,
+      rule
+    );
+  }, [rule, hasEffectiveAge, hasEffectiveWeight, effectiveAgeMonths, effectiveWeightKg]);
 
   // Dynamic Calculation Result with clinical rounding analysis
   const calculationResult: PediatricCalculationResult | null = useMemo(() => {
     if (
-      !patientContext ||
-      !hasDob ||
-      !hasWeight ||
-      !patientContext.weightKg ||
-      patientContext.weightKg <= 0 ||
+      !hasEffectiveAge ||
+      !hasEffectiveWeight ||
+      !effectiveWeightKg ||
+      effectiveWeightKg <= 0 ||
       !eligibility.isEligible ||
       !activeRegimen ||
       !concentrationDetails.isValid
@@ -176,7 +201,7 @@ export function PediatricDosageCalculatorModal({
 
     try {
       return calculatePediatricDose({
-        weightKg: patientContext.weightKg,
+        weightKg: effectiveWeightKg,
         targetMgPerKgDay: activeRegimen.dose_mg_per_kg_day,
         dosesPerDay: activeRegimen.doses_per_day,
         strengthNumeratorMg: concentrationDetails.numeratorMg,
@@ -187,18 +212,19 @@ export function PediatricDosageCalculatorModal({
     } catch {
       return null;
     }
-  }, [patientContext, hasDob, hasWeight, activeRegimen, concentrationDetails, eligibility]);
+  }, [hasEffectiveAge, hasEffectiveWeight, effectiveWeightKg, activeRegimen, concentrationDetails, eligibility]);
 
   if (!isOpen) return null;
 
-  const isRuleApproved = rule?.review_status === 'approved';
+  const isRuleRejected = rule?.review_status === 'rejected';
   const hasAllergy = Boolean(patientContext?.hasPenicillinOrAmoxicillinAllergy);
 
-  // Can apply only when rule is approved, eligible, math valid, and NO allergy exists (Hard Stop)
+  // Can apply only when eligible, math valid, not rejected, and NO allergy exists (Hard Stop)
+  // Note: pending_review does NOT block calculation; it is purely informational.
   const canApply =
-    isRuleApproved &&
-    hasDob &&
-    hasWeight &&
+    !isRuleRejected &&
+    hasEffectiveAge &&
+    hasEffectiveWeight &&
     eligibility.isEligible &&
     !hasAllergy &&
     activeRegimen !== null &&
@@ -229,8 +255,8 @@ export function PediatricDosageCalculatorModal({
       ? 'كل 8 ساعات (3 مرات يومياً)'
       : `كل ${activeRegimen?.interval_hours} ساعة`;
 
-  const handleConfirmAndApply = () => {
-    if (hasAllergy || !calculationResult || !activeRegimen) return;
+  const handleApplyDose = () => {
+    if (!canApply || hasAllergy || !calculationResult || !activeRegimen) return;
 
     const volumeStr = `${selectedDoseMl} مل`;
     const mgStr = `(${actualSingleDoseMg} mg)`;
@@ -244,7 +270,6 @@ export function PediatricDosageCalculatorModal({
       frequency: freqArabic,
     });
 
-    setIsConfirmModalOpen(false);
     onClose();
   };
 
@@ -258,18 +283,32 @@ export function PediatricDosageCalculatorModal({
         maxWidth="xl"
       >
         <div className="space-y-4 text-xs text-slate-700" data-testid="pediatric-dosage-calculator-modal">
-          {/* Clinical Doctor Responsibility Notice */}
-          <div className="p-3 bg-blue-50/80 border border-blue-200 rounded-2xl text-[11px] text-blue-950 flex items-start gap-2">
-            <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-            <div className="space-y-0.5 leading-relaxed">
-              <span className="font-bold">تنبيه سريري للأطباء:</span> اختيار مجموعة العدوى والشدة السريرية هو قرار طبي من مسؤولية الطبيب المعالج حصراً ولا يتم استنتاجه آلياً. لا تستخدم الحاسبة في القصور الكلوي الشديد دون مراجعة بروتوكول تعديل الجرعات الخاص، ومدة العلاج تخضع للتقييم السريري للطبيب.
+          {/* Disclaimer banner & Medical Provenance Link */}
+          <div
+            className="p-3 bg-blue-50/80 border border-blue-200 rounded-2xl text-[11px] text-blue-950 flex items-center justify-between flex-wrap gap-2"
+            data-testid="calculator-disclaimer-banner"
+          >
+            <div className="flex items-center gap-2">
+              <Info className="w-4 h-4 text-blue-600 shrink-0" />
+              <span className="font-bold">
+                الحاسبة أداة مساعدة مبنية على نشرة openFDA؛ القرار النهائي للطبيب.
+              </span>
             </div>
+            <button
+              type="button"
+              onClick={() => setIsReviewRuleModalOpen(true)}
+              className="text-[11px] text-clinic-700 hover:text-clinic-900 underline font-bold cursor-pointer inline-flex items-center gap-1"
+              data-testid="open-rule-source-info-btn"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>عرض المصدر الطبي وقاعدة الحساب</span>
+            </button>
           </div>
 
           {/* 1. Patient Clinical Vitals & Drug Concentration Context */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {/* Patient Context Card */}
-            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-2.5">
               <div className="flex items-center justify-between">
                 <span className="font-bold text-slate-800 flex items-center gap-1.5">
                   <Calendar className="w-4 h-4 text-clinic-600" />
@@ -278,29 +317,65 @@ export function PediatricDosageCalculatorModal({
                 <span className="font-black text-slate-900">{patientContext?.patientName}</span>
               </div>
 
+              {/* Age Row */}
               <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-200">
                 <span className="text-slate-500">العمر المحسوب:</span>
-                <span className="font-bold text-slate-800">
-                  {patientContext?.ageFormatted || 'غير محدد'}{' '}
-                  <span className="font-mono text-slate-400">({patientContext?.ageInMonths} شهر)</span>
+                <span className="font-bold text-slate-800" data-testid="patient-age-display">
+                  {ageDisplayText}{' '}
+                  {effectiveAgeMonths > 0 && (
+                    <span className="font-mono text-slate-400">({effectiveAgeMonths} شهر)</span>
+                  )}
                 </span>
               </div>
 
-              <div className="flex items-center justify-between text-[11px]">
+              {/* Temporary Age Input when DOB missing */}
+              {!hasAutoDob && (
+                <div className="p-2 bg-amber-50/80 border border-amber-200 rounded-xl space-y-1.5" data-testid="temp-age-container">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-amber-900">
+                    <span>العمر غير مسجل — إدخال مؤقت:</span>
+                    <span className="text-[10px] text-amber-700 font-normal">للحساب فقط</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="1"
+                      max="216"
+                      placeholder="العمر بالشهور (مثال: 24)"
+                      value={tempAgeMonths}
+                      onChange={(e) => setTempAgeMonths(e.target.value)}
+                      className="w-full p-1.5 text-xs font-bold bg-white border border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500"
+                      data-testid="temp-age-months-input"
+                    />
+                    <span className="text-xs text-amber-800 font-bold shrink-0">شهر</span>
+                  </div>
+                  <div className="text-[10px] text-amber-700" data-testid="temp-age-notice">
+                    إدخال مؤقت للحساب فقط ولا يتم تعديل ملف المريض في قاعدة البيانات.
+                  </div>
+                </div>
+              )}
+
+              {/* Weight Row */}
+              <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-200">
                 <span className="text-slate-500">الوزن المعتمد:</span>
-                {hasWeight ? (
+                {hasEffectiveWeight ? (
                   <div className="flex items-center gap-1.5">
-                    <span className="font-black text-slate-900 text-sm">
-                      {patientContext?.weightKg} كغم
+                    <span className="font-black text-slate-900 text-sm" data-testid="patient-weight-display">
+                      {effectiveWeightKg} كغم
                     </span>
-                    <Badge
-                      variant={patientContext?.weightSource === 'current_visit' ? 'success' : 'warning'}
-                      size="sm"
-                      className="font-bold"
-                      data-testid="weight-source-badge"
-                    >
-                      {patientContext?.weightSource === 'current_visit' ? 'زيارة اليوم' : 'قياس سابق'}
-                    </Badge>
+                    {hasAutoWeight ? (
+                      <Badge
+                        variant={patientContext?.weightSource === 'current_visit' ? 'success' : 'warning'}
+                        size="sm"
+                        className="font-bold"
+                        data-testid="weight-source-badge"
+                      >
+                        {patientContext?.weightSource === 'current_visit' ? 'زيارة اليوم' : 'قياس سابق'}
+                      </Badge>
+                    ) : (
+                      <Badge variant="warning" size="sm" className="font-bold">
+                        مؤقت
+                      </Badge>
+                    )}
                   </div>
                 ) : (
                   <Badge variant="danger" size="sm" className="font-bold">
@@ -309,8 +384,35 @@ export function PediatricDosageCalculatorModal({
                 )}
               </div>
 
+              {/* Temporary Weight Input when weight missing */}
+              {!hasAutoWeight && (
+                <div className="p-2 bg-amber-50/80 border border-amber-200 rounded-xl space-y-1.5" data-testid="temp-weight-container">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-amber-900">
+                    <span>الوزن غير مسجل — إدخال مؤقت:</span>
+                    <span className="text-[10px] text-amber-700 font-normal">للحساب فقط</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="1"
+                      max="150"
+                      placeholder="الوزن بالكيلوغرام (مثال: 12.5)"
+                      value={tempWeightKg}
+                      onChange={(e) => setTempWeightKg(e.target.value)}
+                      className="w-full p-1.5 text-xs font-bold bg-white border border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500"
+                      data-testid="temp-weight-kg-input"
+                    />
+                    <span className="text-xs text-amber-800 font-bold shrink-0">كغم</span>
+                  </div>
+                  <div className="text-[10px] text-amber-700" data-testid="temp-weight-notice">
+                    إدخال مؤقت للحساب فقط ولا يتم تعديل ملف المريض في قاعدة البيانات.
+                  </div>
+                </div>
+              )}
+
               {/* Weight warning for previous visits */}
-              {patientContext?.weightWarning && (
+              {hasAutoWeight && patientContext?.weightWarning && (
                 <div
                   className="p-2 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-900 font-medium leading-relaxed flex items-start gap-1.5"
                   data-testid="weight-warning-banner"
@@ -362,60 +464,8 @@ export function PediatricDosageCalculatorModal({
             </div>
           </div>
 
-          {/* 2. Rule Approval Status & Clinical Governance */}
-          {!isRuleApproved ? (
-            <div
-              className="p-4 bg-amber-50 border border-amber-300 rounded-2xl space-y-2.5"
-              data-testid="unapproved-rule-banner"
-            >
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-2 font-black text-amber-900">
-                  <ShieldAlert className="w-5 h-5 text-amber-600" />
-                  <span>
-                    {rule?.review_status === 'needs_re_review'
-                      ? 'تتطلب النشرة إعادة مراجعة واعتماد سريري لتغير المصدر'
-                      : 'قاعدة وأنظمة الجرعات بانتظار مراجعة واعتماد الطبيب'}
-                  </span>
-                </div>
-                <Button
-                  type="button"
-                  variant="primary"
-                  size="sm"
-                  onClick={() => setIsReviewRuleModalOpen(true)}
-                  className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs gap-1.5 shadow-sm"
-                  data-testid="open-rule-review-btn"
-                >
-                  <FileText className="w-4 h-4" />
-                  <span>مراجعة واعتماد الأنظمة الآن</span>
-                </Button>
-              </div>
-              <p className="text-[11px] text-amber-950 leading-relaxed">
-                وفقاً لسياسة الأمان الطبي، لا يمكن استخدام الحاسبة إلا بعد تدقيق الطبيب للنشرة الرسمية
-                لـ openFDA واعتماد أنظمة الجرعات المنظمة ومطابقة الهاش الرقمي.
-              </p>
-            </div>
-          ) : (
-            <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-2xl flex items-center justify-between flex-wrap gap-2 text-[11px]">
-              <div className="flex items-center gap-2 font-bold text-emerald-900">
-                <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                <span>
-                  قاعدة وأنظمة معتمدة سريرياً من نشرة openFDA (عمر &gt; {rule?.min_age_value} أشهر ووزن &lt; {rule?.max_weight_kg} كغم)
-                </span>
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setIsReviewRuleModalOpen(true)}
-                className="text-[11px] text-emerald-800 hover:bg-emerald-100 font-bold h-7 px-2"
-              >
-                عرض تفاصيل النشرة
-              </Button>
-            </div>
-          )}
-
           {/* Missing DOB Banner */}
-          {isRuleApproved && !hasDob && (
+          {!hasEffectiveAge && (
             <div
               className="p-3.5 bg-amber-50 border border-amber-300 rounded-2xl text-xs text-amber-950 font-bold flex items-start gap-2.5"
               data-testid="missing-dob-banner"
@@ -431,7 +481,7 @@ export function PediatricDosageCalculatorModal({
           )}
 
           {/* Missing Weight Banner */}
-          {isRuleApproved && !hasWeight && (
+          {!hasEffectiveWeight && (
             <div
               className="p-3.5 bg-rose-50 border border-rose-300 rounded-2xl text-xs text-rose-950 font-bold flex items-start gap-2.5"
               data-testid="missing-weight-banner"
@@ -447,7 +497,7 @@ export function PediatricDosageCalculatorModal({
           )}
 
           {/* Age Eligibility Halt Banner (<= 3 months) */}
-          {isRuleApproved && hasDob && eligibility.ageBlocked && (
+          {hasEffectiveAge && eligibility.ageBlocked && (
             <div
               className="p-3.5 bg-amber-50 border border-amber-300 rounded-2xl text-xs text-amber-950 font-bold flex items-start gap-2.5"
               data-testid="age-unsupported-banner"
@@ -464,7 +514,7 @@ export function PediatricDosageCalculatorModal({
           )}
 
           {/* Weight Eligibility Halt Banner (>= 40 kg or missing) */}
-          {isRuleApproved && hasWeight && !eligibility.ageBlocked && eligibility.weightBlocked && (
+          {hasEffectiveWeight && !eligibility.ageBlocked && eligibility.weightBlocked && (
             <div
               className="p-3.5 bg-rose-50 border border-rose-300 rounded-2xl text-xs text-rose-950 font-bold flex items-start gap-2.5"
               data-testid="weight-blocked-banner"
@@ -501,7 +551,7 @@ export function PediatricDosageCalculatorModal({
           )}
 
           {/* 3. Doctor Interactive Regimen Selector (Strictly Coupled to FDA Table 1) */}
-          {isRuleApproved && eligibility.isEligible && (
+          {!isRuleRejected && eligibility.isEligible && !hasAllergy && (
             <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-4" data-testid="regimen-selector-container">
               <div className="flex items-center justify-between">
                 <span className="font-bold text-slate-900 flex items-center gap-1.5">
@@ -597,16 +647,44 @@ export function PediatricDosageCalculatorModal({
           )}
 
           {/* 4. Comprehensive Clinical Rounding Policy & Result Breakdown */}
-          {calculationResult && activeRegimen && (
+          {calculationResult && activeRegimen && !hasAllergy && (
             <div className="p-4 bg-emerald-50/60 border border-emerald-200 rounded-2xl space-y-3.5" data-testid="calculation-results-card">
               <div className="flex items-center justify-between">
                 <span className="font-bold text-emerald-950 flex items-center gap-1.5">
                   <Calculator className="w-4 h-4 text-emerald-700" />
-                  <span>نتائج الحساب والتحليل الدقيق للتقريب:</span>
+                  <span>نتائج الحساب والجرعات المستخرجة:</span>
                 </span>
                 <span className="text-[11px] font-mono text-emerald-800 font-bold">
-                  الإجمالي: {calculationResult.dailyMg} mg/day
+                  {activeRegimen.dose_mg_per_kg_day} mg/kg/day ({activeRegimen.interval_hours === 12 ? 'q12h' : 'q8h'})
                 </span>
+              </div>
+
+              {/* Clear 4-Value Dose Breakdown Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 bg-white rounded-xl border border-emerald-200 shadow-2xs">
+                <div className="p-2 bg-slate-50 rounded-lg text-center">
+                  <div className="text-[10px] text-slate-500 font-bold">إجمالي الجرعة اليومية</div>
+                  <div className="text-base font-black text-slate-900 font-mono" data-testid="calculated-daily-mg">
+                    {calculationResult.dailyMg} mg/day
+                  </div>
+                </div>
+                <div className="p-2 bg-slate-50 rounded-lg text-center">
+                  <div className="text-[10px] text-slate-500 font-bold">جرعة المرة الواحدة</div>
+                  <div className="text-base font-black text-slate-900 font-mono" data-testid="calculated-single-mg">
+                    {actualSingleDoseMg} mg/dose
+                  </div>
+                </div>
+                <div className="p-2 bg-emerald-50 rounded-lg text-center border border-emerald-300">
+                  <div className="text-[10px] text-emerald-800 font-bold">حجم المرة الواحدة</div>
+                  <div className="text-base font-black text-emerald-700 font-mono" data-testid="calculated-single-ml">
+                    {selectedDoseMl} mL/dose
+                  </div>
+                </div>
+                <div className="p-2 bg-slate-50 rounded-lg text-center">
+                  <div className="text-[10px] text-slate-500 font-bold">التكرار اليومي</div>
+                  <div className="text-xs font-bold text-slate-800 mt-1" data-testid="calculated-frequency">
+                    {freqArabic}
+                  </div>
+                </div>
               </div>
 
               {/* Rounding Policy Selection Options */}
@@ -714,104 +792,24 @@ export function PediatricDosageCalculatorModal({
                 type="button"
                 variant="primary"
                 disabled={!canApply || hasAllergy}
-                onClick={() => {
-                  if (canApply && !hasAllergy) {
-                    setIsConfirmModalOpen(true);
-                  }
-                }}
+                onClick={handleApplyDose}
                 className="bg-clinic-600 hover:bg-clinic-700 text-white font-bold text-xs gap-1.5 px-6 h-10 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
                 data-testid="apply-pediatric-dose-btn"
               >
-                <span>استخدام هذه النتيجة في الوصفة</span>
-                <ArrowRight className="w-4 h-4" />
+                <CheckCircle2 className="w-4 h-4" />
+                <span>استخدام هذه الجرعة</span>
               </Button>
             </div>
           </div>
         </div>
       </Modal>
 
-      {/* Confirmation Modal before writing into prescription */}
-      <Modal
-        isOpen={isConfirmModalOpen}
-        onClose={() => setIsConfirmModalOpen(false)}
-        title="تأكيد إدراج الجرعة في مسودة الوصفة"
-        description="يرجى مراجعة وتأكيد تفاصيل الجرعة المحسوبة والنظام المختار قبل إدراجها."
-        maxWidth="md"
-      >
-        <div className="space-y-4 text-xs text-slate-700" data-testid="confirm-apply-dose-modal">
-          <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
-            <div className="flex justify-between">
-              <span className="text-slate-500">الدواء:</span>
-              <span className="font-bold text-slate-900">{productDisplayName}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-500">وزن الطفل:</span>
-              <span className="font-bold text-slate-900">{patientContext?.weightKg} كغم</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-500">النظام السريري المعتمد:</span>
-              <span className="font-bold text-clinic-700">
-                {activeRegimen?.dose_mg_per_kg_day} mg/kg/day {freqArabic}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-500">الحجم المعتمد للإدراج:</span>
-              <span className="font-black text-clinic-700 font-mono text-sm">
-                {selectedDoseMl} مل {useRoundedDose ? '(قيمة مقربة مقترحة)' : '(قيمة خام دقيقة)'}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-500">المكافئ الفعلي بالمادة الفعالة:</span>
-              <span className="font-bold text-slate-900 font-mono">{actualSingleDoseMg} mg</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-500">الجرعة الفعلية المحققة:</span>
-              <span className="font-bold text-slate-900 font-mono">{actualMgPerKgDay} mg/kg/day</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-500">التكرار السريري:</span>
-              <span className="font-bold text-slate-900">{freqArabic}</span>
-            </div>
-          </div>
-
-          <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-[11px] leading-relaxed font-semibold flex items-start gap-2">
-            <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-            <span>
-              تذكير سريري: هذه الحاسبة هي أداة رياضية مساعدة. القرار النهائي ومسؤولية صرف ومتابعة
-              العلاج تقع بالكامل على عاتق الطبيب المعالج. لن يتم حفظ أو إصدار الوصفة تلقائياً.
-            </span>
-          </div>
-
-          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setIsConfirmModalOpen(false)}
-              className="text-xs"
-              data-testid="cancel-apply-btn"
-            >
-              تراجع
-            </Button>
-            <Button
-              type="button"
-              variant="primary"
-              onClick={handleConfirmAndApply}
-              className="bg-clinic-600 hover:bg-clinic-700 text-white font-bold text-xs gap-1.5"
-              data-testid="confirm-apply-dose-btn"
-            >
-              <CheckCircle2 className="w-4 h-4" />
-              <span>تأكيد واستخدام في الوصفة</span>
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Doctor Rule Review & Approval Modal */}
+      {/* Doctor Rule Review & Provenance Modal (Read-Only) */}
       <PediatricRuleReviewModal
         isOpen={isReviewRuleModalOpen}
         onClose={() => setIsReviewRuleModalOpen(false)}
         rule={rule}
+        readOnly={true}
         onRuleUpdated={(updated) => {
           onRuleUpdated(updated);
         }}

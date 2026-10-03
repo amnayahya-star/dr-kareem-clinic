@@ -621,36 +621,19 @@ export function ElectronicPrescriptionSection({
       }
       setCalculatorPatientContext(ctx);
 
-      // 3. Dispatch based on pediatric dosage rule review status
-      if (eligibility.ruleStatus === "pending_review" || eligibility.ruleStatus === "needs_re_review") {
-        setCalculatorRule(eligibility.rule || null);
-        setIsRuleReviewModalOpen(true);
-        setIsLoadingCalculator(false);
-        return;
-      }
-
-      if (eligibility.ruleStatus === "rejected") {
-        setErrorMessage(
-          language === "ar"
-            ? "تم رفض قاعدة الجرعات السريرية لهذا المنتج؛ ولا يمكن استخدام الحاسبة."
-            : "Pediatric dosage rule for this product is rejected and cannot be used."
-        );
-        setIsLoadingCalculator(false);
-        return;
-      }
-
+      // 3. التحقق من أهلية المنتج واستبعاد المرفوض فقط
       if (!eligibility.isEligible) {
         setErrorMessage(
           eligibility.reason ||
             (language === "ar"
-              ? "هذا المستحضر غير مؤهل لحاسبة جرعات الأطفال أو لا تتوفر قاعدة معتمدة"
-              : "Product is not eligible for pediatric dosage calculator or no approved rule available")
+              ? "هذا المستحضر غير مؤهل لحاسبة جرعات الأطفال"
+              : "Product is not eligible for pediatric dosage calculator")
         );
         setIsLoadingCalculator(false);
         return;
       }
 
-      // 4. Approved rule -> open calculator directly
+      // 4. فتح حاسبة جرعات الأطفال مباشرة (دون أن تسبقها أو تمنعها نافذة المراجعة)
       let rule: PediatricDosageRule | null = eligibility.rule || null;
       if (!rule && targetItem.catalog_product_id) {
         try {
@@ -661,6 +644,7 @@ export function ElectronicPrescriptionSection({
       }
       setCalculatorRule(rule);
       setIsCalculatorOpen(true);
+      setIsRuleReviewModalOpen(false);
     } catch (err: any) {
       setErrorMessage(
         err?.message ||

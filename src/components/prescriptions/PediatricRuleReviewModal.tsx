@@ -36,6 +36,7 @@ interface PediatricRuleReviewModalProps {
   onRuleUpdated?: (updatedRule: PediatricDosageRule) => void;
   onRuleSaved?: (updatedRule: PediatricDosageRule) => void;
   onViewDrugLabel?: () => void;
+  readOnly?: boolean;
 }
 
 /**
@@ -127,6 +128,7 @@ export function PediatricRuleReviewModal({
   onRuleUpdated,
   onRuleSaved,
   onViewDrugLabel,
+  readOnly = false,
 }: PediatricRuleReviewModalProps) {
   const [notes, setNotes] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -283,8 +285,12 @@ export function PediatricRuleReviewModal({
       <Modal
         isOpen={isOpen}
         onClose={onClose}
-        title="المراجعة السريرية لقاعدة وأنظمة جرعات الأطفال (خاص بالطبيب)"
-        description="مراجعة وتدقيق أنظمة الجرعات المنظمة المستخرجة حصراً من جدول النشرة الرسمية Section 2.2 Table 1 واعتمادها سريرياً."
+        title={readOnly ? 'المصدر الطبي وقاعدة الحساب (openFDA)' : 'المراجعة السريرية لقاعدة وأنظمة جرعات الأطفال (خاص بالطبيب)'}
+        description={
+          readOnly
+            ? 'عرض تفاصيل النشرة الرسمية وأنظمة الجرعات السريرية للأطفال (للقراءة فقط).'
+            : 'مراجعة وتدقيق أنظمة الجرعات المنظمة المستخرجة حصراً من جدول النشرة الرسمية Section 2.2 Table 1 واعتمادها سريرياً.'
+        }
         maxWidth="2xl"
       >
         <div className="space-y-4 text-xs text-slate-700" data-testid="pediatric-rule-review-modal">
@@ -551,18 +557,20 @@ export function PediatricRuleReviewModal({
           </div>
 
           {/* 5. Doctor Review Notes */}
-          <div className="space-y-1.5">
-            <Textarea
-              data-testid="rule-review-notes-input"
-              label="ملاحظات المراجعة الطبية (إلزامية للتوثيق والمساءلة)"
-              placeholder="اكتب ملاحظاتك وتأكيدك السريري لمطابقة الأنظمة مع النشرة الرسمية قبل الاعتماد..."
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              className="text-xs min-h-[65px]"
-            />
-          </div>
+          {!readOnly && (
+            <div className="space-y-1.5">
+              <Textarea
+                data-testid="rule-review-notes-input"
+                label="ملاحظات المراجعة الطبية (إلزامية للتوثيق والمساءلة)"
+                placeholder="اكتب ملاحظاتك وتأكيدك السريري لمطابقة الأنظمة مع النشرة الرسمية قبل الاعتماد..."
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                className="text-xs min-h-[65px]"
+              />
+            </div>
+          )}
 
-          {!isDoctor && (
+          {!readOnly && !isDoctor && (
             <div
               className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs font-bold flex items-center gap-2"
               data-testid="non-doctor-warning"
@@ -572,7 +580,7 @@ export function PediatricRuleReviewModal({
             </div>
           )}
 
-          {!isHashMatching && (
+          {!readOnly && !isHashMatching && (
             <div
               className="p-3 bg-rose-50 border border-rose-200 text-rose-900 rounded-xl text-xs font-bold flex items-center gap-2"
               data-testid="hash-mismatch-warning"
@@ -583,44 +591,58 @@ export function PediatricRuleReviewModal({
           )}
 
           {/* Action Buttons */}
-          <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-100">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={onClose}
-              disabled={isSubmitting}
-            >
-              إلغاء
-            </Button>
-
-            <div className="flex items-center gap-2">
+          {readOnly ? (
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={handleReject}
-                disabled={isSubmitting || !isDoctor}
-                className="text-rose-700 border-rose-300 hover:bg-rose-50 gap-1 font-bold"
-                data-testid="reject-rule-btn"
+                onClick={onClose}
+                data-testid="close-rule-review-modal-btn"
               >
-                <XCircle className="w-3.5 h-3.5" />
-                <span>رفض القاعدة</span>
-              </Button>
-
-              <Button
-                type="button"
-                size="sm"
-                onClick={handleOpenApproveConfirmation}
-                disabled={isSubmitting || !isDoctor || !isHashMatching}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-1 shadow-sm"
-                data-testid="approve-rule-btn"
-              >
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>اعتماد أنظمة الجرعات السريرية</span>
+                إغلاق
               </Button>
             </div>
-          </div>
+          ) : (
+            <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-100">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={onClose}
+                disabled={isSubmitting}
+              >
+                إلغاء
+              </Button>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleReject}
+                  disabled={isSubmitting || !isDoctor}
+                  className="text-rose-700 border-rose-300 hover:bg-rose-50 gap-1 font-bold"
+                  data-testid="reject-rule-btn"
+                >
+                  <XCircle className="w-3.5 h-3.5" />
+                  <span>رفض القاعدة</span>
+                </Button>
+
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleOpenApproveConfirmation}
+                  disabled={isSubmitting || !isDoctor || !isHashMatching}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-1 shadow-sm"
+                  data-testid="approve-rule-btn"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>اعتماد أنظمة الجرعات السريرية</span>
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       </Modal>
 
